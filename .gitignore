@@ -13,6 +13,23 @@ target
 # Contains mutation testing data
 **/mutants.out*/
 
+# Node.js frontend dependencies and build output (Tauri)
+node_modules/
+dist/
+dist-ssr/
+
+# Local environment files
+.env
+.env.*
+!.env.example
+
+# Tauri generated schemas and local build output
+/src-tauri/gen/schemas/
+/src-tauri/target/
+
+# macOS metadata
+.DS_Store
+
 # RustRover
 #  JetBrains specific template is maintained in a separate JetBrains.gitignore that can
 #  be found at https://github.com/github/gitignore/blob/main/Global/JetBrains.gitignore
