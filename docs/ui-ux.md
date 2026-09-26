@@ -4,12 +4,13 @@ Working notes for the GM workspace and the player-facing window. See [Brainstorm
 
 ## App shell
 
-The GM works in one main app window. Campaign records can open in tabs and resizable side-by-side or stacked panes so the GM can keep, for example, session notes beside an NPC card or map. Presenter is a dedicated mode entered from the top bar rather than a tab. The same tab bar shows GM tabs or Presenter view tabs depending on the mode. Presenter has one preview and no split view. Both modes' layouts should be restored when the campaign is reopened.
+The GM works in one main app window. Named GM layouts contain resizable side-by-side or stacked panes, with record tabs inside each pane. For example, a Map layout can fill the main area with one map, while a Session prep layout keeps notes on the left and multiple NPC tabs on the right. Presenter is a dedicated mode entered from the top bar rather than a tab. Switching modes restores the corresponding workspace; Presenter has one preview with tabs and no split view. Both modes' workspaces should be restored when the campaign is reopened.
 
 ### Top bar
 
 - **Sidebar toggle:** An icon closes and reopens the sidebar.
 - **Back / Forward:** Arrow buttons beside the sidebar toggle, in the top-left navigation cluster. Keep global search centered and presentation controls on the right. Disable an arrow when there is no available destination.
+- **GM layout selector:** A compact named dropdown, such as **Session prep ▾**, beside Back/Forward in the app topbar. Switch between saved arrangements of panes and tabs, restoring their selected records and view positions. The main area begins directly with pane tabs; do not add a separate workspace-header row for this selector. Keep long layout names truncated so they do not crowd the centered search or presentation controls. Presenter retains its separate single-pane workspace.
 - **Global search:** A search control in the **center** of the top bar opens the command palette. `Cmd+K` opens the same palette from anywhere in the GM app to find and open campaign content.
 - **Presentation controls:** In the **top right**, a triangle **Play** button opens or restores the player window on a projector or second screen and enters Presenter mode. While running, Play becomes a square **Stop** button beside a **Pause** button. While paused, Pause becomes a triangle **Resume** button; Stop remains available. A separate clickable **Presenting** status with a halo and elapsed time, or `Cmd+Option+P`, switches between Presenter and the GM's previous campaign workspace without stopping output. The player window shows only player-facing content.
 
@@ -35,7 +36,7 @@ The top bar stays available across the GM workspaces. Global search belongs here
 
 ### Sidebar
 
-The app has **one sidebar shell and one tab bar**. In GM mode they show campaign navigation and GM tabs; in Presenter mode they show player-facing views, presentation cues, and Presenter tabs. Each mode remembers the sidebar's open or closed state and width. The top bar remains in place in both modes.
+The app has **one shared sidebar shell**. In GM mode it shows campaign navigation, with record tabs in each workspace pane; in Presenter mode it shows player-facing views and cues, with tabs above the single preview. Each mode remembers the sidebar's open or closed state and width. The top bar remains in place in both modes.
 
 - **Campaign selector**
 - **Overview**
