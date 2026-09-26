@@ -9,6 +9,7 @@ The GM works in one main app window. Campaign records can open in tabs and resiz
 ### Top bar
 
 - **Sidebar toggle:** An icon closes and reopens the sidebar.
+- **Back / Forward:** Arrow buttons beside the sidebar toggle, in the top-left navigation cluster. Keep global search centered and presentation controls on the right. Disable an arrow when there is no available destination.
 - **Global search:** A search control in the **center** of the top bar opens the command palette. `Cmd+K` opens the same palette from anywhere in the GM app to find and open campaign content.
 - **Presentation controls:** In the **top right**, a triangle **Play** button opens or restores the player window on a projector or second screen and enters Presenter mode. While running, Play becomes a square **Stop** button beside a **Pause** button. While paused, Pause becomes a triangle **Resume** button; Stop remains available. A separate clickable **Presenting** status with a halo and elapsed time, or `Cmd+Option+P`, switches between Presenter and the GM's previous campaign workspace without stopping output. The player window shows only player-facing content.
 
@@ -21,6 +22,16 @@ The top bar stays available across the GM workspaces. Global search belongs here
 - Reopening a closed view is a workspace navigation action; it does not undo an edit to campaign data.
 - Each mode remembers its own open tabs and selected tab. GM tabs also remember split layout and pane sizes; Presenter tabs remember their selected player-safe record or map. Each tab keeps its own scroll position, map pan and zoom, and relevant local selection or filters. Switching modes restores these positions without reloading a different view onto the projector.
 - Restore these workspaces when the campaign reopens. Reopening the campaign restores the GM and Presenter layouts, but does not start a presentation or reopen the player window.
+
+### Back and Forward navigation (behavior proposal)
+
+- Follow the order of visited destinations, including tab switches, sidebar selections, and record links. For example, Sessions → NPC → Map → Back returns to the NPC. These arrows follow visit history rather than the tabs' left-to-right order.
+- Keep a separate history for each campaign, GM window, and mode. Back does not switch from GM into Presenter mode or start/stop a presentation.
+- Focus an existing destination tab and pane where possible. If its tab was closed, reopen the destination without reconstructing an entire old split layout. Skip deleted or unavailable destinations gracefully.
+- Restore the destination's latest remembered scroll, selection, and map position. Scrolling, typing, moving tokens, and panning do not each add navigation entries. Navigation never restores an older version of a record or discards its draft.
+- Going Back and then opening a different destination clears the forward branch. Back/Forward traversal does not append new visits; selecting the already active destination does not add a duplicate.
+- In Presenter mode, history navigation follows the same rules as selecting a Presenter tab: publish player-safe content while running, stage Next while paused. It does not replay old overlays, media playback, or presentation commands. GM history never changes the projector.
+- Suggested shortcuts: `Cmd+[` / `Cmd+]` on macOS and `Alt+Left` / `Alt+Right` on Windows/Linux. Avoid intercepting editor-owned shortcuts or text selection. Final shortcut conflict checks belong to implementation.
 
 ### Sidebar
 

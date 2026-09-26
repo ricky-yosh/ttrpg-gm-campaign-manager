@@ -80,6 +80,16 @@ Keep **GM mode** and **Presenter mode** as separate workspace state under one ap
 
 Each command should identify its campaign, command type, and validated payload. Execution either returns a result or a structured error. A successful campaign edit saves its state change and its undo information as one operation; a failed command changes neither. Multi-step changes, such as promoting an enemy to an NPC, should be one undoable operation.
 
+### Workspace navigation history (proposal)
+
+Implement Back and Forward within the existing Workspace and navigation module. React manages a bounded list of destination entries and a current index for each campaign/window/mode; persist it through Rust with the workspace restoration state. A destination identifies a view, optional record, and preferred tab/pane using stable IDs. View positions remain in the existing per-tab/view state rather than copies of campaign data in each history entry.
+
+Use workspace actions such as `NavigateTo`, `NavigateBack`, and `NavigateForward`. All entry points (sidebar, tabs, record links, and search results) use the same navigation path. History traversal moves the index without adding another entry. Fresh navigation after Back truncates the forward branch. Resolve missing tabs by reopening the destination and skip unavailable records. Commit the selected destination and history cursor together after successful navigation; restoration on startup must not execute live presentation actions.
+
+These actions are separate from campaign-edit undo/redo and the recently closed tabs list. Explicit Presenter history navigation uses the existing `ActivatePresenterTab` path and Live/Next rules, including current player-safety validation; it must not replay historic mutation or media commands. The history contains destinations, not snapshots of past presentation output.
+
+No technology replacement is required for this feature. The planned React/Tauri/SQLite stack and existing shadcn buttons are sufficient. A frontend reducer/store can own the navigation transitions; generated bindings carry saved workspace state when persistence is implemented. Do not rely on the webview's `window.history.back()` to represent tab/pane history. A routing library is optional if future URL/deep-link requirements justify one.
+
 ### Initial command catalog
 
 Candidate identifiers are shown below to make the boundary concrete. These are a design proposal, not a final API or CLI syntax.
