@@ -131,3 +131,14 @@
     @apply font-sans;
   }
 }
+
+.macos-traffic-light-space {
+  display: none;
+}
+
+.app-topbar[data-macos="true"] .macos-traffic-light-space {
+  display: block;
+  width: 4.5rem;
+  height: 100%;
+  flex: 0 0 4.5rem;
+}
