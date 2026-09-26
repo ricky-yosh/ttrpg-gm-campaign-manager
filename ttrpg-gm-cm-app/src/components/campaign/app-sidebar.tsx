@@ -23,7 +23,7 @@ export function AppSidebar({ section, onSelect }: { section: string; onSelect: (
   const { isMobile, setOpenMobile } = useSidebar();
 
   return (
-    <Sidebar className="top-14 h-auto" collapsible="offcanvas">
+    <Sidebar className="top-11 bottom-0 h-auto" collapsible="offcanvas">
       <SidebarHeader>
         <SidebarMenu>
           <SidebarMenuItem>

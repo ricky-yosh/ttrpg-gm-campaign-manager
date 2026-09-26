@@ -1,24 +1,47 @@
+import { useEffect, useState } from "react";
+import { isTauri } from "@tauri-apps/api/core";
+import { getCurrentWindow } from "@tauri-apps/api/window";
 import { PlayIcon, SearchIcon } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Kbd } from "@/components/ui/kbd";
-import { SidebarTrigger, useSidebar } from "@/components/ui/sidebar";
-import { cn } from "@/lib/utils";
+import { SidebarTrigger } from "@/components/ui/sidebar";
 
 export function Topbar() {
-  const { isMobile, open } = useSidebar();
   const isMacOS = typeof navigator !== "undefined" && /Mac|iPhone|iPad/.test(navigator.platform);
+  const [isFullscreen, setIsFullscreen] = useState(false);
+
+  useEffect(() => {
+    if (!isTauri()) return;
+
+    const currentWindow = getCurrentWindow();
+    let disposed = false;
+    let unlisten: (() => void) | undefined;
+    const syncFullscreen = () => {
+      void currentWindow.isFullscreen().then((fullscreen) => {
+        if (!disposed) setIsFullscreen(fullscreen);
+      });
+    };
+
+    syncFullscreen();
+    void currentWindow.onResized(syncFullscreen).then((stopListening) => {
+      if (disposed) stopListening();
+      else unlisten = stopListening;
+    });
+
+    return () => {
+      disposed = true;
+      unlisten?.();
+    };
+  }, []);
 
   return (
     <header
-      data-macos={isMacOS ? "true" : undefined}
+      data-macos={isMacOS && !isFullscreen ? "true" : undefined}
       className="app-topbar grid h-11 shrink-0 grid-cols-[1fr_minmax(0,24rem)_1fr] items-center gap-3 border-b px-3"
     >
       <div data-tauri-drag-region className="flex h-full items-center">
         <div className="macos-traffic-light-space" aria-hidden="true" data-tauri-drag-region />
-        <div className={cn(
-          "sidebar-trigger-slot flex h-full shrink-0 items-center justify-center transition-[width] duration-200",
-          isMobile || !open ? "w-12" : "w-64",
-        )}>
+        <div className="sidebar-trigger-slot flex h-full w-12 shrink-0 items-center justify-center">
           <SidebarTrigger title="Toggle sidebar" />
         </div>
       </div>
