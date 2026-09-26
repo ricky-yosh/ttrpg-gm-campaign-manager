@@ -1,0 +1,18 @@
+{
+  "$schema": "https://oxc.rs/schema/oxlintrc.json",
+  "jsPlugins": ["@shadcn/lint"],
+  "rules": {
+    "shadcn/no-raw-colors": "error",
+    "shadcn/no-unknown-classes": [
+      "error",
+      { "allow": ["container", "logo", "row", "vite", "react", "tauri"] }
+    ],
+    "shadcn/no-restyle": ["error", { "allow": ["layout"] }]
+  },
+  "overrides": [
+    {
+      "files": ["src/components/ui/**"],
+      "rules": { "shadcn/no-restyle": "off" }
+    }
+  ]
+}
