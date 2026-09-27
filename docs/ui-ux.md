@@ -10,7 +10,7 @@ The GM works in one main app window. Named GM layouts contain resizable side-by-
 
 - **Sidebar toggle:** An icon closes and reopens the sidebar.
 - **Back / Forward:** Arrow buttons beside the sidebar toggle, in the top-left navigation cluster. Keep global search centered and presentation controls on the right. Disable an arrow when there is no available destination.
-- **GM layout selector:** A compact named dropdown, such as **Session prep ▾**, beside Back/Forward in the app topbar. Switch between saved arrangements of panes and tabs, restoring their selected records and view positions. The main area begins directly with pane tabs; do not add a separate workspace-header row for this selector. Keep long layout names truncated so they do not crowd the centered search or presentation controls. Presenter retains its separate single-pane workspace.
+- **GM layout switcher:** A compact button showing the active layout and a chevron sits beside Back/Forward in the app topbar. Clicking it or pressing `Cmd+Shift+L` / `Ctrl+Shift+L` outside text fields and editors opens a searchable switcher. Focus the search field on open; typing filters layouts, Up/Down moves the highlight, Enter opens the highlighted layout, and Escape closes the switcher. Include **New layout…** and **Manage layouts** actions in the switcher. Switch between saved arrangements of panes and tabs, restoring their selected records and view positions. The manager has separate **Save changes** and **Save as new** actions. Mark the active layout when its arrangement has unsaved changes. Confirm before replacing a saved layout, and before switching away from unsaved changes offer **Save and switch**, **Discard and switch**, and **Keep editing**. A duplicate name in **Save as new** must produce an inline validation message rather than replacing the existing layout. The main area begins directly with pane tabs; do not add a separate workspace-header row for this selector. Keep long layout names truncated so they do not crowd the centered search or presentation controls. Presenter retains its separate single-pane workspace.
 - **Global search:** A search control in the **center** of the top bar opens the command palette. `Cmd+K` opens the same palette from anywhere in the GM app to find and open campaign content.
 - **Presentation controls:** In the **top right**, a triangle **Play** button opens or restores the player window on a projector or second screen and enters Presenter mode. While running, Play becomes a square **Stop** button beside a **Pause** button. While paused, Pause becomes a triangle **Resume** button; Stop remains available. A separate clickable **Presenting** status with a halo and elapsed time, or `Cmd+Option+P`, switches between Presenter and the GM's previous campaign workspace without stopping output. The player window shows only player-facing content.
 
@@ -48,6 +48,7 @@ The app has **one shared sidebar shell**. In GM mode it shows campaign navigatio
 - **Story Threads**
 - **Puzzles**
 - **Settings:** Shows D&D 5.5e as the current statblock field set; v1 offers no other choice
+- **Keyboard shortcuts help:** A `?` control above Settings opens a modal listing the currently available shortcuts and keyboard interactions. Keep the list synchronized with implemented behavior; do not show planned shortcuts as active.
 
 Selecting a sidebar destination opens its workspace in the main area. Campaign records within it can open in tabs or split panes.
 
@@ -87,6 +88,8 @@ Use a content-first desktop workspace. The surface chosen for an action should f
 | Separate player window | Content the GM chooses to present to players | Map, scene image, or NPC portraits |
 
 Long forms and reference material belong in tabs or panes, not modals. The right-side inspector is an inline panel that can be shown or hidden; it should not block work in the main pane. Avoid stacking dialogs. Player-facing image overlays are part of the presented scene and are distinct from GM-interface panels or dialogs.
+
+Before a destructive action, show an “Are you sure?” confirmation that names the affected item and explains what will happen. Require an explicit confirmation to proceed, with a clear cancel action. Apply this to deleting saved layouts as well as campaign records; do not perform deletion directly from a compact icon or menu item.
 
 ## Presenter mode
 

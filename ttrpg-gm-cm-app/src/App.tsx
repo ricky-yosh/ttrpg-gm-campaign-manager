@@ -1,17 +1,121 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
+import { DockviewReact, themeDark, themeLight, type DockviewReadyEvent, type IDockviewPanelProps } from "dockview-react";
 import { AppSidebar } from "@/components/campaign/app-sidebar";
 import { Topbar } from "@/components/campaign/topbar";
 import { SidebarProvider } from "@/components/ui/sidebar";
 import { TooltipProvider } from "@/components/ui/tooltip";
-import { Empty, EmptyDescription, EmptyHeader, EmptyTitle } from "@/components/ui/empty";
 import "./App.css";
+import "dockview-react/dist/styles/dockview.css";
+
+export type SavedLayout = { name: string; layout: ReturnType<DockviewReadyEvent["api"]["toJSON"]> };
+
+function CharacterPanel({ params }: IDockviewPanelProps) {
+  const name = typeof params.name === "string" ? params.name : "Character";
+
+  return (
+    <article className="h-full overflow-auto p-8">
+      <p className="mb-2 text-xs font-medium uppercase tracking-wide text-muted-foreground">NPC</p>
+      <h1 className="text-2xl font-semibold">{name}</h1>
+      <p className="mt-3 max-w-prose text-sm text-muted-foreground">
+        Character details will appear here. This placeholder lets us check tab opening and pane behavior.
+      </p>
+    </article>
+  );
+}
+
+const dockviewComponents = { character: CharacterPanel };
 
 function App() {
-  const [section, setSection] = useState("Overview");
+  const [section, setSection] = useState<string | null>(null);
+  const [isDark, setIsDark] = useState(false);
+  const dockviewApi = useRef<DockviewReadyEvent["api"] | null>(null);
+  const layoutChangeSubscription = useRef<{ dispose: () => void } | null>(null);
+  const restoringLayout = useRef(false);
+  const activeLayoutRef = useRef<string | null>(null);
+  const layoutsRef = useRef<SavedLayout[]>([]);
+
+  const [layouts, setLayouts] = useState<SavedLayout[]>([]);
+  const [activeLayout, setActiveLayout] = useState<string | null>(null);
+  const [isLayoutDirty, setIsLayoutDirty] = useState(false);
+
+  layoutsRef.current = layouts;
+  activeLayoutRef.current = activeLayout;
+
+  const updateLayout = (name: string) => {
+    const api = dockviewApi.current;
+    if (!api) return;
+    const saved = { name, layout: api.toJSON() };
+    const next = layoutsRef.current.map((item) => item.name === name ? saved : item);
+    layoutsRef.current = next;
+    setLayouts(next);
+    setIsLayoutDirty(false);
+  };
+
+  const saveAsNewLayout = (name: string) => {
+    const api = dockviewApi.current;
+    const normalizedName = name.trim();
+    if (!api || !normalizedName || layoutsRef.current.some((item) => item.name.toLocaleLowerCase() === normalizedName.toLocaleLowerCase())) return false;
+    const next = [...layoutsRef.current, { name: normalizedName, layout: api.toJSON() }];
+    layoutsRef.current = next;
+    setLayouts(next);
+    activeLayoutRef.current = normalizedName;
+    setActiveLayout(normalizedName);
+    setIsLayoutDirty(false);
+    return true;
+  };
+
+  const applyLayout = (name: string) => {
+    const saved = layoutsRef.current.find((item) => item.name === name);
+    if (!saved || !dockviewApi.current) return;
+    restoringLayout.current = true;
+    activeLayoutRef.current = name;
+    dockviewApi.current.fromJSON(saved.layout);
+    setActiveLayout(name);
+    setIsLayoutDirty(false);
+    queueMicrotask(() => { restoringLayout.current = false; });
+  };
+
+  const switchLayoutWithChanges = (name: string, saveCurrent: boolean) => {
+    if (saveCurrent && activeLayoutRef.current) updateLayout(activeLayoutRef.current);
+    applyLayout(name);
+  };
+
+  const deleteLayout = (name: string) => {
+    const next = layoutsRef.current.filter((layout) => layout.name !== name);
+    layoutsRef.current = next;
+    setLayouts(next);
+    if (activeLayoutRef.current === name) {
+      activeLayoutRef.current = null;
+      setActiveLayout(null);
+      setIsLayoutDirty(false);
+    }
+  };
+
+  const openCharacter = (name: string) => {
+    const api = dockviewApi.current;
+    if (!api) return;
+
+    const id = `character:${name}`;
+    const existingPanel = api.getPanel(id);
+    if (existingPanel) {
+      existingPanel.api.setActive();
+      return;
+    }
+
+    api.addPanel({
+      id,
+      title: name,
+      component: "character",
+      params: { name },
+    });
+  };
 
   useEffect(() => {
     const preference = window.matchMedia("(prefers-color-scheme: dark)");
-    const syncTheme = () => document.documentElement.classList.toggle("dark", preference.matches);
+    const syncTheme = () => {
+      setIsDark(preference.matches);
+      document.documentElement.classList.toggle("dark", preference.matches);
+    };
     syncTheme();
     preference.addEventListener("change", syncTheme);
     return () => preference.removeEventListener("change", syncTheme);
@@ -20,19 +124,35 @@ function App() {
   return (
     <TooltipProvider>
       <SidebarProvider className="h-svh flex-col overflow-hidden">
-        <Topbar />
+        <Topbar
+          layouts={layouts}
+          activeLayout={activeLayout}
+          isLayoutDirty={isLayoutDirty}
+          onSelectLayout={applyLayout}
+          onSaveLayoutChanges={updateLayout}
+          onSaveAsNewLayout={saveAsNewLayout}
+          onDeleteLayout={deleteLayout}
+          onSwitchWithChanges={switchLayoutWithChanges}
+        />
         <div className="flex min-h-0 flex-1">
-          <AppSidebar section={section} onSelect={setSection} />
-          <main aria-label={`${section} workspace`} className="flex min-w-0 flex-1 flex-col overflow-auto">
-            <div className="flex h-12 shrink-0 items-center border-b px-6">
-              <h1 className="text-sm font-medium">{section}</h1>
-            </div>
-            <Empty>
-              <EmptyHeader>
-                <EmptyTitle>Your workspace</EmptyTitle>
-                <EmptyDescription>A place for your campaign to take shape.</EmptyDescription>
-              </EmptyHeader>
-            </Empty>
+          <AppSidebar section={section} onSelectSection={setSection} onOpenCharacter={openCharacter} />
+          <main aria-label="Campaign workspace" className="min-h-0 min-w-0 flex-1">
+            <DockviewReact
+              className="campaign-dockview"
+              theme={isDark ? themeDark : themeLight}
+              components={dockviewComponents}
+              onReady={(event) => {
+                dockviewApi.current = event.api;
+                layoutChangeSubscription.current?.dispose();
+                layoutChangeSubscription.current = event.api.onDidLayoutChange(() => {
+                  if (restoringLayout.current) return;
+                  const currentName = activeLayoutRef.current;
+                  const saved = layoutsRef.current.find((item) => item.name === currentName);
+                  if (!saved) return;
+                  setIsLayoutDirty(JSON.stringify(event.api.toJSON()) !== JSON.stringify(saved.layout));
+                });
+              }}
+            />
           </main>
         </div>
       </SidebarProvider>

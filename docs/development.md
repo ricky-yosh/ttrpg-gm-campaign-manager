@@ -12,6 +12,7 @@ cd ttrpg-gm-cm-app
 - `pnpm dev` starts only the Vite frontend in a browser.
 - `pnpm tauri dev` starts the desktop app and its frontend dev server.
 - `pnpm build` type-checks and builds the frontend into `dist/`.
+- `pnpm lint` runs Oxlint on the frontend code.
 - `pnpm tauri build` builds the desktop app and its distributable package.
 
 These are the Tauri CLI's standard development and build commands; see the [Tauri project guide](https://tauri.app/start/create-project/).

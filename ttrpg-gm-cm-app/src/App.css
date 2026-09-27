@@ -142,3 +142,15 @@
   height: 100%;
   flex: 0 0 4.5rem;
 }
+
+.campaign-dockview {
+  width: 100%;
+  height: 100%;
+  --dv-group-view-background-color: var(--background);
+  --dv-tabs-and-actions-container-background-color: var(--background);
+  --dv-activegroup-visiblepanel-tab-background-color: var(--background);
+  --dv-inactivegroup-visiblepanel-tab-background-color: var(--background);
+  --dv-tab-divider-color: var(--border);
+  --dv-separator-border: var(--border);
+  --dv-paneview-header-border-color: var(--border);
+}

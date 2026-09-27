@@ -163,6 +163,7 @@ function Sidebar({
   collapsible?: "offcanvas" | "icon" | "none"
 }) {
   const { isMobile, state, openMobile, setOpenMobile } = useSidebar()
+  const isMacOS = typeof navigator !== "undefined" && /Mac|iPhone|iPad/.test(navigator.platform)
 
   if (collapsible === "none") {
     return (
@@ -191,6 +192,7 @@ function Sidebar({
           style={
             {
               "--sidebar-width": SIDEBAR_WIDTH_MOBILE,
+              ...(isMacOS ? { top: "2.75rem", bottom: 0, height: "auto" } : {}),
             } as React.CSSProperties
           }
           side={side}
