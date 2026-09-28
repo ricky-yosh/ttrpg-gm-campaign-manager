@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from "react";
-import { DockviewReact, themeDark, themeLight, type DockviewReadyEvent, type IDockviewPanelProps } from "dockview-react";
+import { DockviewReact, themeDark, themeLight, type DockviewReadyEvent } from "dockview-react";
 import { AppSidebar } from "@/components/campaign/app-sidebar";
+import { CharacterPanel } from "@/components/campaign/character-panel";
 import { Topbar } from "@/components/campaign/topbar";
 import { SidebarProvider } from "@/components/ui/sidebar";
 import { TooltipProvider } from "@/components/ui/tooltip";
@@ -8,20 +9,6 @@ import "./App.css";
 import "dockview-react/dist/styles/dockview.css";
 
 export type SavedLayout = { name: string; layout: ReturnType<DockviewReadyEvent["api"]["toJSON"]> };
-
-function CharacterPanel({ params }: IDockviewPanelProps) {
-  const name = typeof params.name === "string" ? params.name : "Character";
-
-  return (
-    <article className="h-full overflow-auto p-8">
-      <p className="mb-2 text-xs font-medium uppercase tracking-wide text-muted-foreground">NPC</p>
-      <h1 className="text-2xl font-semibold">{name}</h1>
-      <p className="mt-3 max-w-prose text-sm text-muted-foreground">
-        Character details will appear here. Drag this tab to a workspace edge to create a split, or drop it in another pane to join that pane’s tabs.
-      </p>
-    </article>
-  );
-}
 
 const dockviewComponents = { character: CharacterPanel };
 
