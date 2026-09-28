@@ -137,6 +137,10 @@ export function AppSidebar({ section, onSelectSection, onOpenCharacter }: AppSid
               <h3 className="mb-2 text-xs font-semibold uppercase tracking-wide text-muted-foreground">Workspace</h3>
               <dl className="space-y-3">
                 <div className="flex items-center justify-between gap-4 text-sm">
+                  <dt>Close active tab</dt>
+                  <Kbd>{isMacOS ? "⌘ W" : "Ctrl W"}</Kbd>
+                </div>
+                <div className="flex items-center justify-between gap-4 text-sm">
                   <dt>Toggle sidebar</dt>
                   <Kbd>{isMacOS ? "⌘ B" : "Ctrl B"}</Kbd>
                 </div>

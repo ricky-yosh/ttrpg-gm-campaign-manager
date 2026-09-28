@@ -17,7 +17,7 @@ function CharacterPanel({ params }: IDockviewPanelProps) {
       <p className="mb-2 text-xs font-medium uppercase tracking-wide text-muted-foreground">NPC</p>
       <h1 className="text-2xl font-semibold">{name}</h1>
       <p className="mt-3 max-w-prose text-sm text-muted-foreground">
-        Character details will appear here. This placeholder lets us check tab opening and pane behavior.
+        Character details will appear here. Drag this tab to a workspace edge to create a split, or drop it in another pane to join that pane’s tabs.
       </p>
     </article>
   );
@@ -121,6 +121,21 @@ function App() {
     return () => preference.removeEventListener("change", syncTheme);
   }, []);
 
+  useEffect(() => {
+    const handleCloseTabShortcut = (event: KeyboardEvent) => {
+      const isMacOS = /Mac|iPhone|iPad/.test(navigator.platform);
+      const hasPrimaryModifier = isMacOS ? event.metaKey : event.ctrlKey;
+      if (!hasPrimaryModifier || event.altKey || event.shiftKey || event.key.toLowerCase() !== "w") return;
+
+      event.preventDefault();
+      event.stopPropagation();
+      dockviewApi.current?.activePanel?.api.close();
+    };
+
+    document.addEventListener("keydown", handleCloseTabShortcut, true);
+    return () => document.removeEventListener("keydown", handleCloseTabShortcut, true);
+  }, []);
+
   return (
     <TooltipProvider>
       <SidebarProvider className="h-svh flex-col overflow-hidden">
@@ -141,6 +156,8 @@ function App() {
               className="campaign-dockview"
               theme={isDark ? themeDark : themeLight}
               components={dockviewComponents}
+              disableDnd={false}
+              dndStrategy="pointer"
               onReady={(event) => {
                 dockviewApi.current = event.api;
                 layoutChangeSubscription.current?.dispose();

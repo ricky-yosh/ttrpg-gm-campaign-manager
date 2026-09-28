@@ -28,6 +28,7 @@ export function Topbar({ layouts, activeLayout, isLayoutDirty, onSelectLayout, o
   const [layoutName, setLayoutName] = useState("");
   const [pendingDelete, setPendingDelete] = useState<string | null>(null);
   const [pendingOverwrite, setPendingOverwrite] = useState<string | null>(null);
+  const [pendingRevert, setPendingRevert] = useState<string | null>(null);
   const [pendingSwitch, setPendingSwitch] = useState<string | null>(null);
   const [layoutError, setLayoutError] = useState<string | null>(null);
 
@@ -37,6 +38,7 @@ export function Topbar({ layouts, activeLayout, isLayoutDirty, onSelectLayout, o
     setLayoutError(null);
     setPendingDelete(null);
     setPendingOverwrite(null);
+    setPendingRevert(null);
     setPendingSwitch(null);
     setIsLayoutManagerOpen(true);
   };
@@ -99,16 +101,18 @@ export function Topbar({ layouts, activeLayout, isLayoutDirty, onSelectLayout, o
 
   return (
     <header
+      data-tauri-drag-region="deep"
       data-macos={isMacOS && !isFullscreen ? "true" : undefined}
       className="app-topbar flex h-11 shrink-0 items-center gap-3 border-b px-3"
     >
-      <div data-tauri-drag-region className="flex h-full shrink-0 items-center">
+      <div className="flex h-full shrink-0 items-center">
         <div className="macos-traffic-light-space" aria-hidden="true" data-tauri-drag-region />
         <div className="flex h-full w-12 shrink-0 items-center justify-center">
-          <SidebarTrigger title="Toggle sidebar" />
+          <SidebarTrigger data-tauri-drag-region="false" title="Toggle sidebar" />
         </div>
         <div className="flex items-center gap-1">
           <Button
+            data-tauri-drag-region="false"
             variant="ghost"
             size="icon-sm"
             aria-label="Back"
@@ -118,6 +122,7 @@ export function Topbar({ layouts, activeLayout, isLayoutDirty, onSelectLayout, o
             <ArrowLeftIcon />
           </Button>
           <Button
+            data-tauri-drag-region="false"
             variant="ghost"
             size="icon-sm"
             aria-label="Forward"
@@ -129,6 +134,7 @@ export function Topbar({ layouts, activeLayout, isLayoutDirty, onSelectLayout, o
         </div>
         <div className="flex items-center" data-tauri-drag-region="false">
           <Button
+            data-tauri-drag-region="false"
             variant="outline"
             size="sm"
             aria-label={`Switch layout${activeLayout ? `, current layout ${activeLayout}` : ""}${isLayoutDirty ? ", unsaved changes" : ""}`}
@@ -147,6 +153,7 @@ export function Topbar({ layouts, activeLayout, isLayoutDirty, onSelectLayout, o
         </div>
       </div>
       <Button
+        data-tauri-drag-region="false"
         variant="outline"
         size="sm"
         className="mx-auto min-w-0 w-full max-w-80 flex-1 justify-start"
@@ -157,8 +164,9 @@ export function Topbar({ layouts, activeLayout, isLayoutDirty, onSelectLayout, o
         <span className="min-w-0 truncate">Search campaign…</span>
         <Kbd className="ml-auto shrink-0">⌘ K</Kbd>
       </Button>
-      <div data-tauri-drag-region className="flex h-full shrink-0 items-center justify-end">
+      <div className="flex h-full shrink-0 items-center justify-end">
         <Button
+          data-tauri-drag-region="false"
           variant="outline"
           size="icon-sm"
           aria-label="Play presentation"
@@ -243,6 +251,7 @@ export function Topbar({ layouts, activeLayout, isLayoutDirty, onSelectLayout, o
           if (!open) {
             setPendingDelete(null);
             setPendingOverwrite(null);
+            setPendingRevert(null);
             setPendingSwitch(null);
           }
         }}
@@ -286,6 +295,19 @@ export function Topbar({ layouts, activeLayout, isLayoutDirty, onSelectLayout, o
                   <Button type="button" onClick={() => { onSaveLayoutChanges(pendingOverwrite); setPendingOverwrite(null); }}>Update layout</Button>
                 </div>
               </div>
+            ) : pendingRevert ? (
+              <div className="space-y-4 p-5">
+                <div>
+                  <DialogTitle>Revert to saved layout?</DialogTitle>
+                  <DialogDescription className="mt-1">
+                    Unsaved changes to “{pendingRevert}” will be discarded. The saved tabs, panes, and sizes will be restored.
+                  </DialogDescription>
+                </div>
+                <div className="flex justify-end gap-2">
+                  <Button autoFocus type="button" variant="outline" onClick={() => setPendingRevert(null)}>Cancel</Button>
+                  <Button type="button" variant="destructive" onClick={() => { onSelectLayout(pendingRevert); setPendingRevert(null); }}>Revert to saved</Button>
+                </div>
+              </div>
             ) : pendingDelete ? (
               <div className="space-y-4 p-5">
                 <div>
@@ -317,7 +339,10 @@ export function Topbar({ layouts, activeLayout, isLayoutDirty, onSelectLayout, o
                     <p className="text-sm font-medium">{activeLayout}</p>
                     <p className="text-xs text-muted-foreground">{isLayoutDirty ? "Current arrangement has unsaved changes" : "Current layout is up to date"}</p>
                   </div>
-                  <Button type="button" variant="outline" disabled={!isLayoutDirty} onClick={() => setPendingOverwrite(activeLayout)}>Save changes</Button>
+                  <div className="flex shrink-0 gap-2">
+                    <Button type="button" variant="outline" disabled={!isLayoutDirty} onClick={() => setPendingRevert(activeLayout)}>Revert to saved</Button>
+                    <Button type="button" variant="outline" disabled={!isLayoutDirty} onClick={() => setPendingOverwrite(activeLayout)}>Save changes</Button>
+                  </div>
                 </div>}
                 <div className="space-y-2 px-5 py-4">
                   <label htmlFor="layout-name" className="text-sm font-medium">Save as new layout</label>
