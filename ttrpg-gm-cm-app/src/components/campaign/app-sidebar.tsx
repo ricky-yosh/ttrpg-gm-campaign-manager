@@ -11,6 +11,7 @@ import {
 import { Dialog, DialogDescription, DialogPopup, DialogTitle } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
 import { Kbd } from "@/components/ui/kbd";
+import { characters } from "@/lib/campaign-data";
 
 const destinations = [
   { label: "Overview", icon: LayoutDashboardIcon },
@@ -22,8 +23,6 @@ const destinations = [
   { label: "Story Threads", icon: ScrollTextIcon },
   { label: "Puzzles", icon: PuzzleIcon },
 ];
-
-const characters = ["Carlos Tree", "Niya Jade", "Renot Force"];
 
 type AppSidebarProps = {
   section: string | null;
@@ -130,7 +129,7 @@ export function AppSidebar({ section, onSelectSection, onOpenCharacter }: AppSid
         <DialogPopup>
           <div className="border-b px-5 py-4">
             <DialogTitle>Keyboard shortcuts</DialogTitle>
-            <DialogDescription className="mt-1">Navigate the workspace and manage layouts from the keyboard. The layout shortcut is ignored while typing in text fields or editors.</DialogDescription>
+            <DialogDescription className="mt-1">Navigate the workspace and search from the keyboard. Layout switching is ignored while typing; use the top-bar search button while editing rich text.</DialogDescription>
           </div>
           <div className="space-y-5 p-5">
             <section>
@@ -139,6 +138,10 @@ export function AppSidebar({ section, onSelectSection, onOpenCharacter }: AppSid
                 <div className="flex items-center justify-between gap-4 text-sm">
                   <dt>Close active tab</dt>
                   <Kbd>{isMacOS ? "⌘ W" : "Ctrl W"}</Kbd>
+                </div>
+                <div className="flex items-center justify-between gap-4 text-sm">
+                  <dt>Open search and command palette</dt>
+                  <Kbd>{isMacOS ? "⌘ K" : "Ctrl K"}</Kbd>
                 </div>
                 <div className="flex items-center justify-between gap-4 text-sm">
                   <dt>Toggle sidebar</dt>

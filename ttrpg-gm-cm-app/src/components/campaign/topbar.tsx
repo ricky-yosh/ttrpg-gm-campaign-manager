@@ -7,9 +7,10 @@ import { Dialog, DialogDescription, DialogPopup, DialogTitle } from "@/component
 import { Input } from "@/components/ui/input";
 import { Kbd } from "@/components/ui/kbd";
 import { SidebarTrigger } from "@/components/ui/sidebar";
+import { CommandPalette } from "@/components/campaign/command-palette";
 import type { SavedLayout } from "@/App";
 
-export function Topbar({ layouts, activeLayout, isLayoutDirty, onSelectLayout, onSaveLayoutChanges, onSaveAsNewLayout, onDeleteLayout, onSwitchWithChanges }: {
+export function Topbar({ layouts, activeLayout, isLayoutDirty, onSelectLayout, onSaveLayoutChanges, onSaveAsNewLayout, onDeleteLayout, onSwitchWithChanges, onOpenCharacter }: {
   layouts: SavedLayout[];
   activeLayout: string | null;
   isLayoutDirty: boolean;
@@ -18,10 +19,12 @@ export function Topbar({ layouts, activeLayout, isLayoutDirty, onSelectLayout, o
   onSaveAsNewLayout: (name: string) => boolean;
   onDeleteLayout: (name: string) => void;
   onSwitchWithChanges: (name: string, saveCurrent: boolean) => void;
+  onOpenCharacter: (name: string) => void;
 }) {
   const isMacOS = typeof navigator !== "undefined" && /Mac|iPhone|iPad/.test(navigator.platform);
   const [isFullscreen, setIsFullscreen] = useState(false);
   const [isLayoutSwitcherOpen, setIsLayoutSwitcherOpen] = useState(false);
+  const [isCommandPaletteOpen, setIsCommandPaletteOpen] = useState(false);
   const [layoutQuery, setLayoutQuery] = useState("");
   const [highlightedLayout, setHighlightedLayout] = useState(0);
   const [isLayoutManagerOpen, setIsLayoutManagerOpen] = useState(false);
@@ -74,6 +77,27 @@ export function Topbar({ layouts, activeLayout, isLayoutDirty, onSelectLayout, o
     window.addEventListener("keydown", handleShortcut);
     return () => window.removeEventListener("keydown", handleShortcut);
   }, [isMacOS, isLayoutManagerOpen, isLayoutSwitcherOpen]);
+
+  useEffect(() => {
+    const handleSearchShortcut = (event: KeyboardEvent) => {
+      const target = event.target;
+      const element = target instanceof HTMLElement ? target : null;
+      const isInDialog = Boolean(element?.closest('[role="dialog"]'));
+      const isInRichTextEditor = Boolean(element?.closest('[contenteditable="true"]'));
+      const hasPrimaryModifier = isMacOS ? event.metaKey : event.ctrlKey;
+
+      if (
+        event.repeat || isInDialog || isInRichTextEditor || event.altKey || event.shiftKey ||
+        !hasPrimaryModifier || event.key.toLowerCase() !== "k"
+      ) return;
+
+      event.preventDefault();
+      setIsCommandPaletteOpen(true);
+    };
+
+    window.addEventListener("keydown", handleSearchShortcut);
+    return () => window.removeEventListener("keydown", handleSearchShortcut);
+  }, [isMacOS]);
 
   useEffect(() => {
     if (!isTauri()) return;
@@ -157,12 +181,13 @@ export function Topbar({ layouts, activeLayout, isLayoutDirty, onSelectLayout, o
         variant="outline"
         size="sm"
         className="mx-auto min-w-0 w-full max-w-80 flex-1 justify-start"
-        aria-disabled="true"
-        title="Search — coming soon"
+        aria-label="Search campaign"
+        title={`Search campaign (${isMacOS ? "⌘K" : "Ctrl+K"})`}
+        onClick={() => setIsCommandPaletteOpen(true)}
       >
         <SearchIcon data-icon="inline-start" />
         <span className="min-w-0 truncate">Search campaign…</span>
-        <Kbd className="ml-auto shrink-0">⌘ K</Kbd>
+        <Kbd className="ml-auto shrink-0">{isMacOS ? "⌘ K" : "Ctrl K"}</Kbd>
       </Button>
       <div className="flex h-full shrink-0 items-center justify-end">
         <Button
@@ -244,6 +269,12 @@ export function Topbar({ layouts, activeLayout, isLayoutDirty, onSelectLayout, o
           <p className="border-t px-5 py-2 text-xs text-muted-foreground">↑ ↓ to move · Enter to open · Esc to close</p>
         </DialogPopup>
       </Dialog>
+      <CommandPalette
+        open={isCommandPaletteOpen}
+        onOpenChange={setIsCommandPaletteOpen}
+        onCreateLayout={openLayoutManager}
+        onOpenCharacter={onOpenCharacter}
+      />
       <Dialog
         open={isLayoutManagerOpen}
         onOpenChange={(open) => {
