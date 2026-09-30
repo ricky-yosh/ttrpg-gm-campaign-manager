@@ -132,6 +132,12 @@
   }
 }
 
+html[data-image-resizing="true"],
+html[data-image-resizing="true"] * {
+  user-select: none !important;
+  -webkit-user-select: none !important;
+}
+
 .macos-traffic-light-space {
   display: none;
 }

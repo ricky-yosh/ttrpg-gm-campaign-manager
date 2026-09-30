@@ -10,10 +10,12 @@ import { SidebarTrigger } from "@/components/ui/sidebar";
 import { CommandPalette } from "@/components/campaign/command-palette";
 import type { SavedLayout } from "@/App";
 
-export function Topbar({ layouts, activeLayout, isLayoutDirty, onSelectLayout, onSaveLayoutChanges, onSaveAsNewLayout, onDeleteLayout, onSwitchWithChanges, onOpenCharacter }: {
+export function Topbar({ layouts, activeLayout, isLayoutDirty, isCommandPaletteOpen, onCommandPaletteOpenChange, onSelectLayout, onSaveLayoutChanges, onSaveAsNewLayout, onDeleteLayout, onSwitchWithChanges, onOpenCharacter }: {
   layouts: SavedLayout[];
   activeLayout: string | null;
   isLayoutDirty: boolean;
+  isCommandPaletteOpen: boolean;
+  onCommandPaletteOpenChange: (open: boolean) => void;
   onSelectLayout: (name: string) => void;
   onSaveLayoutChanges: (name: string) => void;
   onSaveAsNewLayout: (name: string) => boolean;
@@ -24,7 +26,6 @@ export function Topbar({ layouts, activeLayout, isLayoutDirty, onSelectLayout, o
   const isMacOS = typeof navigator !== "undefined" && /Mac|iPhone|iPad/.test(navigator.platform);
   const [isFullscreen, setIsFullscreen] = useState(false);
   const [isLayoutSwitcherOpen, setIsLayoutSwitcherOpen] = useState(false);
-  const [isCommandPaletteOpen, setIsCommandPaletteOpen] = useState(false);
   const [layoutQuery, setLayoutQuery] = useState("");
   const [highlightedLayout, setHighlightedLayout] = useState(0);
   const [isLayoutManagerOpen, setIsLayoutManagerOpen] = useState(false);
@@ -92,7 +93,7 @@ export function Topbar({ layouts, activeLayout, isLayoutDirty, onSelectLayout, o
       ) return;
 
       event.preventDefault();
-      setIsCommandPaletteOpen(true);
+      onCommandPaletteOpenChange(true);
     };
 
     window.addEventListener("keydown", handleSearchShortcut);
@@ -183,7 +184,7 @@ export function Topbar({ layouts, activeLayout, isLayoutDirty, onSelectLayout, o
         className="mx-auto min-w-0 w-full max-w-80 flex-1 justify-start"
         aria-label="Search campaign"
         title={`Search campaign (${isMacOS ? "⌘K" : "Ctrl+K"})`}
-        onClick={() => setIsCommandPaletteOpen(true)}
+        onClick={() => onCommandPaletteOpenChange(true)}
       >
         <SearchIcon data-icon="inline-start" />
         <span className="min-w-0 truncate">Search campaign…</span>
@@ -271,7 +272,7 @@ export function Topbar({ layouts, activeLayout, isLayoutDirty, onSelectLayout, o
       </Dialog>
       <CommandPalette
         open={isCommandPaletteOpen}
-        onOpenChange={setIsCommandPaletteOpen}
+        onOpenChange={onCommandPaletteOpenChange}
         onCreateLayout={openLayoutManager}
         onOpenCharacter={onOpenCharacter}
       />

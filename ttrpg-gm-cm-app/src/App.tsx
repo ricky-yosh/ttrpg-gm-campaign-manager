@@ -3,8 +3,12 @@ import { DockviewReact, themeDark, themeLight, type DockviewReadyEvent } from "d
 import { AppSidebar } from "@/components/campaign/app-sidebar";
 import { CharacterPanel } from "@/components/campaign/character-panel";
 import { Topbar } from "@/components/campaign/topbar";
+import { Button } from "@/components/ui/button";
+import { Empty, EmptyContent, EmptyDescription, EmptyHeader, EmptyMedia, EmptyTitle } from "@/components/ui/empty";
+import { Kbd } from "@/components/ui/kbd";
 import { SidebarProvider } from "@/components/ui/sidebar";
 import { TooltipProvider } from "@/components/ui/tooltip";
+import { SearchIcon } from "lucide-react";
 import "./App.css";
 import "dockview-react/dist/styles/dockview.css";
 
@@ -15,6 +19,8 @@ const dockviewComponents = { character: CharacterPanel };
 function App() {
   const [section, setSection] = useState<string | null>(null);
   const [isDark, setIsDark] = useState(false);
+  const [hasOpenPanels, setHasOpenPanels] = useState(false);
+  const [isCommandPaletteOpen, setIsCommandPaletteOpen] = useState(false);
   const dockviewApi = useRef<DockviewReadyEvent["api"] | null>(null);
   const layoutChangeSubscription = useRef<{ dispose: () => void } | null>(null);
   const restoringLayout = useRef(false);
@@ -127,6 +133,8 @@ function App() {
     <TooltipProvider>
       <SidebarProvider className="h-svh flex-col overflow-hidden">
         <Topbar
+          isCommandPaletteOpen={isCommandPaletteOpen}
+          onCommandPaletteOpenChange={setIsCommandPaletteOpen}
           layouts={layouts}
           activeLayout={activeLayout}
           isLayoutDirty={isLayoutDirty}
@@ -139,7 +147,7 @@ function App() {
         />
         <div className="flex min-h-0 flex-1">
           <AppSidebar section={section} onSelectSection={setSection} onOpenCharacter={openCharacter} />
-          <main aria-label="Campaign workspace" className="min-h-0 min-w-0 flex-1">
+          <main aria-label="Campaign workspace" className="relative min-h-0 min-w-0 flex-1">
             <DockviewReact
               className="campaign-dockview"
               theme={isDark ? themeDark : themeLight}
@@ -148,8 +156,10 @@ function App() {
               dndStrategy="pointer"
               onReady={(event) => {
                 dockviewApi.current = event.api;
+                setHasOpenPanels(event.api.panels.length > 0);
                 layoutChangeSubscription.current?.dispose();
                 layoutChangeSubscription.current = event.api.onDidLayoutChange(() => {
+                  setHasOpenPanels(event.api.panels.length > 0);
                   if (restoringLayout.current) return;
                   const currentName = activeLayoutRef.current;
                   const saved = layoutsRef.current.find((item) => item.name === currentName);
@@ -158,6 +168,26 @@ function App() {
                 });
               }}
             />
+            {!hasOpenPanels && (
+              <Empty aria-label="Workspace empty state" className="absolute inset-0 h-full">
+                <EmptyHeader>
+                  <EmptyMedia variant="icon">
+                    <SearchIcon aria-hidden="true" />
+                  </EmptyMedia>
+                  <EmptyTitle>Nothing open</EmptyTitle>
+                  <EmptyDescription>
+                    Choose a section from the sidebar or search your campaign to open something.
+                  </EmptyDescription>
+                </EmptyHeader>
+                <EmptyContent>
+                  <Button variant="outline" onClick={() => setIsCommandPaletteOpen(true)}>
+                    <SearchIcon data-icon="inline-start" />
+                    Search campaign
+                    <Kbd className="ml-2">{/Mac|iPhone|iPad/.test(navigator.platform) ? "⌘ K" : "Ctrl K"}</Kbd>
+                  </Button>
+                </EmptyContent>
+              </Empty>
+            )}
           </main>
         </div>
       </SidebarProvider>

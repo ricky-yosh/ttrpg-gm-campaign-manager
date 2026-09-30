@@ -5,9 +5,10 @@ import { KEYS, type TMediaElement } from "platejs";
 import type { IDockviewPanelProps } from "dockview-react";
 import { BasicBlocksPlugin, BasicMarksPlugin, BlockquotePlugin } from "@platejs/basic-nodes/react";
 import { CaptionPlugin, CaptionTextarea } from "@platejs/caption/react";
+import { ListPlugin } from "@platejs/list-classic/react";
 import { ImagePlugin } from "@platejs/media/react";
 import { Resizable, ResizableProvider, ResizeHandle, useResizableValue } from "@platejs/resizable";
-import { BoldIcon, Heading1Icon, Heading2Icon, Heading3Icon, ImageIcon, ItalicIcon, PilcrowIcon, QuoteIcon, UnderlineIcon } from "lucide-react";
+import { BoldIcon, Heading1Icon, Heading2Icon, Heading3Icon, ImageIcon, ItalicIcon, ListIcon, ListOrderedIcon, PilcrowIcon, QuoteIcon, UnderlineIcon } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Separator } from "@/components/ui/separator";
 import { cn } from "cn";
@@ -26,7 +27,32 @@ const ImageElement = withHOC(
     const selected = useSelected();
     const figureRef = useRef<HTMLElement>(null);
     const imageRef = useRef<HTMLImageElement>(null);
+    const resizeCleanupRef = useRef<(() => void) | null>(null);
     const width = useResizableValue("width");
+
+    const beginImageResize = (event: React.MouseEvent) => {
+      event.preventDefault();
+      resizeCleanupRef.current?.();
+      document.documentElement.dataset.imageResizing = "true";
+
+      const endImageResize = () => {
+        delete document.documentElement.dataset.imageResizing;
+        window.removeEventListener("mouseup", endImageResize);
+        window.removeEventListener("blur", endImageResize);
+        document.removeEventListener("visibilitychange", endIfHidden);
+        resizeCleanupRef.current = null;
+      };
+      const endIfHidden = () => {
+        if (document.hidden) endImageResize();
+      };
+
+      resizeCleanupRef.current = endImageResize;
+      window.addEventListener("mouseup", endImageResize, { once: true });
+      window.addEventListener("blur", endImageResize, { once: true });
+      document.addEventListener("visibilitychange", endIfHidden);
+    };
+
+    useEffect(() => () => resizeCleanupRef.current?.(), []);
 
     useEffect(() => {
       const figure = figureRef.current;
@@ -74,7 +100,7 @@ const ImageElement = withHOC(
           >
             <ResizeHandle
               aria-hidden="true"
-              options={{ direction: "left" }}
+              options={{ direction: "left", onMouseDown: beginImageResize }}
               className="absolute left-0 top-1/2 z-10 h-8 w-2 -translate-x-1/2 -translate-y-1/2 cursor-ew-resize rounded-full bg-muted-foreground/60 opacity-80 transition-colors hover:bg-primary hover:opacity-100"
             />
             <img
@@ -90,7 +116,7 @@ const ImageElement = withHOC(
             />
             <ResizeHandle
               aria-hidden="true"
-              options={{ direction: "right" }}
+              options={{ direction: "right", onMouseDown: beginImageResize }}
               className="absolute right-0 top-1/2 z-10 h-8 w-2 translate-x-1/2 -translate-y-1/2 cursor-ew-resize rounded-full bg-muted-foreground/60 opacity-80 transition-colors hover:bg-primary hover:opacity-100"
             />
           </Resizable>
@@ -111,6 +137,7 @@ const ImageElement = withHOC(
 const characterEditorPlugins = [
   BasicBlocksPlugin,
   BasicMarksPlugin,
+  ListPlugin,
   ImagePlugin.withComponent(ImageElement),
   CaptionPlugin.configure({ options: { query: { allow: [KEYS.img] } } }),
 ];
@@ -130,6 +157,22 @@ function FormattingToolbar() {
     (currentEditor) => Boolean(
       currentEditor.api.above({
         match: (node) => node.type === currentEditor.getType(KEYS.blockquote),
+      }),
+    ),
+    [],
+  );
+  const bulletedListActive = useEditorSelector(
+    (currentEditor) => Boolean(
+      currentEditor.api.above({
+        match: (node) => node.type === currentEditor.getType(KEYS.ulClassic),
+      }),
+    ),
+    [],
+  );
+  const numberedListActive = useEditorSelector(
+    (currentEditor) => Boolean(
+      currentEditor.api.above({
+        match: (node) => node.type === currentEditor.getType(KEYS.olClassic),
       }),
     ),
     [],
@@ -260,6 +303,30 @@ function FormattingToolbar() {
       >
         <QuoteIcon aria-hidden="true" />
       </Button>
+      <Button
+        type="button"
+        size="icon-sm"
+        variant={bulletedListActive ? "secondary" : "ghost"}
+        aria-label="Bulleted list"
+        aria-pressed={bulletedListActive}
+        title="Bulleted list"
+        onMouseDown={preventSelectionLoss}
+        onClick={() => editor.getTransforms(ListPlugin).toggle.bulletedList()}
+      >
+        <ListIcon aria-hidden="true" />
+      </Button>
+      <Button
+        type="button"
+        size="icon-sm"
+        variant={numberedListActive ? "secondary" : "ghost"}
+        aria-label="Numbered list"
+        aria-pressed={numberedListActive}
+        title="Numbered list"
+        onMouseDown={preventSelectionLoss}
+        onClick={() => editor.getTransforms(ListPlugin).toggle.numberedList()}
+      >
+        <ListOrderedIcon aria-hidden="true" />
+      </Button>
       <Separator orientation="vertical" className="mx-1 h-5" />
       <Button
         type="button"
@@ -346,7 +413,7 @@ export function CharacterPanel({ params }: IDockviewPanelProps) {
             aria-label={`${name} notes editor`}
             placeholder="Add notes about this character…"
             onKeyDown={handleEditorKeyDown}
-            className="min-h-60 px-4 py-3 text-sm leading-6 outline-none [&_p]:mb-3 [&_p:last-child]:mb-0 [&_h1]:mb-3 [&_h1]:mt-5 [&_h1]:text-xl [&_h1]:font-semibold [&_h1]:leading-tight [&_h1:first-child]:mt-0 [&_h2]:mb-2 [&_h2]:mt-4 [&_h2]:text-lg [&_h2]:font-semibold [&_h2]:leading-tight [&_h2:first-child]:mt-0 [&_h3]:mb-2 [&_h3]:mt-3 [&_h3]:text-base [&_h3]:font-semibold [&_h3]:leading-tight [&_h3:first-child]:mt-0 [&_blockquote]:my-4 [&_blockquote]:border-l-2 [&_blockquote]:border-border [&_blockquote]:pl-4 [&_blockquote]:italic"
+            className="min-h-60 px-4 py-3 text-sm leading-6 outline-none [&_p]:mb-3 [&_p:last-child]:mb-0 [&_h1]:mb-3 [&_h1]:mt-5 [&_h1]:text-xl [&_h1]:font-semibold [&_h1]:leading-tight [&_h1:first-child]:mt-0 [&_h2]:mb-2 [&_h2]:mt-4 [&_h2]:text-lg [&_h2]:font-semibold [&_h2]:leading-tight [&_h2:first-child]:mt-0 [&_h3]:mb-2 [&_h3]:mt-3 [&_h3]:text-base [&_h3]:font-semibold [&_h3]:leading-tight [&_h3:first-child]:mt-0 [&_blockquote]:my-4 [&_blockquote]:border-l-2 [&_blockquote]:border-border [&_blockquote]:pl-4 [&_blockquote]:italic [&_ul]:my-3 [&_ul]:list-disc [&_ul]:pl-6 [&_ol]:my-3 [&_ol]:list-decimal [&_ol]:pl-6 [&_li]:pl-1"
           />
         </Plate>
       </section>
