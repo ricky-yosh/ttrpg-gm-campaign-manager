@@ -4,6 +4,8 @@ import type Konva from "konva";
 import { ImagePlusIcon, MapPinIcon, MinusIcon, PlusIcon, RotateCcwIcon, UploadIcon } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Empty, EmptyDescription, EmptyHeader, EmptyMedia, EmptyTitle } from "@/components/ui/empty";
+import { Separator } from "@/components/ui/separator";
+import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 
 type MapPin = { id: number; x: number; y: number };
 type Size = { width: number; height: number };
@@ -99,46 +101,17 @@ export function MapPrototypePanel() {
 
   return (
     <div className="flex size-full min-h-0 flex-col bg-background">
-      <header className="flex flex-wrap items-center justify-between gap-3 border-b px-4 py-3">
-        <div className="min-w-0">
-          <h1 className="truncate text-sm font-semibold">Map prototype</h1>
-          <p className="text-xs text-muted-foreground">One map image with draggable pins</p>
-        </div>
-        <div className="flex flex-wrap items-center gap-2">
-          <input
-            ref={fileRef}
-            type="file"
-            accept="image/*"
-            aria-label="Choose a map image"
-            className="sr-only"
-            onChange={(event) => {
-              selectImage(event.currentTarget.files?.[0]);
-              event.currentTarget.value = "";
-            }}
-          />
-          <Button variant="outline" size="sm" onClick={() => fileRef.current?.click()}>
-            <UploadIcon data-icon="inline-start" />{image ? "Replace image" : "Upload image"}
-          </Button>
-          {image && (
-            <>
-              <Button
-                variant={addingPin ? "default" : "outline"}
-                size="sm"
-                aria-pressed={addingPin}
-                onClick={() => setAddingPin((active) => !active)}
-              >
-                <MapPinIcon data-icon="inline-start" />{addingPin ? "Click map to place" : "Add pin"}
-              </Button>
-              <div className="flex items-center rounded-md border">
-                <Button variant="ghost" size="icon-sm" aria-label="Zoom out" onClick={() => changeZoom(camera.scale / 1.2)}><MinusIcon /></Button>
-                <span className="min-w-12 text-center text-xs tabular-nums text-muted-foreground">{Math.round(camera.scale * 100)}%</span>
-                <Button variant="ghost" size="icon-sm" aria-label="Zoom in" onClick={() => changeZoom(camera.scale * 1.2)}><PlusIcon /></Button>
-              </div>
-              <Button variant="ghost" size="icon-sm" aria-label="Reset map view" onClick={() => setCamera({ scale: 1, x: 0, y: 0 })}><RotateCcwIcon /></Button>
-            </>
-          )}
-        </div>
-      </header>
+      <input
+        ref={fileRef}
+        type="file"
+        accept="image/*"
+        aria-label="Choose a map image"
+        className="sr-only"
+        onChange={(event) => {
+          selectImage(event.currentTarget.files?.[0]);
+          event.currentTarget.value = "";
+        }}
+      />
 
       {error && <p role="alert" className="border-b bg-destructive/10 px-4 py-2 text-sm text-destructive">{error}</p>}
 
@@ -215,8 +188,48 @@ export function MapPrototypePanel() {
                 })}
               </Layer>
             </Stage>
-            <div className="pointer-events-none absolute bottom-3 left-3 rounded-md border bg-background/90 px-2.5 py-1.5 text-xs text-muted-foreground shadow-sm">
-              {addingPin ? "Click anywhere on the map to add a pin" : "Drag to pan · Scroll to zoom · Drag pins to move"}
+            <div role="toolbar" aria-label="Map tools" className="absolute bottom-4 left-1/2 flex max-w-[calc(100%-2rem)] -translate-x-1/2 items-center gap-1 rounded-xl border bg-background/95 p-1.5 shadow-xl backdrop-blur-md">
+              <Tooltip>
+                <TooltipTrigger render={<Button variant="ghost" size="icon" aria-label="Replace map image" onClick={() => fileRef.current?.click()} />}>
+                  <UploadIcon />
+                </TooltipTrigger>
+                <TooltipContent>Replace map image</TooltipContent>
+              </Tooltip>
+              <Tooltip>
+                <TooltipTrigger render={
+                  <Button
+                    variant={addingPin ? "secondary" : "ghost"}
+                    size="icon"
+                    aria-label={addingPin ? "Cancel adding pin" : "Add pin"}
+                    aria-pressed={addingPin}
+                    onClick={() => setAddingPin((active) => !active)}
+                  />
+                }>
+                  <MapPinIcon />
+                </TooltipTrigger>
+                <TooltipContent>{addingPin ? "Cancel adding pin" : "Add pin"}</TooltipContent>
+              </Tooltip>
+              <Separator orientation="vertical" className="mx-1 h-6" />
+              <Tooltip>
+                <TooltipTrigger render={<Button variant="ghost" size="icon" aria-label="Zoom out" onClick={() => changeZoom(camera.scale / 1.2)} />}>
+                  <MinusIcon />
+                </TooltipTrigger>
+                <TooltipContent>Zoom out</TooltipContent>
+              </Tooltip>
+              <span aria-live="polite" className="min-w-12 text-center text-xs font-medium tabular-nums text-muted-foreground">{Math.round(camera.scale * 100)}%</span>
+              <Tooltip>
+                <TooltipTrigger render={<Button variant="ghost" size="icon" aria-label="Zoom in" onClick={() => changeZoom(camera.scale * 1.2)} />}>
+                  <PlusIcon />
+                </TooltipTrigger>
+                <TooltipContent>Zoom in</TooltipContent>
+              </Tooltip>
+              <Separator orientation="vertical" className="mx-1 h-6" />
+              <Tooltip>
+                <TooltipTrigger render={<Button variant="ghost" size="icon" aria-label="Reset map view" onClick={() => setCamera({ scale: 1, x: 0, y: 0 })} />}>
+                  <RotateCcwIcon />
+                </TooltipTrigger>
+                <TooltipContent>Reset map view</TooltipContent>
+              </Tooltip>
             </div>
           </div>
           <aside className="hidden w-56 shrink-0 flex-col gap-3 border-l p-4 sm:flex">
