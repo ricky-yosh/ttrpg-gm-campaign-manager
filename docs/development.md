@@ -26,3 +26,16 @@ Usually no cleanup is needed. Use these when a build is stale or you need to rec
 - `rm -rf node_modules && pnpm install` removes and reinstalls frontend dependencies if the install is broken. It does not remove the pnpm package store.
 
 Cargo's clean command removes generated artifacts from its target directory; see the [Cargo clean reference](https://doc.rust-lang.org/cargo/commands/cargo-clean.html).
+
+## Try campaign persistence
+
+Start the desktop app with `pnpm tauri dev` (restart it after adding Rust commands or plugins). Click **Save** to keep the sample campaign, or **New campaign** to create an empty one. Save each campaign as its own `<name>.campaign` folder package. It contains `campaign.sqlite` and `assets/`, which remain browsable inside the folder. New campaigns are unsaved drafts until their first Save. Closing or switching away from unsaved work offers Save, Don’t save, and Cancel. Choose Close without saving to discard an accidental campaign without creating a file. Previously saved campaign files are retained.
+
+Click **New NPC**, enter a name, then edit its notes. Insert an image with the note toolbar. Once a campaign file exists, edits autosave; the Save button also flushes pending changes. **Open campaign** reopens a saved package and restores its NPCs and workspace layout. For a backup, wait for **Saved**, then ZIP the entire `.campaign` folder, including `campaign.sqlite` and `assets/`.
+
+Storage regression checks:
+
+- `cargo test --manifest-path src-tauri/Cargo.toml` checks portable image/note round trips, missing/corrupt assets, and preservation of the previous document on failed saves.
+- `node --test tests/campaign-store.test.mjs` (Node 22.18+ with native TypeScript stripping, or newer) checks concurrent save requests, edits during a write, duplicate NPC names, canceled/failed opens, campaign isolation, discarded drafts, close cancellation, and autosave suspension through mocked Tauri IPC.
+
+Frontend builds and browser UI checks do not exercise native file dialogs. For desktop verification, create two `.campaign` packages, add/edit NPCs and a local image, split their tabs, close/restart the app, reopen each campaign, and repeat after moving one folder. Check normal window close and canceling the first-save dialog as well.

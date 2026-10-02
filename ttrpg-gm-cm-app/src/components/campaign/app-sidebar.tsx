@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import {
   ArrowLeftIcon, BookOpenIcon, ChevronsUpDownIcon, CircleHelpIcon, Dice5Icon, FlagIcon, LayoutDashboardIcon,
   MapIcon, PackageIcon, PuzzleIcon, ScrollTextIcon, SettingsIcon, UsersIcon,
@@ -11,7 +11,7 @@ import {
 import { Dialog, DialogDescription, DialogPopup, DialogTitle } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
 import { Kbd } from "@/components/ui/kbd";
-import { characters } from "@/lib/campaign-data";
+import { updateCampaign, useCampaign } from "@/lib/campaign-data";
 import { SidebarResizeHandle } from "@/components/ui/sidebar-resize-handle";
 
 const destinations = [
@@ -29,11 +29,16 @@ type AppSidebarProps = {
   section: string | null;
   onSelectSection: (section: string | null) => void;
   onOpenCharacter: (name: string) => void;
+  onCreateNpc: () => void;
 };
 
-export function AppSidebar({ section, onSelectSection, onOpenCharacter }: AppSidebarProps) {
+export function AppSidebar({ section, onSelectSection, onOpenCharacter, onCreateNpc }: AppSidebarProps) {
+  const { campaign } = useCampaign();
   const { isMobile, setOpenMobile, open, setOpen } = useSidebar();
-  const [sidebarWidth, setSidebarWidth] = useState(256);
+  const [sidebarWidth, setSidebarWidth] = useState(campaign.sidebar.width);
+  useEffect(() => {
+    if (campaign.sidebar.width !== sidebarWidth || campaign.sidebar.open !== open) updateCampaign({ sidebar: { width: sidebarWidth, open } });
+  }, [sidebarWidth, open, campaign.sidebar]);
   const [isShortcutsOpen, setIsShortcutsOpen] = useState(false);
   const isMacOS = typeof navigator !== "undefined" && /Mac|iPhone|iPad/.test(navigator.platform);
   const selectSection = (nextSection: string) => {
@@ -46,10 +51,10 @@ export function AppSidebar({ section, onSelectSection, onOpenCharacter }: AppSid
       <SidebarHeader>
         <SidebarMenu>
           <SidebarMenuItem>
-            <SidebarMenuButton size="lg" aria-disabled="true" title="Campaign selector — coming soon">
+            <SidebarMenuButton size="lg" aria-disabled="true" title={campaign.name}>
               <Dice5Icon aria-hidden="true" />
               <span className="flex flex-1 flex-col gap-0.5 group-data-[collapsible=icon]:hidden">
-                <span>My campaign</span>
+                <span>{campaign.name}</span>
                 <span className="text-xs text-muted-foreground">D&D 5.5e</span>
               </span>
               <ChevronsUpDownIcon className="group-data-[collapsible=icon]:hidden" aria-hidden="true" />
@@ -73,10 +78,11 @@ export function AppSidebar({ section, onSelectSection, onOpenCharacter }: AppSid
                 </SidebarMenuItem>
               </SidebarMenu>
               <div className="px-2 pb-2 pt-4 text-xs font-semibold text-muted-foreground group-data-[collapsible=icon]:hidden">{section}</div>
+              {section === "Characters" && <Button variant="outline" onClick={onCreateNpc}>New NPC</Button>}
               <SidebarMenu>
-                {section === "Characters" ? characters.map((name) => (
-                  <SidebarMenuItem key={name}>
-                    <SidebarMenuButton tooltip={name} onClick={() => onOpenCharacter(name)}>
+                {section === "Characters" ? campaign.npcs.map(({ id, name }) => (
+                  <SidebarMenuItem key={id}>
+                    <SidebarMenuButton tooltip={name} onClick={() => onOpenCharacter(id)}>
                       <UsersIcon aria-hidden="true" />
                       <span>{name}</span>
                     </SidebarMenuButton>

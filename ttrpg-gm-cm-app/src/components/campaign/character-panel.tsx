@@ -12,7 +12,7 @@ import { BoldIcon, Heading1Icon, Heading2Icon, Heading3Icon, ImageIcon, ItalicIc
 import { Button } from "@/components/ui/button";
 import { Separator } from "@/components/ui/separator";
 import { cn } from "cn";
-import { getCharacterNotes, saveCharacterNotes } from "@/lib/campaign-data";
+import { getCharacterNotes, saveCharacterNotes, useCampaign } from "@/lib/campaign-data";
 
 const MAX_IMAGE_SIZE = 10 * 1024 * 1024;
 const MAX_IMAGE_DISPLAY_HEIGHT = 448;
@@ -353,13 +353,25 @@ function FormattingToolbar() {
   );
 }
 
-export function CharacterPanel({ params }: IDockviewPanelProps) {
-  const name = typeof params.name === "string" ? params.name : "Character";
+export function CharacterPanel({ params, api }: IDockviewPanelProps) {
+  const id = typeof params.name === "string" ? params.name : "";
+  const { campaign } = useCampaign();
+  const npc = campaign.npcs.find((item) => item.id === id);
+  const name = npc?.name ?? "Character";
+  const scrollRef = useRef<HTMLElement>(null);
+  const initialScrollTop = useRef(typeof params.scrollTop === "number" ? params.scrollTop : 0);
+  useEffect(() => {
+    const frame = requestAnimationFrame(() => { if (scrollRef.current) scrollRef.current.scrollTop = initialScrollTop.current; });
+    return () => cancelAnimationFrame(frame);
+  }, []);
   const editor = usePlateEditor({
-    id: `character-notes:${name}`,
+    id: `character-notes:${id}`,
     plugins: characterEditorPlugins,
-    value: () => getCharacterNotes(name),
+    value: () => structuredClone(getCharacterNotes(id)),
   });
+  useEffect(() => {
+    if (npc && JSON.stringify(editor.children) !== JSON.stringify(npc.notes)) editor.tf.setValue(structuredClone(npc.notes));
+  }, [editor, npc]);
   const handleEditorKeyDown = (event: React.KeyboardEvent<HTMLDivElement>) => {
     if (event.key !== "Enter" || event.shiftKey || event.altKey || event.ctrlKey || event.metaKey) return;
 
@@ -397,16 +409,19 @@ export function CharacterPanel({ params }: IDockviewPanelProps) {
   };
 
   return (
-    <article className="h-full overflow-auto p-8">
+    <article ref={scrollRef} className="h-full overflow-auto p-8" onScroll={(event) => {
+      api.updateParameters({ scrollTop: event.currentTarget.scrollTop });
+      window.dispatchEvent(new Event("campaign-workspace-change"));
+    }}>
       <p className="mb-2 text-xs font-medium uppercase tracking-wide text-muted-foreground">NPC</p>
       <h1 className="text-2xl font-semibold">{name}</h1>
       <p className="mt-3 max-w-prose text-sm text-muted-foreground">
-        Demo notes. Changes stay in this session.
+        Private campaign notes. Use Save to keep your changes.
       </p>
       <section aria-label={`${name} notes`} className="mt-6 max-w-3xl overflow-hidden rounded-xl border bg-card">
         <Plate
           editor={editor}
-          onValueChange={({ value }) => saveCharacterNotes(name, value)}
+          onValueChange={({ value }) => saveCharacterNotes(id, value)}
         >
           <FormattingToolbar />
           <PlateContent

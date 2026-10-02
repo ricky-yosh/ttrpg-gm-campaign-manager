@@ -3,7 +3,7 @@ import { Autocomplete } from "@base-ui/react/autocomplete";
 import { LayoutTemplateIcon, SearchIcon, UserRoundIcon, type LucideIcon } from "lucide-react";
 import { Dialog, DialogDescription, DialogPopup, DialogTitle } from "@/components/ui/dialog";
 import { Kbd } from "@/components/ui/kbd";
-import { characters } from "@/lib/campaign-data";
+import { useCampaign } from "@/lib/campaign-data";
 
 type PaletteItem = {
   id: string;
@@ -19,33 +19,6 @@ type PaletteGroup = {
   items: PaletteItem[];
 };
 
-const paletteGroups: PaletteGroup[] = [
-  {
-    value: "Actions",
-    items: [
-      {
-        id: "create-workspace",
-        kind: "create-workspace",
-        label: "Create new workspace",
-        description: "Open an empty workspace tab",
-        keywords: ["tab", "new", "workspace"],
-        icon: LayoutTemplateIcon,
-      },
-    ],
-  },
-  {
-    value: "Characters",
-    items: characters.map((name) => ({
-      id: `character:${name}`,
-      kind: "character",
-      label: name,
-      description: "Open character tab",
-      keywords: ["character", "npc", "person"],
-      icon: UserRoundIcon,
-    })),
-  },
-];
-
 export function CommandPalette({
   open,
   onOpenChange,
@@ -57,6 +30,34 @@ export function CommandPalette({
   onCreateWorkspace: () => void;
   onOpenCharacter: (name: string) => void;
 }) {
+  const { campaign } = useCampaign();
+  const paletteGroups: PaletteGroup[] = [
+    {
+      value: "Actions",
+      items: [
+        {
+          id: "create-workspace",
+          kind: "create-workspace",
+          label: "Create new workspace",
+          description: "Open an empty workspace tab",
+          keywords: ["tab", "new", "workspace"],
+          icon: LayoutTemplateIcon,
+        },
+      ],
+    },
+    {
+      value: "Characters",
+      items: campaign.npcs.map(({ id, name }) => ({
+        id,
+        kind: "character",
+        label: name,
+        description: "Open character tab",
+        keywords: ["character", "npc", "person"],
+        icon: UserRoundIcon,
+      })),
+    },
+  ];
+
   const [query, setQuery] = useState("");
 
   useEffect(() => {
@@ -67,7 +68,7 @@ export function CommandPalette({
     setQuery("");
     onOpenChange(false);
     if (item.kind === "create-workspace") onCreateWorkspace();
-    else onOpenCharacter(item.label);
+    else onOpenCharacter(item.id);
   };
 
   return (

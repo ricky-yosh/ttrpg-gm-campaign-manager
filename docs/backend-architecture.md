@@ -2,6 +2,16 @@
 
 Working outline for the technical design. See [Brainstorm](brainstorm-doc.md) for feature ideas, [UI/UX](ui-ux.md) for interface decisions, [Campaign Data Model](data-model.md) for candidate objects and attributes, and [Maps and Exploration](maps.md) for the linked-map workflow.
 
+## Current persistence prototype
+
+The first implementation uses a **`.campaign` package folder containing `campaign.sqlite` and an `assets/` folder**, following the SQLite storage decision below. The package extension makes one campaign easy to identify while keeping its files browsable. It saves the features that exist now: NPC identities and Plate note documents, imported note images, workspace tabs/splits, active tabs, sidebar state, note scroll positions, and bounded navigation history.
+
+Rust validates and saves campaign metadata, NPC records, Plate note JSON, and workspace state in a SQLite transaction. Images stay as content-hashed files under `assets/`, with relative references in note documents. Saves use SQLite's atomic transaction behavior and install referenced images before committing. Unknown database versions and malformed records are rejected. Save chooses a destination named `<campaign name>.campaign`; Open selects the package folder.
+
+The frontend offers New campaign, Open campaign, Save, and New NPC. Once a destination has been chosen, edits autosave after 750 ms of inactivity. A serialized save loop includes edits made while a write is in progress. Switching campaigns and normal desktop window closure offer Save, Don’t save, and Cancel for unsaved work. Autosave pauses while this choice and any subsequent file dialog are open. Don’t save discards unsaved work without deleting a previously saved package; canceling the choice or the save dialog, or encountering a failure, retains the current campaign. New campaigns stay in memory until their first Save. The initial sample characters remain available in an unsaved campaign; new campaigns start empty. Restarting the app requires using Open campaign to select the saved package.
+
+For a backup, click Save, wait for **Saved**, then ZIP or copy the **entire `.campaign` folder**, including `campaign.sqlite` and `assets/`. The app does not yet create ZIP files, prune unused images, provide Save Copy, recover unsaved drafts after a crash, support concurrent editing from multiple app instances, or persist campaign-wide edit undo history. Text-editor undo remains local to the active editor. Browser-only Vite development can create/edit NPCs, but filesystem saving requires the Tauri desktop app.
+
 ## Known requirements
 
 - The app is a Tauri desktop application with separate GM and player windows. The player window exists only during an active presentation; closing it ends that presentation.

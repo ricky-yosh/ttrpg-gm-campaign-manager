@@ -8,6 +8,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { SidebarResizeHandle } from "@/components/ui/sidebar-resize-handle";
 import { Dialog, DialogDescription, DialogPopup, DialogTitle } from "@/components/ui/dialog";
+import { getCampaign, updateCampaign } from "@/lib/campaign-data";
 import { cn } from "@/lib/utils";
 
 export type WorkspaceHandle = {
@@ -99,18 +100,41 @@ export function Workspaces({ ref, isDark, onSearch, onNavigationChange }: {
   onSearch: () => void;
   onNavigationChange: (state: NavigationState) => void;
 }) {
+  const generation = useRef(getCampaign().generation).current;
+  const initialState = useRef(getCampaign().campaign.workspace).current;
+  const initialized = useRef(false);
   const api = useRef<DockviewApi | null>(null);
   const panels = useRef(new Map<string, DockviewApi>());
-  const nextId = useRef(1);
+  const nextId = useRef(initialState?.nextId ?? 1);
   const subscriptions = useRef<{ dispose: () => void }[]>([]);
-  const [isCollapsed, setIsCollapsed] = useState(false);
-  const [sidebarWidth, setSidebarWidth] = useState(192);
+  const [isCollapsed, setIsCollapsed] = useState(initialState?.collapsed ?? false);
+  const [sidebarWidth, setSidebarWidth] = useState(initialState?.sidebarWidth ?? 192);
   const [workspaceTabs, setWorkspaceTabs] = useState<{ id: string; title: string }[]>([]);
   const [activeWorkspace, setActiveWorkspace] = useState<string | null>(null);
   const [workspaceToDelete, setWorkspaceToDelete] = useState<{ id: string; title: string } | null>(null);
   const draggedWorkspace = useRef<string | null>(null);
-  const history = useRef<{ entries: Destination[]; index: number }>({ entries: [], index: -1 });
+  const history = useRef<{ entries: Destination[]; index: number }>(initialState ? structuredClone(initialState.history) : { entries: [], index: -1 });
   const isNavigating = useRef(false);
+
+  const captureWorkspace = () => {
+    const container = api.current;
+    if (getCampaign().generation !== generation || !initialized.current || !container || container.panels.some((panel) => !panels.current.has(panel.id))) return;
+    const workspace = {
+      layout: container.toJSON(),
+      panels: Object.fromEntries(container.panels.map((panel) => [panel.id, panels.current.get(panel.id)!.toJSON()])),
+      nextId: nextId.current, sidebarWidth, collapsed: isCollapsed,
+      history: structuredClone(history.current),
+    };
+    if (JSON.stringify(getCampaign().campaign.workspace) !== JSON.stringify(workspace)) updateCampaign({ workspace });
+  };
+  const captureRef = useRef(captureWorkspace);
+  captureRef.current = captureWorkspace;
+  const scheduleCapture = () => queueMicrotask(() => captureRef.current());
+  useEffect(scheduleCapture, [isCollapsed, sidebarWidth]);
+  useEffect(() => {
+    window.addEventListener("campaign-workspace-change", scheduleCapture);
+    return () => window.removeEventListener("campaign-workspace-change", scheduleCapture);
+  }, []);
 
   const findDestination = (direction: -1 | 1) => {
     const { entries, index } = history.current;
@@ -135,16 +159,19 @@ export function Workspaces({ ref, isDark, onSearch, onNavigationChange }: {
     const current = history.current;
     const previous = current.entries[current.index];
     if (previous?.workspaceId === workspaceId && previous.name === name) return;
-    current.entries = [...current.entries.slice(0, current.index + 1), { workspaceId, name }];
+    current.entries = [...current.entries.slice(0, current.index + 1), { workspaceId, name }].slice(-100);
     current.index = current.entries.length - 1;
     syncNavigation();
+    scheduleCapture();
   };
 
   const openCharacterInWorkspace = (workspace: DockviewApi, name: string) => {
+    const npc = getCampaign().campaign.npcs.find((item) => item.id === name);
+    if (!npc) return;
     const id = `character:${name}`;
     const existing = workspace.getPanel(id);
     if (existing) existing.api.setActive();
-    else workspace.addPanel({ id, title: name, component: "character", params: { name } });
+    else workspace.addPanel({ id, title: npc.name, component: "character", params: { name } });
   };
 
   const navigate = (direction: -1 | 1) => {
@@ -161,19 +188,24 @@ export function Workspaces({ ref, isDark, onSearch, onNavigationChange }: {
     } finally {
       isNavigating.current = false;
       syncNavigation();
+      scheduleCapture();
     }
   };
 
   const onPanelReady = (workspaceId: string, workspace: DockviewApi) => {
+    const saved = initialState?.panels[workspaceId];
+    if (saved) workspace.fromJSON(saved);
     // Closing or moving a tab can activate another tab without a new visit.
     let isChangingLayout = false;
     const listeners = [
+      workspace.onDidLayoutChange(scheduleCapture),
       workspace.onWillMutateLayout(({ kind }) => { isChangingLayout = kind !== "add"; }),
       workspace.onDidMutateLayout(() => { isChangingLayout = false; }),
       workspace.onDidActivePanelChange(() => {
         if (!isChangingLayout && api.current?.activePanel?.id === workspaceId) recordVisit();
       }),
     ];
+    scheduleCapture();
     return { dispose: () => listeners.forEach((listener) => listener.dispose()) };
   };
 
@@ -182,6 +214,7 @@ export function Workspaces({ ref, isDark, onSearch, onNavigationChange }: {
     if (!container) return;
     setWorkspaceTabs(container.groups.flatMap((group) => group.panels.map((panel) => ({ id: panel.id, title: panel.title ?? "Workspace" }))));
     setActiveWorkspace(container.activePanel?.id ?? null);
+    scheduleCapture();
   };
 
   const moveWorkspace = (id: string, index: number) => {
@@ -371,9 +404,10 @@ export function Workspaces({ ref, isDark, onSearch, onNavigationChange }: {
             disableFloatingGroups
             onReady={({ api: container }) => {
               api.current = container;
-              nextId.current = 1;
+              initialized.current = false;
+              nextId.current = initialState?.nextId ?? 1;
               subscriptions.current.forEach((subscription) => subscription.dispose());
-              subscriptions.current = [container.onDidActivePanelChange(() => {
+              subscriptions.current = [container.onDidLayoutChange(scheduleCapture), container.onDidActivePanelChange(() => {
                 syncWorkspaceTabs();
                 recordVisit();
               }), container.onDidRemovePanel(() => {
@@ -385,7 +419,15 @@ export function Workspaces({ ref, isDark, onSearch, onNavigationChange }: {
                   else syncWorkspaceTabs();
                 });
               })];
-              createWorkspace();
+              if (initialState) {
+                container.fromJSON(initialState.layout);
+                container.groups.forEach((group) => { group.header.hidden = true; });
+                syncWorkspaceTabs();
+                syncNavigation();
+              }
+              if (!container.panels.length) createWorkspace();
+              initialized.current = true;
+              scheduleCapture();
             }}
           />
         </TabsContent>
