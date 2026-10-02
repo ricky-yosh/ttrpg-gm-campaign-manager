@@ -133,7 +133,9 @@
 }
 
 html[data-image-resizing="true"],
-html[data-image-resizing="true"] * {
+html[data-image-resizing="true"] *,
+html[data-tab-dragging="true"],
+html[data-tab-dragging="true"] * {
   user-select: none !important;
   -webkit-user-select: none !important;
 }

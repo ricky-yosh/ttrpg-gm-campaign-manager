@@ -129,6 +129,28 @@ function App() {
     return () => document.removeEventListener("keydown", handleCloseTabShortcut, true);
   }, []);
 
+  useEffect(() => {
+    const clearTabDragging = () => {
+      delete document.documentElement.dataset.tabDragging;
+    };
+    const startTabDragging = (event: PointerEvent) => {
+      if (event.button !== 0 || !(event.target instanceof Element) || !event.target.closest(".campaign-dockview .dv-tab")) return;
+      document.documentElement.dataset.tabDragging = "true";
+    };
+
+    document.addEventListener("pointerdown", startTabDragging, true);
+    window.addEventListener("pointerup", clearTabDragging, true);
+    window.addEventListener("pointercancel", clearTabDragging, true);
+    window.addEventListener("blur", clearTabDragging);
+    return () => {
+      document.removeEventListener("pointerdown", startTabDragging, true);
+      window.removeEventListener("pointerup", clearTabDragging, true);
+      window.removeEventListener("pointercancel", clearTabDragging, true);
+      window.removeEventListener("blur", clearTabDragging);
+      clearTabDragging();
+    };
+  }, []);
+
   return (
     <TooltipProvider>
       <SidebarProvider className="h-svh flex-col overflow-hidden">
