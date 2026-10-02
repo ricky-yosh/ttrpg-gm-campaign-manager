@@ -4,6 +4,7 @@ import type Konva from "konva";
 import { ImagePlusIcon, MapPinIcon, MinusIcon, PlusIcon, RotateCcwIcon, UploadIcon } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Empty, EmptyDescription, EmptyHeader, EmptyMedia, EmptyTitle } from "@/components/ui/empty";
+import { cn } from "@/lib/utils";
 import { Separator } from "@/components/ui/separator";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 
@@ -20,6 +21,7 @@ export function MapPrototypePanel() {
   const [pins, setPins] = useState<MapPin[]>([]);
   const [selectedPin, setSelectedPin] = useState<number | null>(null);
   const [addingPin, setAddingPin] = useState(false);
+  const [spacePressed, setSpacePressed] = useState(false);
   const [camera, setCamera] = useState({ scale: 1, x: 0, y: 0 });
   const [error, setError] = useState<string | null>(null);
   const hasImage = Boolean(image);
@@ -53,6 +55,19 @@ export function MapPrototypePanel() {
     if (imageUrl) URL.revokeObjectURL(imageUrl);
   }, [imageUrl]);
 
+  useEffect(() => {
+    const releaseSpace = (event: KeyboardEvent) => {
+      if (event.code === "Space") setSpacePressed(false);
+    };
+    const releaseOnBlur = () => setSpacePressed(false);
+    window.addEventListener("keyup", releaseSpace);
+    window.addEventListener("blur", releaseOnBlur);
+    return () => {
+      window.removeEventListener("keyup", releaseSpace);
+      window.removeEventListener("blur", releaseOnBlur);
+    };
+  }, []);
+
   const imageRect = useMemo(() => {
     if (!image) return null;
     const fit = Math.min(viewport.width / image.width, viewport.height / image.height);
@@ -74,11 +89,13 @@ export function MapPrototypePanel() {
     setImageUrl(URL.createObjectURL(file));
   };
 
-  const changeZoom = (nextScale: number, anchor?: { x: number; y: number }) => {
-    const scale = Math.max(0.4, Math.min(4, nextScale));
-    const point = anchor ?? { x: viewport.width / 2, y: viewport.height / 2 };
-    const world = { x: (point.x - camera.x) / camera.scale, y: (point.y - camera.y) / camera.scale };
-    setCamera({ scale, x: point.x - world.x * scale, y: point.y - world.y * scale });
+  const changeZoom = (factor: number, anchor?: { x: number; y: number }) => {
+    setCamera((current) => {
+      const scale = Math.max(0.4, Math.min(4, current.scale * factor));
+      const point = anchor ?? { x: viewport.width / 2, y: viewport.height / 2 };
+      const world = { x: (point.x - current.x) / current.scale, y: (point.y - current.y) / current.scale };
+      return { scale, x: point.x - world.x * scale, y: point.y - world.y * scale };
+    });
   };
 
   const handleMapClick = () => {
@@ -119,11 +136,53 @@ export function MapPrototypePanel() {
         <div className="flex min-h-0 flex-1">
           <div
             ref={viewportRef}
-            className={`relative min-h-0 min-w-0 flex-1 overflow-hidden bg-muted/40 ${addingPin ? "cursor-crosshair" : "cursor-grab active:cursor-grabbing"}`}
+            tabIndex={0}
+            aria-label="Map canvas. Hold Space and drag to pan. Use a trackpad to pan and pinch to zoom."
+            className={cn(
+              "relative min-h-0 min-w-0 flex-1 overflow-hidden bg-muted/40 focus-visible:outline-none",
+              addingPin && "cursor-crosshair",
+              spacePressed && !addingPin && "cursor-grab active:cursor-grabbing",
+            )}
+            onPointerDown={(event) => {
+              if ((event.target as HTMLElement).closest(".konvajs-content")) {
+                event.currentTarget.focus({ preventScroll: true });
+              }
+            }}
+            onKeyDown={(event) => {
+              const target = event.target as HTMLElement;
+              if (target.closest("button, input, textarea, select, [contenteditable='true']")) return;
+              if (event.code === "Space" && !addingPin) {
+                event.preventDefault();
+                setSpacePressed(true);
+              } else if (event.shiftKey && event.code === "Digit1") {
+                event.preventDefault();
+                setCamera({ scale: 1, x: 0, y: 0 });
+              } else if ((event.metaKey || event.ctrlKey) && (event.key === "+" || event.key === "=")) {
+                event.preventDefault();
+                changeZoom(1.2);
+              } else if ((event.metaKey || event.ctrlKey) && event.key === "-") {
+                event.preventDefault();
+                changeZoom(1 / 1.2);
+              }
+            }}
             onWheel={(event) => {
               event.preventDefault();
-              const bounds = event.currentTarget.getBoundingClientRect();
-              changeZoom(camera.scale * (event.deltaY < 0 ? 1.08 : 0.92), { x: event.clientX - bounds.left, y: event.clientY - bounds.top });
+              if (event.ctrlKey || event.metaKey) {
+                const bounds = event.currentTarget.getBoundingClientRect();
+                const pointer = { x: event.clientX - bounds.left, y: event.clientY - bounds.top };
+                const deltaY = event.deltaMode === WheelEvent.DOM_DELTA_LINE
+                  ? event.deltaY * 16
+                  : event.deltaMode === WheelEvent.DOM_DELTA_PAGE
+                    ? event.deltaY * viewport.height
+                    : event.deltaY;
+                changeZoom(Math.exp(-deltaY * 0.003), pointer);
+                return;
+              }
+              setCamera((current) => ({
+                ...current,
+                x: current.x - event.deltaX,
+                y: current.y - event.deltaY,
+              }));
             }}
           >
             <Stage
@@ -134,8 +193,11 @@ export function MapPrototypePanel() {
               y={camera.y}
               scaleX={camera.scale}
               scaleY={camera.scale}
-              draggable={!addingPin}
-              onDragEnd={(event) => setCamera((current) => ({ ...current, x: event.target.x(), y: event.target.y() }))}
+              draggable={spacePressed && !addingPin}
+              onDragEnd={(event) => {
+                if (event.target !== stageRef.current) return;
+                setCamera((current) => ({ ...current, x: event.target.x(), y: event.target.y() }));
+              }}
               onClick={handleMapClick}
               onTap={handleMapClick}
               onMouseDown={(event) => {
@@ -153,10 +215,11 @@ export function MapPrototypePanel() {
                       key={pin.id}
                       x={x}
                       y={y}
-                      draggable
+                      draggable={!spacePressed}
                       onClick={(event) => { event.cancelBubble = true; setSelectedPin(pin.id); }}
                       onTap={(event) => { event.cancelBubble = true; setSelectedPin(pin.id); }}
                       onDragEnd={(event) => {
+                        event.cancelBubble = true;
                         const nextX = Math.max(0, Math.min(1, (event.target.x() - imageRect.x) / imageRect.width));
                         const nextY = Math.max(0, Math.min(1, (event.target.y() - imageRect.y) / imageRect.height));
                         setPins((current) => current.map((item) => item.id === pin.id ? { ...item, x: nextX, y: nextY } : item));
@@ -211,14 +274,14 @@ export function MapPrototypePanel() {
               </Tooltip>
               <Separator orientation="vertical" className="mx-1 h-6" />
               <Tooltip>
-                <TooltipTrigger render={<Button variant="ghost" size="icon" aria-label="Zoom out" onClick={() => changeZoom(camera.scale / 1.2)} />}>
+                <TooltipTrigger render={<Button variant="ghost" size="icon" aria-label="Zoom out" onClick={() => changeZoom(1 / 1.2)} />}>
                   <MinusIcon />
                 </TooltipTrigger>
                 <TooltipContent>Zoom out</TooltipContent>
               </Tooltip>
               <span aria-live="polite" className="min-w-12 text-center text-xs font-medium tabular-nums text-muted-foreground">{Math.round(camera.scale * 100)}%</span>
               <Tooltip>
-                <TooltipTrigger render={<Button variant="ghost" size="icon" aria-label="Zoom in" onClick={() => changeZoom(camera.scale * 1.2)} />}>
+                <TooltipTrigger render={<Button variant="ghost" size="icon" aria-label="Zoom in" onClick={() => changeZoom(1.2)} />}>
                   <PlusIcon />
                 </TooltipTrigger>
                 <TooltipContent>Zoom in</TooltipContent>

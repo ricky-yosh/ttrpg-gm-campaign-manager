@@ -66,6 +66,7 @@ function App() {
   const [navigation, setNavigation] = useState<NavigationState>({ canGoBack: false, canGoForward: false });
   const workspaces = useRef<WorkspaceHandle>(null);
   const openCharacter = (name: string) => workspaces.current?.openCharacter(name);
+  const openMap = () => workspaces.current?.openMap();
 
   useEffect(() => {
     const preference = window.matchMedia("(prefers-color-scheme: dark)");
@@ -129,7 +130,7 @@ function App() {
           onOpenCharacter={openCharacter}
         />
         <div className="flex min-h-0 flex-1">
-          <AppSidebar onCreateNpc={() => setNpcOpen(true)} section={section} onSelectSection={setSection} onOpenCharacter={openCharacter} />
+          <AppSidebar onCreateNpc={() => setNpcOpen(true)} section={section} onSelectSection={setSection} onOpenCharacter={openCharacter} onOpenMap={openMap} />
           <main aria-label="Campaign workspace" className="flex min-h-0 min-w-0 flex-1 flex-col">
             <CampaignControls npcOpen={npcOpen} onNpcOpenChange={setNpcOpen} onOpenNpc={openCharacter} />
             <Workspaces key={generation} ref={workspaces} isDark={isDark} onSearch={() => setIsCommandPaletteOpen(true)} onNavigationChange={setNavigation} />

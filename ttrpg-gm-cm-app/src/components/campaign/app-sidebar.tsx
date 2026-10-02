@@ -30,9 +30,10 @@ type AppSidebarProps = {
   onSelectSection: (section: string | null) => void;
   onOpenCharacter: (name: string) => void;
   onCreateNpc: () => void;
+  onOpenMap: () => void;
 };
 
-export function AppSidebar({ section, onSelectSection, onOpenCharacter, onCreateNpc }: AppSidebarProps) {
+export function AppSidebar({ section, onSelectSection, onOpenCharacter, onCreateNpc, onOpenMap }: AppSidebarProps) {
   const { campaign } = useCampaign();
   const { isMobile, setOpenMobile, open, setOpen } = useSidebar();
   const [sidebarWidth, setSidebarWidth] = useState(campaign.sidebar.width);
@@ -87,7 +88,14 @@ export function AppSidebar({ section, onSelectSection, onOpenCharacter, onCreate
                       <span>{name}</span>
                     </SidebarMenuButton>
                   </SidebarMenuItem>
-                )) : (
+                )) : section === "Locations & Maps" ? (
+                  <SidebarMenuItem>
+                    <SidebarMenuButton tooltip="Map prototype" onClick={onOpenMap}>
+                      <MapIcon aria-hidden="true" />
+                      <span>Map prototype</span>
+                    </SidebarMenuButton>
+                  </SidebarMenuItem>
+                ) : (
                   <li className="px-2 py-2 text-sm text-muted-foreground">Nothing here yet</li>
                 )}
               </SidebarMenu>
