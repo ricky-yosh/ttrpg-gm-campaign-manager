@@ -7,7 +7,11 @@ import { Kbd } from "@/components/ui/kbd";
 import { SidebarTrigger } from "@/components/ui/sidebar";
 import { CommandPalette } from "@/components/campaign/command-palette";
 
-export function Topbar({ isCommandPaletteOpen, onCommandPaletteOpenChange, onCreateWorkspace, onOpenCharacter }: {
+export function Topbar({ canGoBack, canGoForward, onGoBack, onGoForward, isCommandPaletteOpen, onCommandPaletteOpenChange, onCreateWorkspace, onOpenCharacter }: {
+  canGoBack: boolean;
+  canGoForward: boolean;
+  onGoBack: () => void;
+  onGoForward: () => void;
   isCommandPaletteOpen: boolean;
   onCommandPaletteOpenChange: (open: boolean) => void;
   onCreateWorkspace: () => void;
@@ -78,8 +82,9 @@ export function Topbar({ isCommandPaletteOpen, onCommandPaletteOpenChange, onCre
             variant="ghost"
             size="icon-sm"
             aria-label="Back"
-            aria-disabled="true"
-            title="Back — coming soon"
+            disabled={!canGoBack}
+            onClick={onGoBack}
+            title="Back"
           >
             <ArrowLeftIcon />
           </Button>
@@ -88,8 +93,9 @@ export function Topbar({ isCommandPaletteOpen, onCommandPaletteOpenChange, onCre
             variant="ghost"
             size="icon-sm"
             aria-label="Forward"
-            aria-disabled="true"
-            title="Forward — coming soon"
+            disabled={!canGoForward}
+            onClick={onGoForward}
+            title="Forward"
           >
             <ArrowRightIcon />
           </Button>

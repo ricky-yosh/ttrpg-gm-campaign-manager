@@ -27,6 +27,8 @@ The top bar stays available across the GM workspaces. Global search belongs here
 
 ### Back and Forward navigation (behavior proposal)
 
+The initial implementation keeps record-tab history in memory for the current GM window, across its workspaces. Sidebar and search actions count when they open or focus a record tab; sidebar category changes and empty workspaces do not add destinations. Closed record tabs reopen in their original workspace, while destinations in deleted workspaces are skipped. Automatic focus changes from closing or rearranging tabs do not add visits. Persistence, shortcuts, and restoration of closed tabs' local view state are deferred.
+
 - Follow the order of visited destinations, including tab switches, sidebar selections, and record links. For example, Sessions → NPC → Map → Back returns to the NPC. These arrows follow visit history rather than the tabs' left-to-right order.
 - Keep a separate history for each campaign, GM window, and mode. Back does not switch from GM into Presenter mode or start/stop a presentation.
 - Focus an existing destination tab and pane where possible. If its tab was closed, reopen the destination without reconstructing an entire old split layout. Skip deleted or unavailable destinations gracefully.

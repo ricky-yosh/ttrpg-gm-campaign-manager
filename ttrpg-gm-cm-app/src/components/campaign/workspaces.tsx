@@ -7,18 +7,25 @@ import { Empty, EmptyContent, EmptyDescription, EmptyHeader, EmptyMedia, EmptyTi
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { SidebarResizeHandle } from "@/components/ui/sidebar-resize-handle";
+import { Dialog, DialogDescription, DialogPopup, DialogTitle } from "@/components/ui/dialog";
 import { cn } from "@/lib/utils";
 
 export type WorkspaceHandle = {
   createWorkspace: () => void;
   openCharacter: (name: string) => void;
   closeActiveTab: () => void;
+  goBack: () => void;
+  goForward: () => void;
 };
+
+export type NavigationState = { canGoBack: boolean; canGoForward: boolean };
+type Destination = { workspaceId: string; name: string };
 
 const WorkspaceContext = createContext<{
   isDark: boolean;
   panels: Map<string, DockviewApi>;
   onSearch: () => void;
+  onPanelReady: (workspaceId: string, api: DockviewApi) => { dispose: () => void };
 } | null>(null);
 
 function useWorkspaceContext() {
@@ -30,7 +37,7 @@ function useWorkspaceContext() {
 const characterComponents = { character: CharacterPanel };
 
 function WorkspacePanel({ api }: IDockviewPanelProps) {
-  const { isDark, panels, onSearch } = useWorkspaceContext();
+  const { isDark, panels, onSearch, onPanelReady } = useWorkspaceContext();
   const [hasPanels, setHasPanels] = useState(false);
   const [isVisible, setIsVisible] = useState(api.isVisible);
   const subscription = useRef<{ dispose: () => void } | null>(null);
@@ -61,7 +68,9 @@ function WorkspacePanel({ api }: IDockviewPanelProps) {
           panels.set(api.id, panelApi);
           setHasPanels(panelApi.panels.length > 0);
           subscription.current?.dispose();
-          subscription.current = panelApi.onDidLayoutChange(() => setHasPanels(panelApi.panels.length > 0));
+          const layout = panelApi.onDidLayoutChange(() => setHasPanels(panelApi.panels.length > 0));
+          const navigation = onPanelReady(api.id, panelApi);
+          subscription.current = { dispose: () => { layout.dispose(); navigation.dispose(); } };
         }}
       />
       {!hasPanels && (
@@ -84,10 +93,11 @@ function WorkspacePanel({ api }: IDockviewPanelProps) {
 
 const workspaceComponents = { workspace: WorkspacePanel };
 
-export function Workspaces({ ref, isDark, onSearch }: {
+export function Workspaces({ ref, isDark, onSearch, onNavigationChange }: {
   ref: Ref<WorkspaceHandle>;
   isDark: boolean;
   onSearch: () => void;
+  onNavigationChange: (state: NavigationState) => void;
 }) {
   const api = useRef<DockviewApi | null>(null);
   const panels = useRef(new Map<string, DockviewApi>());
@@ -97,7 +107,75 @@ export function Workspaces({ ref, isDark, onSearch }: {
   const [sidebarWidth, setSidebarWidth] = useState(192);
   const [workspaceTabs, setWorkspaceTabs] = useState<{ id: string; title: string }[]>([]);
   const [activeWorkspace, setActiveWorkspace] = useState<string | null>(null);
+  const [workspaceToDelete, setWorkspaceToDelete] = useState<{ id: string; title: string } | null>(null);
   const draggedWorkspace = useRef<string | null>(null);
+  const history = useRef<{ entries: Destination[]; index: number }>({ entries: [], index: -1 });
+  const isNavigating = useRef(false);
+
+  const findDestination = (direction: -1 | 1) => {
+    const { entries, index } = history.current;
+    for (let next = index + direction; next >= 0 && next < entries.length; next += direction) {
+      if (api.current?.getPanel(entries[next].workspaceId)) return next;
+    }
+    return -1;
+  };
+
+  const syncNavigation = () => onNavigationChange({
+    canGoBack: findDestination(-1) !== -1,
+    canGoForward: findDestination(1) !== -1,
+  });
+
+  const recordVisit = () => {
+    if (isNavigating.current) return;
+    const workspaceId = api.current?.activePanel?.id;
+    const panel = workspaceId && panels.current.get(workspaceId)?.activePanel;
+    if (!workspaceId || !panel) return;
+    const name = panel.params?.name;
+    if (typeof name !== "string") return;
+    const current = history.current;
+    const previous = current.entries[current.index];
+    if (previous?.workspaceId === workspaceId && previous.name === name) return;
+    current.entries = [...current.entries.slice(0, current.index + 1), { workspaceId, name }];
+    current.index = current.entries.length - 1;
+    syncNavigation();
+  };
+
+  const openCharacterInWorkspace = (workspace: DockviewApi, name: string) => {
+    const id = `character:${name}`;
+    const existing = workspace.getPanel(id);
+    if (existing) existing.api.setActive();
+    else workspace.addPanel({ id, title: name, component: "character", params: { name } });
+  };
+
+  const navigate = (direction: -1 | 1) => {
+    const index = findDestination(direction);
+    if (index === -1) return;
+    const destination = history.current.entries[index];
+    const workspace = panels.current.get(destination.workspaceId);
+    if (!workspace) return;
+    isNavigating.current = true;
+    try {
+      history.current.index = index;
+      api.current?.getPanel(destination.workspaceId)?.api.setActive();
+      openCharacterInWorkspace(workspace, destination.name);
+    } finally {
+      isNavigating.current = false;
+      syncNavigation();
+    }
+  };
+
+  const onPanelReady = (workspaceId: string, workspace: DockviewApi) => {
+    // Closing or moving a tab can activate another tab without a new visit.
+    let isChangingLayout = false;
+    const listeners = [
+      workspace.onWillMutateLayout(({ kind }) => { isChangingLayout = kind !== "add"; }),
+      workspace.onDidMutateLayout(() => { isChangingLayout = false; }),
+      workspace.onDidActivePanelChange(() => {
+        if (!isChangingLayout && api.current?.activePanel?.id === workspaceId) recordVisit();
+      }),
+    ];
+    return { dispose: () => listeners.forEach((listener) => listener.dispose()) };
+  };
 
   const syncWorkspaceTabs = () => {
     const container = api.current;
@@ -111,6 +189,23 @@ export function Workspaces({ ref, isDark, onSearch }: {
     if (!panel) return;
     panel.api.moveTo({ group: panel.api.group, index });
     syncWorkspaceTabs();
+  };
+
+  const requestCloseWorkspace = (id: string) => {
+    const workspace = workspaceTabs.find((tab) => tab.id === id);
+    if (workspace) setWorkspaceToDelete(workspace);
+  };
+
+  const confirmCloseWorkspace = () => {
+    if (!workspaceToDelete) return;
+    isNavigating.current = true;
+    try {
+      api.current?.getPanel(workspaceToDelete.id)?.api.close();
+    } finally {
+      isNavigating.current = false;
+      syncNavigation();
+    }
+    setWorkspaceToDelete(null);
   };
 
   const createWorkspace = () => {
@@ -130,20 +225,20 @@ export function Workspaces({ ref, isDark, onSearch }: {
 
   useImperativeHandle(ref, () => ({
     createWorkspace,
+    goBack: () => navigate(-1),
+    goForward: () => navigate(1),
     openCharacter: (name) => {
       const active = api.current?.activePanel;
       const workspace = active && panels.current.get(active.id);
       if (!workspace) return;
-      const id = `character:${name}`;
-      const existing = workspace.getPanel(id);
-      if (existing) existing.api.setActive();
-      else workspace.addPanel({ id, title: name, component: "character", params: { name } });
+      openCharacterInWorkspace(workspace, name);
+      recordVisit();
     },
     closeActiveTab: () => {
       const active = api.current?.activePanel;
       const workspace = active && panels.current.get(active.id);
       if (workspace?.activePanel) workspace.activePanel.api.close();
-      else active?.api.close();
+      else if (active) requestCloseWorkspace(active.id);
     },
   }));
 
@@ -153,7 +248,7 @@ export function Workspaces({ ref, isDark, onSearch }: {
   }, []);
 
   return (
-    <WorkspaceContext.Provider value={{ isDark, panels: panels.current, onSearch }}>
+    <WorkspaceContext.Provider value={{ isDark, panels: panels.current, onSearch, onPanelReady }}>
       <Tabs
         orientation="vertical"
         variant="workspace"
@@ -218,7 +313,7 @@ export function Workspaces({ ref, isDark, onSearch }: {
                         onKeyDown={(event) => {
                           if (event.key === "Delete") {
                             event.preventDefault();
-                            api.current?.getPanel(id)?.api.close();
+                            requestCloseWorkspace(id);
                           } else if (event.altKey && (event.key === "ArrowUp" || event.key === "ArrowDown")) {
                             event.preventDefault();
                             event.stopPropagation();
@@ -237,7 +332,7 @@ export function Workspaces({ ref, isDark, onSearch }: {
                       size="icon-xs"
                       className="absolute right-1"
                       aria-label={`Close ${title}`}
-                      onClick={() => api.current?.getPanel(id)?.api.close()}
+                      onClick={() => requestCloseWorkspace(id)}
                     >
                       <XIcon />
                     </Button>
@@ -278,7 +373,11 @@ export function Workspaces({ ref, isDark, onSearch }: {
               api.current = container;
               nextId.current = 1;
               subscriptions.current.forEach((subscription) => subscription.dispose());
-              subscriptions.current = [container.onDidActivePanelChange(syncWorkspaceTabs), container.onDidRemovePanel(() => {
+              subscriptions.current = [container.onDidActivePanelChange(() => {
+                syncWorkspaceTabs();
+                recordVisit();
+              }), container.onDidRemovePanel(() => {
+                syncNavigation();
                 // Keep one workspace available after closing the last tab.
                 queueMicrotask(() => {
                   if (api.current !== container) return;
@@ -291,6 +390,20 @@ export function Workspaces({ ref, isDark, onSearch }: {
           />
         </TabsContent>
       </Tabs>
+      <Dialog open={workspaceToDelete !== null} onOpenChange={(open) => { if (!open) setWorkspaceToDelete(null); }}>
+        <DialogPopup>
+          <div className="flex flex-col gap-4 p-5">
+            <div className="space-y-2">
+              <DialogTitle>Are you sure you want to delete {workspaceToDelete?.title}?</DialogTitle>
+              <DialogDescription>This will close the workspace and all tabs open in it.</DialogDescription>
+            </div>
+            <div className="flex justify-end gap-2">
+              <Button variant="outline" onClick={() => setWorkspaceToDelete(null)}>Cancel</Button>
+              <Button variant="destructive" onClick={confirmCloseWorkspace}>Delete workspace</Button>
+            </div>
+          </div>
+        </DialogPopup>
+      </Dialog>
     </WorkspaceContext.Provider>
   );
 }

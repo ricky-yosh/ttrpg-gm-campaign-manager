@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from "react";
 import { AppSidebar } from "@/components/campaign/app-sidebar";
-import { Workspaces, type WorkspaceHandle } from "@/components/campaign/workspaces";
+import { Workspaces, type NavigationState, type WorkspaceHandle } from "@/components/campaign/workspaces";
 import { Topbar } from "@/components/campaign/topbar";
 import { SidebarProvider } from "@/components/ui/sidebar";
 import { TooltipProvider } from "@/components/ui/tooltip";
@@ -11,6 +11,7 @@ function App() {
   const [section, setSection] = useState<string | null>(null);
   const [isDark, setIsDark] = useState(false);
   const [isCommandPaletteOpen, setIsCommandPaletteOpen] = useState(false);
+  const [navigation, setNavigation] = useState<NavigationState>({ canGoBack: false, canGoForward: false });
   const workspaces = useRef<WorkspaceHandle>(null);
   const openCharacter = (name: string) => workspaces.current?.openCharacter(name);
 
@@ -66,6 +67,10 @@ function App() {
     <TooltipProvider>
       <SidebarProvider className="h-svh flex-col overflow-hidden">
         <Topbar
+          canGoBack={navigation.canGoBack}
+          canGoForward={navigation.canGoForward}
+          onGoBack={() => workspaces.current?.goBack()}
+          onGoForward={() => workspaces.current?.goForward()}
           isCommandPaletteOpen={isCommandPaletteOpen}
           onCommandPaletteOpenChange={setIsCommandPaletteOpen}
           onCreateWorkspace={() => workspaces.current?.createWorkspace()}
@@ -74,7 +79,7 @@ function App() {
         <div className="flex min-h-0 flex-1">
           <AppSidebar section={section} onSelectSection={setSection} onOpenCharacter={openCharacter} />
           <main aria-label="Campaign workspace" className="flex min-h-0 min-w-0 flex-1 flex-col">
-            <Workspaces ref={workspaces} isDark={isDark} onSearch={() => setIsCommandPaletteOpen(true)} />
+            <Workspaces ref={workspaces} isDark={isDark} onSearch={() => setIsCommandPaletteOpen(true)} onNavigationChange={setNavigation} />
           </main>
         </div>
       </SidebarProvider>
