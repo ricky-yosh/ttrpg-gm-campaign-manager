@@ -6,6 +6,7 @@ import type { SerializedDockview } from "dockview-react";
 import type { Value } from "platejs";
 
 const demoCharacters = ["Carlos Tree", "Niya Jade", "Renot Force"] as const;
+export const characters = demoCharacters;
 
 export type CharacterName = typeof demoCharacters[number];
 

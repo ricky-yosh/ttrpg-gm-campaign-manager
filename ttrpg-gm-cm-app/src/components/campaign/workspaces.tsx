@@ -10,10 +10,12 @@ import { SidebarResizeHandle } from "@/components/ui/sidebar-resize-handle";
 import { Dialog, DialogDescription, DialogPopup, DialogTitle } from "@/components/ui/dialog";
 import { getCampaign, updateCampaign } from "@/lib/campaign-data";
 import { cn } from "@/lib/utils";
+import { MapPrototypePanel } from "@/components/campaign/map-prototype-panel";
 
 export type WorkspaceHandle = {
   createWorkspace: () => void;
   openCharacter: (name: string) => void;
+  openMap: () => void;
   closeActiveTab: () => void;
   goBack: () => void;
   goForward: () => void;
@@ -35,7 +37,7 @@ function useWorkspaceContext() {
   return context;
 }
 
-const characterComponents = { character: CharacterPanel };
+const characterComponents = { character: CharacterPanel, map: MapPrototypePanel };
 
 function WorkspacePanel({ api }: IDockviewPanelProps) {
   const { isDark, panels, onSearch, onPanelReady } = useWorkspaceContext();
@@ -174,6 +176,13 @@ export function Workspaces({ ref, isDark, onSearch, onNavigationChange }: {
     else workspace.addPanel({ id, title: npc.name, component: "character", params: { name } });
   };
 
+  const openMapInWorkspace = (workspace: DockviewApi) => {
+    const id = "map:prototype";
+    const existing = workspace.getPanel(id);
+    if (existing) existing.api.setActive();
+    else workspace.addPanel({ id, title: "Map prototype", component: "map" });
+  };
+
   const navigate = (direction: -1 | 1) => {
     const index = findDestination(direction);
     if (index === -1) return;
@@ -266,6 +275,11 @@ export function Workspaces({ ref, isDark, onSearch, onNavigationChange }: {
       if (!workspace) return;
       openCharacterInWorkspace(workspace, name);
       recordVisit();
+    },
+    openMap: () => {
+      const active = api.current?.activePanel;
+      const workspace = active && panels.current.get(active.id);
+      if (workspace) openMapInWorkspace(workspace);
     },
     closeActiveTab: () => {
       const active = api.current?.activePanel;
