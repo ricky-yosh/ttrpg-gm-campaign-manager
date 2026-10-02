@@ -12,6 +12,7 @@ import { Dialog, DialogDescription, DialogPopup, DialogTitle } from "@/component
 import { Button } from "@/components/ui/button";
 import { Kbd } from "@/components/ui/kbd";
 import { characters } from "@/lib/campaign-data";
+import { SidebarResizeHandle } from "@/components/ui/sidebar-resize-handle";
 
 const destinations = [
   { label: "Overview", icon: LayoutDashboardIcon },
@@ -31,7 +32,8 @@ type AppSidebarProps = {
 };
 
 export function AppSidebar({ section, onSelectSection, onOpenCharacter }: AppSidebarProps) {
-  const { isMobile, setOpenMobile } = useSidebar();
+  const { isMobile, setOpenMobile, open, setOpen } = useSidebar();
+  const [sidebarWidth, setSidebarWidth] = useState(256);
   const [isShortcutsOpen, setIsShortcutsOpen] = useState(false);
   const isMacOS = typeof navigator !== "undefined" && /Mac|iPhone|iPad/.test(navigator.platform);
   const selectSection = (nextSection: string) => {
@@ -40,17 +42,17 @@ export function AppSidebar({ section, onSelectSection, onOpenCharacter }: AppSid
   };
 
   return (
-    <Sidebar className="top-11 bottom-0 h-auto" collapsible="offcanvas">
+    <Sidebar className="top-11 bottom-0 h-auto" collapsible="icon" width={sidebarWidth}>
       <SidebarHeader>
         <SidebarMenu>
           <SidebarMenuItem>
             <SidebarMenuButton size="lg" aria-disabled="true" title="Campaign selector — coming soon">
               <Dice5Icon aria-hidden="true" />
-              <span className="flex flex-1 flex-col gap-0.5">
+              <span className="flex flex-1 flex-col gap-0.5 group-data-[collapsible=icon]:hidden">
                 <span>My campaign</span>
                 <span className="text-xs text-muted-foreground">D&D 5.5e</span>
               </span>
-              <ChevronsUpDownIcon aria-hidden="true" />
+              <ChevronsUpDownIcon className="group-data-[collapsible=icon]:hidden" aria-hidden="true" />
             </SidebarMenuButton>
           </SidebarMenuItem>
         </SidebarMenu>
@@ -64,17 +66,17 @@ export function AppSidebar({ section, onSelectSection, onOpenCharacter }: AppSid
             <SidebarGroupContent>
               <SidebarMenu>
                 <SidebarMenuItem>
-                  <SidebarMenuButton onClick={() => onSelectSection(null)}>
+                  <SidebarMenuButton tooltip="All sections" onClick={() => onSelectSection(null)}>
                     <ArrowLeftIcon aria-hidden="true" />
                     <span>All sections</span>
                   </SidebarMenuButton>
                 </SidebarMenuItem>
               </SidebarMenu>
-              <div className="px-2 pb-2 pt-4 text-xs font-semibold text-muted-foreground">{section}</div>
+              <div className="px-2 pb-2 pt-4 text-xs font-semibold text-muted-foreground group-data-[collapsible=icon]:hidden">{section}</div>
               <SidebarMenu>
                 {section === "Characters" ? characters.map((name) => (
                   <SidebarMenuItem key={name}>
-                    <SidebarMenuButton onClick={() => onOpenCharacter(name)}>
+                    <SidebarMenuButton tooltip={name} onClick={() => onOpenCharacter(name)}>
                       <UsersIcon aria-hidden="true" />
                       <span>{name}</span>
                     </SidebarMenuButton>
@@ -95,7 +97,7 @@ export function AppSidebar({ section, onSelectSection, onOpenCharacter }: AppSid
                 <SidebarMenu>
                   {destinations.map(({ label, icon: Icon }) => (
                     <SidebarMenuItem key={label}>
-                      <SidebarMenuButton onClick={() => selectSection(label)}>
+                      <SidebarMenuButton tooltip={label} onClick={() => selectSection(label)}>
                         <Icon aria-hidden="true" />
                         <span>{label}</span>
                       </SidebarMenuButton>
@@ -112,24 +114,37 @@ export function AppSidebar({ section, onSelectSection, onOpenCharacter }: AppSid
       <SidebarFooter>
         <SidebarMenu>
           <SidebarMenuItem>
-            <SidebarMenuButton onClick={() => setIsShortcutsOpen(true)} title="Keyboard shortcuts">
+            <SidebarMenuButton tooltip="Keyboard shortcuts" onClick={() => setIsShortcutsOpen(true)} title="Keyboard shortcuts">
               <CircleHelpIcon aria-hidden="true" />
               <span>Keyboard shortcuts</span>
             </SidebarMenuButton>
           </SidebarMenuItem>
           <SidebarMenuItem>
-            <SidebarMenuButton onClick={() => selectSection("Settings")}>
+            <SidebarMenuButton tooltip="Settings" onClick={() => selectSection("Settings")}>
               <SettingsIcon aria-hidden="true" />
               <span>Settings</span>
             </SidebarMenuButton>
           </SidebarMenuItem>
         </SidebarMenu>
       </SidebarFooter>
+      {!isMobile && (
+        <SidebarResizeHandle
+          label="Resize campaign sidebar"
+          width={sidebarWidth}
+          collapsed={!open}
+          collapsedWidth={48}
+          minWidth={200}
+          maxWidth={400}
+          collapseThreshold={160}
+          onWidthChange={setSidebarWidth}
+          onCollapsedChange={(collapsed) => setOpen(!collapsed)}
+        />
+      )}
       <Dialog open={isShortcutsOpen} onOpenChange={setIsShortcutsOpen}>
         <DialogPopup>
           <div className="border-b px-5 py-4">
             <DialogTitle>Keyboard shortcuts</DialogTitle>
-            <DialogDescription className="mt-1">Navigate the workspace and search from the keyboard. Layout switching is ignored while typing; use the top-bar search button while editing rich text.</DialogDescription>
+            <DialogDescription className="mt-1">Navigate the workspace and search from the keyboard. Use the top-bar search button while editing rich text.</DialogDescription>
           </div>
           <div className="space-y-5 p-5">
             <section>
@@ -147,45 +162,9 @@ export function AppSidebar({ section, onSelectSection, onOpenCharacter }: AppSid
                   <dt>Toggle sidebar</dt>
                   <Kbd>{isMacOS ? "⌘ B" : "Ctrl B"}</Kbd>
                 </div>
-                <div className="flex items-center justify-between gap-4 text-sm">
-                  <dt>Open layout switcher</dt>
-                  <Kbd>{isMacOS ? "⌘⇧L" : "Ctrl ⇧ L"}</Kbd>
-                </div>
-                <div className="flex items-center justify-between gap-4 text-sm">
-                  <dt>Filter layouts</dt>
-                  <Kbd>Type name</Kbd>
-                </div>
-                <div className="flex items-center justify-between gap-4 text-sm">
-                  <dt>Move through results</dt>
-                  <Kbd>↑ ↓</Kbd>
-                </div>
-                <div className="flex items-center justify-between gap-4 text-sm">
-                  <dt>Open selected layout</dt>
-                  <Kbd>Enter</Kbd>
-                </div>
               </dl>
             </section>
-            <section>
-              <h3 className="mb-2 text-xs font-semibold uppercase tracking-wide text-muted-foreground">Layout manager</h3>
-              <dl className="space-y-3">
-                <div className="flex items-center justify-between gap-4 text-sm">
-                  <dt>Open layout manager</dt>
-                  <span className="text-right text-muted-foreground">Choose “Manage layouts”</span>
-                </div>
-                <div className="flex items-center justify-between gap-4 text-sm">
-                  <dt>Save a new layout</dt>
-                  <Kbd>Enter</Kbd>
-                </div>
-                <div className="flex items-center justify-between gap-4 text-sm">
-                  <dt>Move between controls</dt>
-                  <Kbd>Tab</Kbd>
-                </div>
-                <div className="flex items-center justify-between gap-4 text-sm">
-                  <dt>Close a dialog</dt>
-                  <Kbd>Esc</Kbd>
-                </div>
-              </dl>
-            </section>
+
           </div>
           <div className="flex justify-end border-t px-5 py-3">
             <Button type="button" variant="outline" onClick={() => setIsShortcutsOpen(false)}>Done</Button>

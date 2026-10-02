@@ -7,7 +7,7 @@ import { characters } from "@/lib/campaign-data";
 
 type PaletteItem = {
   id: string;
-  kind: "create-layout" | "character";
+  kind: "create-workspace" | "character";
   label: string;
   description: string;
   keywords: string[];
@@ -24,11 +24,11 @@ const paletteGroups: PaletteGroup[] = [
     value: "Actions",
     items: [
       {
-        id: "create-layout",
-        kind: "create-layout",
-        label: "Create new layout",
-        description: "Save the current workspace as a new layout",
-        keywords: ["layout", "new", "save", "workspace"],
+        id: "create-workspace",
+        kind: "create-workspace",
+        label: "Create new workspace",
+        description: "Open an empty workspace tab",
+        keywords: ["tab", "new", "workspace"],
         icon: LayoutTemplateIcon,
       },
     ],
@@ -49,12 +49,12 @@ const paletteGroups: PaletteGroup[] = [
 export function CommandPalette({
   open,
   onOpenChange,
-  onCreateLayout,
+  onCreateWorkspace,
   onOpenCharacter,
 }: {
   open: boolean;
   onOpenChange: (open: boolean) => void;
-  onCreateLayout: () => void;
+  onCreateWorkspace: () => void;
   onOpenCharacter: (name: string) => void;
 }) {
   const [query, setQuery] = useState("");
@@ -66,7 +66,7 @@ export function CommandPalette({
   const selectItem = (item: PaletteItem) => {
     setQuery("");
     onOpenChange(false);
-    if (item.kind === "create-layout") onCreateLayout();
+    if (item.kind === "create-workspace") onCreateWorkspace();
     else onOpenCharacter(item.label);
   };
 
