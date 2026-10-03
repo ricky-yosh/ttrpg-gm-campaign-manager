@@ -88,8 +88,8 @@ export function CampaignControls() {
     <>
       {!isTauri() && <DropdownMenu>
         <DropdownMenuTrigger render={
-          <Button data-tauri-drag-region="false" variant="ghost" size="sm" aria-label="File commands">
-            <FileIcon data-icon="inline-start" />File<ChevronDownIcon data-icon="inline-end" />
+          <Button data-tauri-drag-region="false" variant="ghost" size="sm" aria-label="File commands" title="File commands">
+            <FileIcon data-icon="inline-start" /><span className="hidden sm:inline">File</span><ChevronDownIcon className="hidden sm:inline" data-icon="inline-end" />
           </Button>
         } />
         <DropdownMenuContent>

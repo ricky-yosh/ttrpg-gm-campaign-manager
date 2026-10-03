@@ -36,6 +36,7 @@ function App() {
   })));
   const section = useSessionStore((state) => state.section);
   const sidebarOpen = useSessionStore((state) => state.sidebar.open);
+  const isPresenting = useSessionStore((state) => state.presentationStartedAt !== null);
   const { appearance, isDark, setAppearance } = useAppearance();
   const [leaveIntent, setLeaveIntent] = useState<LeaveIntent | null>(null);
   const choiceResolver = useRef<((choice: UnsavedChoice) => void) | null>(null);
@@ -111,23 +112,26 @@ function App() {
 
   return (
     <TooltipProvider>
-      <CampaignAutosave />
-      <SidebarProvider key={generation} open={sidebarOpen} onOpenChange={(open) => useSessionStore.getState().setSidebar({ open })} inert={isLeaving} className="h-svh flex-col overflow-hidden">
-        <Topbar />
-        <div className="flex min-h-0 flex-1">
-          <AppSidebar />
-          <main aria-label="Campaign workspace" className="relative flex min-h-0 min-w-0 flex-1 flex-col">
-            {section === "Settings" && (
-              <div className="relative z-10 flex min-h-0 flex-1 flex-col">
-                <SettingsPanel appearance={appearance} onAppearanceChange={setAppearance} />
+      <div className="relative h-svh overflow-hidden" data-presenting={isPresenting ? "true" : undefined}>
+        <CampaignAutosave />
+        <SidebarProvider key={generation} open={sidebarOpen} onOpenChange={(open) => useSessionStore.getState().setSidebar({ open })} inert={isLeaving} className="h-full flex-col overflow-hidden">
+          <Topbar />
+          <div className="flex min-h-0 flex-1">
+            <AppSidebar />
+            <main aria-label="Campaign workspace" className="relative flex min-h-0 min-w-0 flex-1 flex-col">
+              {section === "Settings" && (
+                <div className="relative z-10 flex min-h-0 flex-1 flex-col">
+                  <SettingsPanel appearance={appearance} onAppearanceChange={setAppearance} />
+                </div>
+              )}
+              <div className="absolute inset-0 flex" aria-hidden={section === "Settings"} inert={section === "Settings"}>
+                <Workspaces key={generation} ref={workspaces} isDark={isDark} onSearch={appCommands.openCommandPalette} />
               </div>
-            )}
-            <div className="absolute inset-0 flex" aria-hidden={section === "Settings"} inert={section === "Settings"}>
-              <Workspaces key={generation} ref={workspaces} isDark={isDark} onSearch={appCommands.openCommandPalette} />
-            </div>
-          </main>
-        </div>
-      </SidebarProvider>
+            </main>
+          </div>
+        </SidebarProvider>
+        {isPresenting && <div className="presenter-frame" aria-hidden="true" />}
+      </div>
       <Dialog open={leaveIntent !== null} onOpenChange={(open) => { if (!open) resolveChoice("cancel"); }}>
         <DialogPopup>
           <div className="flex flex-col gap-5 p-5">

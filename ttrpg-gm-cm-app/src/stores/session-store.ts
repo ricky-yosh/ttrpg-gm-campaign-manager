@@ -25,6 +25,9 @@ export type SessionState = {
   npcDialogOpen: boolean;
   campaignDialogOpen: boolean;
   shortcutsOpen: boolean;
+  presentationStartedAt: number | null;
+  presentationElapsedMs: number;
+  presentationPaused: boolean;
   workspaceTabs: WorkspaceTab[];
   activeWorkspaceId: string | null;
   workspaceSidebarWidth: number;
@@ -41,6 +44,10 @@ export type SessionState = {
   setNpcDialogOpen: (open: boolean) => void;
   setCampaignDialogOpen: (open: boolean) => void;
   setShortcutsOpen: (open: boolean) => void;
+  startPresentation: () => void;
+  pausePresentation: () => void;
+  resumePresentation: () => void;
+  stopPresentation: () => void;
   setWorkspaceSnapshot: (tabs: WorkspaceTab[], activeId: string | null) => void;
   setWorkspaceSidebar: (change: { width?: number; collapsed?: boolean }) => void;
   setCharacterIds: (ids: string[]) => void;
@@ -91,6 +98,9 @@ export const useSessionStore = create<SessionState>()((set, get) => ({
   npcDialogOpen: false,
   campaignDialogOpen: false,
   shortcutsOpen: false,
+  presentationStartedAt: null,
+  presentationElapsedMs: 0,
+  presentationPaused: false,
   workspaceTabs: [],
   activeWorkspaceId: null,
   workspaceSidebarWidth: 192,
@@ -111,6 +121,22 @@ export const useSessionStore = create<SessionState>()((set, get) => ({
   setNpcDialogOpen: (npcDialogOpen) => set({ npcDialogOpen }),
   setCampaignDialogOpen: (campaignDialogOpen) => set({ campaignDialogOpen }),
   setShortcutsOpen: (shortcutsOpen) => set({ shortcutsOpen }),
+  startPresentation: () => set((state) => state.presentationStartedAt === null && !state.presentationPaused
+    ? { presentationStartedAt: Date.now(), presentationElapsedMs: 0 }
+    : state),
+  pausePresentation: () => set((state) => state.presentationStartedAt === null
+    ? state
+    : {
+      presentationStartedAt: null,
+      presentationElapsedMs: state.presentationElapsedMs + Date.now() - state.presentationStartedAt,
+      presentationPaused: true,
+    }),
+  resumePresentation: () => set((state) => !state.presentationPaused
+    ? state
+    : { presentationStartedAt: Date.now(), presentationPaused: false }),
+  stopPresentation: () => set((state) => state.presentationStartedAt === null && !state.presentationPaused
+    ? state
+    : { presentationStartedAt: null, presentationElapsedMs: 0, presentationPaused: false }),
   setWorkspaceSnapshot: (workspaceTabs, activeWorkspaceId) => {
     const state = get();
     if (state.activeWorkspaceId === activeWorkspaceId && JSON.stringify(state.workspaceTabs) === JSON.stringify(workspaceTabs)) return;
@@ -170,6 +196,9 @@ export function hydrateSession(campaign: CampaignSession, generation: number) {
     npcDialogOpen: false,
     campaignDialogOpen: false,
     shortcutsOpen: false,
+    presentationStartedAt: null,
+    presentationElapsedMs: 0,
+    presentationPaused: false,
     workspaceTabs: [],
     activeWorkspaceId: null,
     workspaceSidebarWidth: campaign.workspace?.sidebarWidth ?? 192,

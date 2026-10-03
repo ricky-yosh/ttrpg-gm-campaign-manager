@@ -1,7 +1,7 @@
 import { useEffect, useState } from "react";
 import { isTauri } from "@tauri-apps/api/core";
 import { getCurrentWindow } from "@tauri-apps/api/window";
-import { ArrowLeftIcon, ArrowRightIcon, PlayIcon, SearchIcon } from "lucide-react";
+import { ArrowLeftIcon, ArrowRightIcon, MoreHorizontalIcon, PauseIcon, PlayIcon, SearchIcon, SquareIcon } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Kbd } from "@/components/ui/kbd";
 import { SidebarTrigger } from "@/components/ui/sidebar";
@@ -9,12 +9,25 @@ import { CommandPalette } from "@/components/campaign/command-palette";
 import { appCommands } from "@/lib/app-commands";
 import { selectCanGoBack, selectCanGoForward, useSessionStore } from "@/stores/session-store";
 import { CampaignControls } from "@/components/campaign/campaign-controls";
+import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
 
 export function Topbar() {
   const canGoBack = useSessionStore(selectCanGoBack);
   const canGoForward = useSessionStore(selectCanGoForward);
+  const presentationStartedAt = useSessionStore((state) => state.presentationStartedAt);
+  const presentationElapsedMs = useSessionStore((state) => state.presentationElapsedMs);
+  const presentationPaused = useSessionStore((state) => state.presentationPaused);
   const isMacOS = typeof navigator !== "undefined" && /Mac|iPhone|iPad/.test(navigator.platform);
   const [isFullscreen, setIsFullscreen] = useState(false);
+  const [now, setNow] = useState(() => Date.now());
+  const isPresenting = presentationStartedAt !== null || presentationPaused;
+
+  useEffect(() => {
+    if (!presentationStartedAt) return;
+    setNow(Date.now());
+    const interval = window.setInterval(() => setNow(Date.now()), 1000);
+    return () => window.clearInterval(interval);
+  }, [presentationStartedAt]);
 
   useEffect(() => {
     const handleSearchShortcut = (event: KeyboardEvent) => {
@@ -84,15 +97,15 @@ export function Topbar() {
     <header
       data-tauri-drag-region="deep"
       data-macos={isMacOS && !isFullscreen ? "true" : undefined}
-      className="app-topbar flex h-11 shrink-0 items-center gap-3 border-b px-3"
+      className="app-topbar flex h-11 shrink-0 items-center gap-1 border-b px-1 sm:gap-2 sm:px-3"
     >
-      <div className="flex h-full shrink-0 items-center">
+      <div className="flex h-full min-w-0 shrink-0 items-center">
         <div className="macos-traffic-light-space" aria-hidden="true" data-tauri-drag-region />
         <CampaignControls />
-        <div className="flex h-full w-12 shrink-0 items-center justify-center">
+        <div className="flex h-full w-9 shrink-0 items-center justify-center sm:w-12">
           <SidebarTrigger data-tauri-drag-region="false" title="Toggle sidebar" />
         </div>
-        <div className="flex items-center gap-1">
+        <div className="hidden items-center gap-1 sm:flex">
           <Button
             data-tauri-drag-region="false"
             variant="ghost"
@@ -116,34 +129,86 @@ export function Topbar() {
             <ArrowRightIcon />
           </Button>
         </div>
-
+        <DropdownMenu>
+          <DropdownMenuTrigger render={
+            <Button data-tauri-drag-region="false" variant="ghost" size="icon-sm" className="sm:hidden" aria-label="Navigation history" title="Navigation history">
+              <MoreHorizontalIcon />
+            </Button>
+          } />
+          <DropdownMenuContent align="start">
+            <DropdownMenuItem disabled={!canGoBack} onClick={appCommands.goBack}>
+              <ArrowLeftIcon />Back
+            </DropdownMenuItem>
+            <DropdownMenuItem disabled={!canGoForward} onClick={appCommands.goForward}>
+              <ArrowRightIcon />Forward
+            </DropdownMenuItem>
+          </DropdownMenuContent>
+        </DropdownMenu>
       </div>
       <Button
         data-tauri-drag-region="false"
         variant="outline"
         size="sm"
-        className="mx-auto min-w-0 w-full max-w-80 flex-1 justify-start"
+        className="mx-auto min-w-9 w-full max-w-80 flex-1 justify-start max-sm:mx-0 max-sm:w-9 max-sm:flex-none max-sm:justify-center"
         aria-label="Search campaign"
         title={`Search campaign (${isMacOS ? "⌘K" : "Ctrl+K"})`}
         onClick={() => appCommands.openCommandPalette()}
       >
         <SearchIcon data-icon="inline-start" />
-        <span className="min-w-0 truncate">Search campaign…</span>
-        <Kbd className="ml-auto shrink-0">{isMacOS ? "⌘ K" : "Ctrl K"}</Kbd>
+        <span className="hidden min-w-0 truncate sm:inline">Search campaign…</span>
+        <Kbd className="ml-auto hidden shrink-0 lg:inline-flex">{isMacOS ? "⌘ K" : "Ctrl K"}</Kbd>
       </Button>
-      <div className="flex h-full shrink-0 items-center justify-end">
+      <div className="flex h-full shrink-0 items-center justify-end gap-1 sm:gap-2">
+        {isPresenting && (
+          <div className="flex items-center gap-1 rounded-md px-1 py-1 text-xs sm:mr-1 sm:gap-2 sm:px-2" role="status" aria-label="Presentation in progress">
+            <span className="size-2 rounded-full bg-destructive" aria-hidden="true" />
+            <span className="hidden font-medium md:inline">{presentationPaused ? "Paused" : "Presenting"}</span>
+            <time className="font-mono text-[0.7rem] tabular-nums text-muted-foreground sm:text-xs" aria-label="Presentation elapsed time">
+              {formatElapsedTime(presentationElapsedMs + (presentationStartedAt === null ? 0 : now - presentationStartedAt))}
+            </time>
+          </div>
+        )}
+        {isPresenting && (
+          <Button
+            data-tauri-drag-region="false"
+            variant="outline"
+            size="icon-sm"
+            aria-label={presentationPaused ? "Resume presentation" : "Pause presentation"}
+            title={presentationPaused ? "Resume presentation" : "Pause presentation"}
+            onClick={() => {
+              if (presentationPaused) useSessionStore.getState().resumePresentation();
+              else useSessionStore.getState().pausePresentation();
+            }}
+          >
+            {presentationPaused ? <PlayIcon className="size-3" /> : <PauseIcon className="size-3" />}
+          </Button>
+        )}
         <Button
           data-tauri-drag-region="false"
           variant="outline"
           size="icon-sm"
-          aria-label="Play presentation"
-          aria-disabled="true"
-          title="Play presentation — coming soon"
+          aria-label={isPresenting ? "Stop presentation" : "Start presentation"}
+          title={isPresenting ? "Stop presentation" : "Start presentation"}
+          onClick={() => {
+            if (isPresenting) useSessionStore.getState().stopPresentation();
+            else useSessionStore.getState().startPresentation();
+          }}
         >
-          <PlayIcon className="size-3" />
+          {isPresenting ? <SquareIcon className="size-3" /> : <PlayIcon className="size-3" />}
         </Button>
       </div>
       <CommandPalette />
     </header>
   );
+}
+
+function formatElapsedTime(milliseconds: number) {
+  const totalSeconds = Math.floor(Math.max(0, milliseconds) / 1000);
+  const hours = Math.floor(totalSeconds / 3600);
+  const minutes = Math.floor((totalSeconds % 3600) / 60);
+  const seconds = totalSeconds % 60;
+  const twoDigits = (value: number) => value.toString().padStart(2, "0");
+  return hours > 0
+    ? `${twoDigits(hours)}:${twoDigits(minutes)}:${twoDigits(seconds)}`
+    : `${twoDigits(minutes)}:${twoDigits(seconds)}`;
 }
