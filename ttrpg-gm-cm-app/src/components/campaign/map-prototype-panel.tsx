@@ -1,12 +1,13 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { Circle, Group, Image as KonvaImage, Layer, Stage, Text } from "react-konva";
 import type Konva from "konva";
-import { ImagePlusIcon, MapPinIcon, MinusIcon, PlusIcon, RotateCcwIcon, UploadIcon } from "lucide-react";
+import { ChevronLeftIcon, ChevronRightIcon, ImagePlusIcon, MapPinIcon, MinusIcon, PlusIcon, RotateCcwIcon, UploadIcon } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Empty, EmptyDescription, EmptyHeader, EmptyMedia, EmptyTitle } from "@/components/ui/empty";
 import { cn } from "@/lib/utils";
 import { Separator } from "@/components/ui/separator";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
+import { SidebarResizeHandle } from "@/components/ui/sidebar-resize-handle";
 
 type MapPin = { id: number; x: number; y: number };
 type Size = { width: number; height: number };
@@ -24,6 +25,8 @@ export function MapPrototypePanel() {
   const [spacePressed, setSpacePressed] = useState(false);
   const [camera, setCamera] = useState({ scale: 1, x: 0, y: 0 });
   const [error, setError] = useState<string | null>(null);
+  const [pinSidebarWidth, setPinSidebarWidth] = useState(224);
+  const [isPinSidebarCollapsed, setIsPinSidebarCollapsed] = useState(false);
   const hasImage = Boolean(image);
 
   useEffect(() => {
@@ -295,20 +298,64 @@ export function MapPrototypePanel() {
               </Tooltip>
             </div>
           </div>
-          <aside className="hidden w-56 shrink-0 flex-col gap-3 border-l p-4 sm:flex">
-            <div>
-              <h2 className="text-sm font-medium">Pins</h2>
-              <p className="text-xs text-muted-foreground">{pins.length === 1 ? "1 pin on this map" : `${pins.length} pins on this map`}</p>
-            </div>
-            {selectedPin ? (
-              <div className="flex flex-col gap-2 rounded-lg border bg-card p-3">
-                <p className="text-sm font-medium">Pin {pins.findIndex((pin) => pin.id === selectedPin) + 1}</p>
-                <p className="text-xs text-muted-foreground">Pins will link to location notes in a later step.</p>
-                <Button variant="outline" size="sm" onClick={deleteSelectedPin}>Remove pin</Button>
+          <aside
+            className="relative hidden shrink-0 flex-col border-l sm:flex"
+            style={{ width: isPinSidebarCollapsed ? 48 : pinSidebarWidth }}
+          >
+            {isPinSidebarCollapsed ? (
+              <div className="flex flex-col items-center gap-3 py-3">
+                <Tooltip>
+                  <TooltipTrigger render={
+                    <Button variant="ghost" size="icon" aria-label="Expand pins sidebar" onClick={() => setIsPinSidebarCollapsed(false)} />
+                  }>
+                    <ChevronLeftIcon />
+                  </TooltipTrigger>
+                  <TooltipContent side="left">Expand pins</TooltipContent>
+                </Tooltip>
+                <div className="flex flex-col items-center gap-1 text-muted-foreground" aria-label={`${pins.length} pins`}>
+                  <MapPinIcon className="size-4" />
+                  <span className="text-xs tabular-nums">{pins.length}</span>
+                </div>
               </div>
             ) : (
-              <p className="text-sm text-muted-foreground">Select a pin to view it. Add a pin to mark a place on the map.</p>
+              <div className="flex min-h-0 flex-1 flex-col gap-3 p-4">
+                <div className="flex items-start gap-2">
+                  <Tooltip>
+                    <TooltipTrigger render={
+                      <Button variant="ghost" size="icon" aria-label="Collapse pins sidebar" className="-ml-2 -mt-1 shrink-0" onClick={() => setIsPinSidebarCollapsed(true)} />
+                    }>
+                      <ChevronRightIcon />
+                    </TooltipTrigger>
+                    <TooltipContent side="left">Collapse pins</TooltipContent>
+                  </Tooltip>
+                  <div>
+                    <h2 className="text-sm font-medium">Pins</h2>
+                    <p className="text-xs text-muted-foreground">{pins.length === 1 ? "1 pin on this map" : `${pins.length} pins on this map`}</p>
+                  </div>
+                </div>
+                {selectedPin ? (
+                  <div className="flex flex-col gap-2 rounded-lg border bg-card p-3">
+                    <p className="text-sm font-medium">Pin {pins.findIndex((pin) => pin.id === selectedPin) + 1}</p>
+                    <p className="text-xs text-muted-foreground">Pins will link to location notes in a later step.</p>
+                    <Button variant="outline" size="sm" onClick={deleteSelectedPin}>Remove pin</Button>
+                  </div>
+                ) : (
+                  <p className="text-sm text-muted-foreground">Select a pin to view it. Add a pin to mark a place on the map.</p>
+                )}
+              </div>
             )}
+            <SidebarResizeHandle
+              label="Resize pins sidebar"
+              width={pinSidebarWidth}
+              collapsed={isPinSidebarCollapsed}
+              side="left"
+              collapsedWidth={48}
+              minWidth={176}
+              maxWidth={360}
+              collapseThreshold={128}
+              onWidthChange={setPinSidebarWidth}
+              onCollapsedChange={setIsPinSidebarCollapsed}
+            />
           </aside>
         </div>
       ) : (

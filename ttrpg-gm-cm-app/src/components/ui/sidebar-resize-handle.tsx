@@ -1,7 +1,8 @@
 import { useEffect, useRef, type PointerEvent } from "react";
+import { cn } from "@/lib/utils";
 
 /** Adds drag-to-collapse behavior to sidebar edges without hiding their rails. */
-export function SidebarResizeHandle({ label, width, collapsed, collapsedWidth, minWidth, maxWidth, collapseThreshold, onWidthChange, onCollapsedChange }: {
+export function SidebarResizeHandle({ label, width, collapsed, collapsedWidth, minWidth, maxWidth, collapseThreshold, side = "right", onWidthChange, onCollapsedChange }: {
   label: string;
   width: number;
   collapsed: boolean;
@@ -9,6 +10,7 @@ export function SidebarResizeHandle({ label, width, collapsed, collapsedWidth, m
   minWidth: number;
   maxWidth: number;
   collapseThreshold: number;
+  side?: "left" | "right";
   onWidthChange: (width: number) => void;
   onCollapsedChange: (collapsed: boolean) => void;
 }) {
@@ -85,12 +87,16 @@ export function SidebarResizeHandle({ label, width, collapsed, collapsedWidth, m
       aria-valuetext={collapsed ? "Collapsed" : `${Math.round(width)} pixels`}
       tabIndex={0}
       title="Drag to resize; drag inward to collapse. Double-click to toggle."
-      className="absolute inset-y-0 -right-1 z-20 w-2 cursor-col-resize touch-none select-none rounded-sm outline-none hover:bg-sidebar-ring/30 focus-visible:bg-sidebar-ring/50"
+      className={cn(
+        "absolute inset-y-0 z-20 w-2 cursor-col-resize touch-none select-none rounded-sm outline-none hover:bg-sidebar-ring/30 focus-visible:bg-sidebar-ring/50",
+        side === "right" ? "-right-1" : "-left-1",
+      )}
       onPointerDown={start}
       onPointerMove={(event) => {
         const current = drag.current;
         if (!current || current.pointerId !== event.pointerId) return;
-        current.collapsed = resize(current.startWidth + event.clientX - current.startX, current.collapsed);
+        const delta = (event.clientX - current.startX) * (side === "right" ? 1 : -1);
+        current.collapsed = resize(current.startWidth + delta, current.collapsed);
       }}
       onPointerUp={() => finish()}
       onPointerCancel={() => finish(true)}
@@ -102,10 +108,11 @@ export function SidebarResizeHandle({ label, width, collapsed, collapsedWidth, m
           finish(true);
         } else if (event.key === "ArrowLeft" || event.key === "ArrowRight") {
           event.preventDefault();
+          const increasesWidth = (event.key === "ArrowRight") === (side === "right");
           if (collapsed) {
-            if (event.key === "ArrowRight") onCollapsedChange(false);
-          } else if (event.key === "ArrowLeft" && width <= minWidth) onCollapsedChange(true);
-          else resize(width + (event.key === "ArrowRight" ? 16 : -16), false);
+            if (increasesWidth) onCollapsedChange(false);
+          } else if (!increasesWidth && width <= minWidth) onCollapsedChange(true);
+          else resize(width + (increasesWidth ? 16 : -16), false);
         } else if (event.key === "Enter") {
           event.preventDefault();
           onCollapsedChange(!collapsed);
