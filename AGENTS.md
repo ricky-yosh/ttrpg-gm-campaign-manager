@@ -5,6 +5,7 @@
 - Frontend: React with TypeScript, built with Vite.
 - Styling and components: Tailwind CSS and shadcn/ui. Use the project's configured shadcn style and component conventions.
 - Dockable workspace layout: Dockview (`dockview-react`).
+- Frontend state management: Zustand, including Back/Forward navigation history.
 - Interactive map canvas: Konva with its React bindings (`react-konva`). Use it for rendering and interacting with imported map images, pins, tokens, fog, grids, and map gestures.
 - Rich text editing: Plate (`platejs` and the `@platejs/*` packages). The project uses the Plate registry configured in `components.json`.
 - Desktop shell and backend: Tauri 2 with Rust.

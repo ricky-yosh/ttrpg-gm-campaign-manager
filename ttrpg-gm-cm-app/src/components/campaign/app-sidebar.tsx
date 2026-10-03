@@ -1,9 +1,10 @@
+import { useEffect, useState } from "react";
 import { useShallow } from "zustand/react/shallow";
 import { appCommands } from "@/lib/app-commands";
 import { useSessionStore } from "@/stores/session-store";
 import {
-  ArrowLeftIcon, BookOpenIcon, ChevronsUpDownIcon, CircleHelpIcon, Dice5Icon, FlagIcon, LayoutDashboardIcon,
-  MapIcon, PackageIcon, PaletteIcon, PuzzleIcon, ScrollTextIcon, SettingsIcon, UsersIcon,
+  ArrowLeftIcon, BookOpenIcon, ChevronsUpDownIcon, CircleHelpIcon, Dice5Icon, FlagIcon, FolderOpenIcon,
+  LayoutDashboardIcon, MapIcon, PackageIcon, PaletteIcon, PuzzleIcon, ScrollTextIcon, SettingsIcon, UsersIcon,
 } from "lucide-react";
 import {
   Sidebar, SidebarContent, SidebarFooter, SidebarGroup, SidebarGroupContent,
@@ -13,8 +14,37 @@ import {
 import { Dialog, DialogDescription, DialogPopup, DialogTitle } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
 import { Kbd } from "@/components/ui/kbd";
-import { useCampaign } from "@/lib/campaign-data";
+import { openCampaignAt, useCampaign } from "@/lib/campaign-data";
 import { SidebarResizeHandle } from "@/components/ui/sidebar-resize-handle";
+import {
+  DropdownMenu, DropdownMenuContent, DropdownMenuGroup, DropdownMenuItem, DropdownMenuLabel,
+  DropdownMenuSeparator, DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
+
+type RecentCampaign = { name: string; path: string };
+const RECENT_CAMPAIGNS_KEY = "ttrpg-gm-cm.recent-campaigns";
+
+function readRecentCampaigns(): RecentCampaign[] {
+  try {
+    const stored: unknown = JSON.parse(localStorage.getItem(RECENT_CAMPAIGNS_KEY) ?? "[]");
+    if (!Array.isArray(stored)) return [];
+    return stored.filter((item): item is RecentCampaign =>
+      typeof item?.name === "string" && typeof item?.path === "string",
+    );
+  } catch {
+    return [];
+  }
+}
+
+function rememberCampaign(name: string, path: string): RecentCampaign[] {
+  const recent = [{ name, path }, ...readRecentCampaigns().filter((item) => item.path !== path)].slice(0, 8);
+  try {
+    localStorage.setItem(RECENT_CAMPAIGNS_KEY, JSON.stringify(recent));
+  } catch {
+    // Keep the picker usable for the current session if storage is unavailable.
+  }
+  return recent;
+}
 
 const destinations = [
   { label: "Overview", icon: LayoutDashboardIcon },
@@ -28,7 +58,9 @@ const destinations = [
 ];
 
 export function AppSidebar() {
-  const campaignName = useCampaign((state) => state.campaign.name);
+  const { campaignName, campaignPath, campaignStatus, isLeaving } = useCampaign(useShallow((state) => ({
+    campaignName: state.campaign.name, campaignPath: state.path, campaignStatus: state.status, isLeaving: state.isLeaving,
+  })));
   const ids = useCampaign(useShallow((state) => state.campaign.npcs.map((npc) => npc.id)));
   const names = useCampaign(useShallow((state) => state.campaign.npcs.map((npc) => npc.name)));
   const section = useSessionStore((state) => state.section);
@@ -36,26 +68,52 @@ export function AppSidebar() {
   const isShortcutsOpen = useSessionStore((state) => state.shortcutsOpen);
   const setIsShortcutsOpen = useSessionStore((state) => state.setShortcutsOpen);
   const setSidebarWidth = (width: number) => useSessionStore.getState().setSidebar({ width });
-  const { isMobile, setOpenMobile, open, setOpen } = useSidebar();
+  const { isMobile, open, setOpen } = useSidebar();
+  const [recentCampaigns, setRecentCampaigns] = useState<RecentCampaign[]>(readRecentCampaigns);
   const isMacOS = typeof navigator !== "undefined" && /Mac|iPhone|iPad/.test(navigator.platform);
   const selectSection = (nextSection: string) => {
     appCommands.selectSection(nextSection);
-    if (isMobile) setOpenMobile(false);
   };
+
+  useEffect(() => {
+    if (!campaignPath || campaignStatus !== "Saved") return;
+    setRecentCampaigns(rememberCampaign(campaignName, campaignPath));
+  }, [campaignName, campaignPath, campaignStatus]);
 
   return (
     <Sidebar className="top-11 bottom-0 h-auto" collapsible="icon" width={sidebarWidth}>
       <SidebarHeader>
         <SidebarMenu>
           <SidebarMenuItem>
-            <SidebarMenuButton size="lg" aria-disabled="true" title={campaignName}>
-              <Dice5Icon aria-hidden="true" />
-              <span className="flex flex-1 flex-col gap-0.5 group-data-[collapsible=icon]:hidden">
-                <span>{campaignName}</span>
-                <span className="text-xs text-muted-foreground">D&D 5.5e</span>
-              </span>
-              <ChevronsUpDownIcon className="group-data-[collapsible=icon]:hidden" aria-hidden="true" />
-            </SidebarMenuButton>
+            <DropdownMenu>
+              <DropdownMenuTrigger disabled={isLeaving} render={
+                <SidebarMenuButton size="lg" tooltip="Recent campaigns" title="Recent campaigns">
+                  <Dice5Icon aria-hidden="true" />
+                  <span className="flex flex-1 flex-col gap-0.5 group-data-[collapsible=icon]:hidden">
+                    <span>{campaignName}</span>
+                    <span className="text-xs text-muted-foreground">D&D 5.5e</span>
+                  </span>
+                  <ChevronsUpDownIcon className="group-data-[collapsible=icon]:hidden" aria-hidden="true" />
+                </SidebarMenuButton>
+              } />
+              <DropdownMenuContent className="w-64" align="start">
+                <DropdownMenuGroup>
+                  <DropdownMenuLabel>Recent campaigns</DropdownMenuLabel>
+                  {recentCampaigns.length ? recentCampaigns.map((campaign) => (
+                    <DropdownMenuItem key={campaign.path} onClick={() => void openCampaignAt(campaign.path)}>
+                      <span className="flex min-w-0 flex-col">
+                        <span className="truncate">{campaign.name}</span>
+                        <span className="truncate text-xs text-muted-foreground">{campaign.path}</span>
+                      </span>
+                    </DropdownMenuItem>
+                  )) : <DropdownMenuItem disabled>No recent campaigns</DropdownMenuItem>}
+                </DropdownMenuGroup>
+                <DropdownMenuSeparator />
+                <DropdownMenuItem onClick={() => void appCommands.openCampaign()}>
+                  <FolderOpenIcon aria-hidden="true" />Open campaign…
+                </DropdownMenuItem>
+              </DropdownMenuContent>
+            </DropdownMenu>
           </SidebarMenuItem>
         </SidebarMenu>
       </SidebarHeader>
