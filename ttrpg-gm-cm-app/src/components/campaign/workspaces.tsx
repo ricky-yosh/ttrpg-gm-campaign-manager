@@ -1,6 +1,6 @@
 import { createContext, useContext, useEffect, useImperativeHandle, useRef, useState, type Ref } from "react";
 import { DockviewReact, themeDark, themeLight, type DockviewApi, type IDockviewPanelProps } from "dockview-react";
-import { PanelLeftCloseIcon, PanelLeftOpenIcon, PlusIcon, SearchIcon, XIcon } from "lucide-react";
+import { ChevronLeftIcon, ChevronRightIcon, PlusIcon, SearchIcon, XIcon } from "lucide-react";
 import { CharacterPanel } from "@/components/campaign/character-panel";
 import { Button } from "@/components/ui/button";
 import { Empty, EmptyContent, EmptyDescription, EmptyHeader, EmptyMedia, EmptyTitle } from "@/components/ui/empty";
@@ -310,7 +310,7 @@ export function Workspaces({ ref, isDark, onSearch, onNavigationChange }: {
           className="relative flex shrink-0 flex-col gap-2 border-r bg-sidebar p-2"
           style={{ width: isCollapsed ? 56 : sidebarWidth }}
         >
-          <div className="flex h-8 shrink-0 items-center justify-between gap-2">
+          <div className={cn("flex h-8 shrink-0 items-center gap-2", isCollapsed ? "justify-center" : "justify-between")}>
             {!isCollapsed && <span className="pl-1 text-xs font-medium text-muted-foreground">Workspaces</span>}
             <Tooltip>
               <TooltipTrigger render={
@@ -322,7 +322,7 @@ export function Workspaces({ ref, isDark, onSearch, onNavigationChange }: {
                   aria-controls="workspace-navigation-tabs"
                   onClick={() => setIsCollapsed((collapsed) => !collapsed)}
                 >
-                  {isCollapsed ? <PanelLeftOpenIcon /> : <PanelLeftCloseIcon />}
+                  {isCollapsed ? <ChevronRightIcon /> : <ChevronLeftIcon />}
                 </Button>
               } />
               <TooltipContent side="right">{isCollapsed ? "Expand workspaces" : "Collapse workspaces"}</TooltipContent>
@@ -390,7 +390,7 @@ export function Workspaces({ ref, isDark, onSearch, onNavigationChange }: {
           </div>
           <Tooltip>
             <TooltipTrigger render={
-              <Button variant="ghost" size={isCollapsed ? "icon" : "default"} aria-label="New workspace" className={cn(!isCollapsed && "justify-start")} onClick={createWorkspace}>
+              <Button variant="ghost" size={isCollapsed ? "icon" : "default"} aria-label="New workspace" className={cn(isCollapsed ? "self-center" : "justify-start")} onClick={createWorkspace}>
                 <PlusIcon data-icon="inline-start" />
                 {!isCollapsed && "New workspace"}
               </Button>

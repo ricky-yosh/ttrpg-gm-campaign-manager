@@ -2,7 +2,6 @@ import { Button } from "@/components/ui/button";
 import { Dialog, DialogDescription, DialogPopup, DialogTitle } from "@/components/ui/dialog";
 import { isTauri } from "@tauri-apps/api/core";
 import { getCurrentWindow } from "@tauri-apps/api/window";
-import { CampaignControls } from "@/components/campaign/campaign-controls";
 import { leaveCampaign, listenForCampaignOpens, saveCampaign, setUnsavedChoiceHandler, updateCampaign, useCampaign, type LeaveIntent, type UnsavedChoice } from "@/lib/campaign-data";
 import { useEffect, useRef, useState } from "react";
 import { AppSidebar } from "@/components/campaign/app-sidebar";
@@ -128,12 +127,21 @@ function App() {
           onCommandPaletteOpenChange={setIsCommandPaletteOpen}
           onCreateWorkspace={() => workspaces.current?.createWorkspace()}
           onOpenCharacter={openCharacter}
+          npcOpen={npcOpen}
+          onNpcOpenChange={setNpcOpen}
         />
         <div className="flex min-h-0 flex-1">
           <AppSidebar onCreateNpc={() => setNpcOpen(true)} section={section} onSelectSection={setSection} onOpenCharacter={openCharacter} onOpenMap={openMap} />
-          <main aria-label="Campaign workspace" className="flex min-h-0 min-w-0 flex-1 flex-col">
-            <CampaignControls npcOpen={npcOpen} onNpcOpenChange={setNpcOpen} onOpenNpc={openCharacter} />
-            <Workspaces key={generation} ref={workspaces} isDark={isDark} onSearch={() => setIsCommandPaletteOpen(true)} onNavigationChange={setNavigation} />
+          <main aria-label="Campaign workspace" className="relative flex min-h-0 min-w-0 flex-1 flex-col">
+            {section === "Settings" && (
+              <section className="relative z-10 flex min-h-0 flex-1 flex-col gap-2 bg-background p-6" aria-labelledby="settings-title">
+                <h1 id="settings-title" className="text-xl font-semibold">Settings</h1>
+                <p className="text-sm text-muted-foreground">There are no app settings to configure yet.</p>
+              </section>
+            )}
+            <div className="absolute inset-0 flex" aria-hidden={section === "Settings"} inert={section === "Settings"}>
+              <Workspaces key={generation} ref={workspaces} isDark={isDark} onSearch={() => setIsCommandPaletteOpen(true)} onNavigationChange={setNavigation} />
+            </div>
           </main>
         </div>
       </SidebarProvider>

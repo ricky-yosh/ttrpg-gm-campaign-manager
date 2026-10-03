@@ -65,7 +65,7 @@ export function AppSidebar({ section, onSelectSection, onOpenCharacter, onCreate
       </SidebarHeader>
       <SidebarSeparator />
       <SidebarContent>
-        {section ? (
+        {section && section !== "Settings" ? (
           <div key={`section:${section}`} className="animate-in fade-in slide-in-from-right-2 duration-200">
           <SidebarGroup>
             <SidebarGroupLabel className="sr-only">{section} navigation</SidebarGroupLabel>
@@ -134,7 +134,7 @@ export function AppSidebar({ section, onSelectSection, onOpenCharacter, onCreate
             </SidebarMenuButton>
           </SidebarMenuItem>
           <SidebarMenuItem>
-            <SidebarMenuButton tooltip="Settings" onClick={() => selectSection("Settings")}>
+            <SidebarMenuButton tooltip="Settings" isActive={section === "Settings"} onClick={() => selectSection("Settings")}>
               <SettingsIcon aria-hidden="true" />
               <span>Settings</span>
             </SidebarMenuButton>

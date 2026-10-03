@@ -1,16 +1,57 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
+import { isTauri } from "@tauri-apps/api/core";
+import { getCurrentWindow } from "@tauri-apps/api/window";
+import { Menu, MenuItem, PredefinedMenuItem, Submenu } from "@tauri-apps/api/menu";
+import { ChevronDownIcon, FileIcon, FilePlus2Icon, FolderOpenIcon, SaveIcon } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Field, FieldGroup, FieldLabel } from "@/components/ui/field";
 import { Dialog, DialogDescription, DialogPopup, DialogTitle } from "@/components/ui/dialog";
+import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuSeparator, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
 import { createNpc, replaceCampaign, saveCampaign, useCampaign } from "@/lib/campaign-data";
+
+type FileCommand = "new" | "open" | "save";
+let nativeMenuPromise: Promise<void> | null = null;
+
+function installNativeFileMenu(isMacOS: boolean) {
+  if (!nativeMenuPromise) {
+    nativeMenuPromise = (async () => {
+      const menu = await Menu.default();
+      const items = [
+        await MenuItem.new({ id: "campaign-new", text: "New Campaign", accelerator: "CmdOrCtrl+N", action: () => window.dispatchEvent(new CustomEvent<FileCommand>("campaign-file-command", { detail: "new" })) }),
+        await MenuItem.new({ id: "campaign-open", text: "Open Campaign…", accelerator: "CmdOrCtrl+O", action: () => window.dispatchEvent(new CustomEvent<FileCommand>("campaign-file-command", { detail: "open" })) }),
+        await PredefinedMenuItem.new({ item: "Separator" }),
+        await MenuItem.new({ id: "campaign-save", text: "Save Campaign", accelerator: "CmdOrCtrl+S", action: () => window.dispatchEvent(new CustomEvent<FileCommand>("campaign-file-command", { detail: "save" })) }),
+      ];
+
+      const existingItems = await menu.items();
+      let fileMenu: Submenu | undefined;
+      for (const item of existingItems) {
+        if (item instanceof Submenu && await item.text() === "File") {
+          fileMenu = item;
+          break;
+        }
+      }
+      if (fileMenu) await fileMenu.prepend(items);
+      else if (isMacOS) await menu.insert(await Submenu.new({ text: "File", items }), 1);
+      else await menu.prepend(await Submenu.new({ text: "File", items }));
+
+      if (isMacOS) await menu.setAsAppMenu();
+      else await menu.setAsWindowMenu(getCurrentWindow());
+    })().catch((error: unknown) => {
+      nativeMenuPromise = null;
+      throw error;
+    });
+  }
+  return nativeMenuPromise;
+}
 
 export function CampaignControls({ npcOpen, onNpcOpenChange, onOpenNpc }: {
   npcOpen: boolean;
   onNpcOpenChange: (open: boolean) => void;
   onOpenNpc: (id: string) => void;
 }) {
-  const { status, error, path } = useCampaign();
+  const { campaign, status, error, path } = useCampaign();
   const [campaignOpen, setCampaignOpen] = useState(false);
   const [name, setName] = useState("");
   const [npcName, setNpcName] = useState("");
@@ -19,16 +60,48 @@ export function CampaignControls({ npcOpen, onNpcOpenChange, onOpenNpc }: {
     setBusy(true);
     try { await action(); } finally { setBusy(false); }
   };
+  useEffect(() => {
+    if (!isTauri()) return;
+    const handleFileCommand = (event: Event) => {
+      const command = (event as CustomEvent<FileCommand>).detail;
+      if (command === "new") {
+        setName("");
+        setCampaignOpen(true);
+      } else if (command === "open") void run(() => replaceCampaign());
+      else if (command === "save") void run(() => saveCampaign());
+    };
+    window.addEventListener("campaign-file-command", handleFileCommand);
+    void installNativeFileMenu(typeof navigator !== "undefined" && /Mac|iPhone|iPad/.test(navigator.platform))
+      .catch((error: unknown) => console.error("Could not install native File menu", error));
+    return () => window.removeEventListener("campaign-file-command", handleFileCommand);
+  }, []);
   return (
     <>
-      <div className="flex shrink-0 flex-wrap items-center gap-2 border-b px-3 py-2">
-        <Button size="sm" variant="outline" disabled={busy} onClick={() => { setName(""); setCampaignOpen(true); }}>New campaign</Button>
-        <Button size="sm" variant="outline" disabled={busy} onClick={() => void run(() => replaceCampaign())}>Open campaign</Button>
-        <Button size="sm" disabled={busy || status === "Saving…"} onClick={() => void run(() => saveCampaign())}>Save</Button>
-        <Button size="sm" variant="outline" disabled={busy} onClick={() => { setNpcName(""); onNpcOpenChange(true); }}>New NPC</Button>
-        <span role="status" className="min-w-0 truncate text-xs text-muted-foreground" title={path ?? undefined}>{status}</span>
-      </div>
-      {error && <p role="alert" className="border-b px-3 py-2 text-sm text-destructive">{error}</p>}
+      {!isTauri() && <DropdownMenu>
+        <DropdownMenuTrigger render={
+          <Button data-tauri-drag-region="false" variant="ghost" size="sm" aria-label="File commands">
+            <FileIcon data-icon="inline-start" />File<ChevronDownIcon data-icon="inline-end" />
+          </Button>
+        } />
+        <DropdownMenuContent>
+          <div className="flex min-w-0 flex-col gap-0.5 px-2 py-1.5">
+            <span className="truncate text-sm font-medium" title={path ?? campaign.name}>{campaign.name}</span>
+            <span role="status" className="truncate text-xs text-muted-foreground">{status}</span>
+            {error && <span role="alert" className="text-xs text-destructive">{error}</span>}
+          </div>
+          <DropdownMenuSeparator />
+          <DropdownMenuItem disabled={busy} onClick={() => { setName(""); setCampaignOpen(true); }}>
+            <FilePlus2Icon />New campaign
+          </DropdownMenuItem>
+          <DropdownMenuItem disabled={busy} onClick={() => void run(() => replaceCampaign())}>
+            <FolderOpenIcon />Open campaign
+          </DropdownMenuItem>
+          <DropdownMenuSeparator />
+          <DropdownMenuItem disabled={busy || status === "Saving…"} onClick={() => void run(() => saveCampaign())}>
+            <SaveIcon />Save campaign
+          </DropdownMenuItem>
+        </DropdownMenuContent>
+      </DropdownMenu>}
       <Dialog open={campaignOpen} onOpenChange={setCampaignOpen}>
         <DialogPopup>
           <form className="flex flex-col gap-5 p-5" onSubmit={(event) => {
@@ -49,7 +122,7 @@ export function CampaignControls({ npcOpen, onNpcOpenChange, onOpenNpc }: {
           </form>
         </DialogPopup>
       </Dialog>
-      <Dialog open={npcOpen} onOpenChange={onNpcOpenChange}>
+      <Dialog open={npcOpen} onOpenChange={(open) => { if (open) setNpcName(""); onNpcOpenChange(open); }}>
         <DialogPopup>
           <form className="flex flex-col gap-5 p-5" onSubmit={(event) => {
             event.preventDefault();

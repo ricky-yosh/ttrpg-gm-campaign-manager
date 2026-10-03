@@ -6,8 +6,9 @@ import { Button } from "@/components/ui/button";
 import { Kbd } from "@/components/ui/kbd";
 import { SidebarTrigger } from "@/components/ui/sidebar";
 import { CommandPalette } from "@/components/campaign/command-palette";
+import { CampaignControls } from "@/components/campaign/campaign-controls";
 
-export function Topbar({ canGoBack, canGoForward, onGoBack, onGoForward, isCommandPaletteOpen, onCommandPaletteOpenChange, onCreateWorkspace, onOpenCharacter }: {
+export function Topbar({ canGoBack, canGoForward, onGoBack, onGoForward, isCommandPaletteOpen, onCommandPaletteOpenChange, onCreateWorkspace, onOpenCharacter, npcOpen, onNpcOpenChange }: {
   canGoBack: boolean;
   canGoForward: boolean;
   onGoBack: () => void;
@@ -16,6 +17,8 @@ export function Topbar({ canGoBack, canGoForward, onGoBack, onGoForward, isComma
   onCommandPaletteOpenChange: (open: boolean) => void;
   onCreateWorkspace: () => void;
   onOpenCharacter: (name: string) => void;
+  npcOpen: boolean;
+  onNpcOpenChange: (open: boolean) => void;
 }) {
   const isMacOS = typeof navigator !== "undefined" && /Mac|iPhone|iPad/.test(navigator.platform);
   const [isFullscreen, setIsFullscreen] = useState(false);
@@ -73,6 +76,7 @@ export function Topbar({ canGoBack, canGoForward, onGoBack, onGoForward, isComma
     >
       <div className="flex h-full shrink-0 items-center">
         <div className="macos-traffic-light-space" aria-hidden="true" data-tauri-drag-region />
+        <CampaignControls npcOpen={npcOpen} onNpcOpenChange={onNpcOpenChange} onOpenNpc={onOpenCharacter} />
         <div className="flex h-full w-12 shrink-0 items-center justify-center">
           <SidebarTrigger data-tauri-drag-region="false" title="Toggle sidebar" />
         </div>
