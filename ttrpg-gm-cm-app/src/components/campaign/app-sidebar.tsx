@@ -42,6 +42,11 @@ export function AppSidebar({ section, onSelectSection, onOpenCharacter, onCreate
   }, [sidebarWidth, open, campaign.sidebar]);
   const [isShortcutsOpen, setIsShortcutsOpen] = useState(false);
   const isMacOS = typeof navigator !== "undefined" && /Mac|iPhone|iPad/.test(navigator.platform);
+  useEffect(() => {
+    const handleOpenShortcuts = () => setIsShortcutsOpen(true);
+    window.addEventListener("app-open-shortcuts", handleOpenShortcuts);
+    return () => window.removeEventListener("app-open-shortcuts", handleOpenShortcuts);
+  }, []);
   const selectSection = (nextSection: string) => {
     onSelectSection(nextSection);
     if (isMobile) setOpenMobile(false);

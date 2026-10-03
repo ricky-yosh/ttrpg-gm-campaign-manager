@@ -153,6 +153,8 @@ function App() {
           onCreateWorkspace={() => workspaces.current?.createWorkspace()}
           onOpenCharacter={openCharacter}
           onOpenSettings={() => setSection("Settings")}
+          onOpenMap={openMap}
+          onCloseActiveTab={() => workspaces.current?.closeActiveTab()}
           npcOpen={npcOpen}
           onNpcOpenChange={setNpcOpen}
         />

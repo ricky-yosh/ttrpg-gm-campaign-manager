@@ -74,7 +74,6 @@ export function CampaignControls({ npcOpen, onNpcOpenChange, onOpenNpc }: {
     try { await action(); } finally { setBusy(false); }
   };
   useEffect(() => {
-    if (!isTauri()) return;
     const handleFileCommand = (event: Event) => {
       const command = (event as CustomEvent<FileCommand>).detail;
       if (command === "new") {
@@ -85,8 +84,10 @@ export function CampaignControls({ npcOpen, onNpcOpenChange, onOpenNpc }: {
       else if (command === "save-as") void run(() => saveCampaignAs());
     };
     window.addEventListener("campaign-file-command", handleFileCommand);
-    void installNativeFileMenu(typeof navigator !== "undefined" && /Mac|iPhone|iPad/.test(navigator.platform))
-      .catch((error: unknown) => console.error("Could not install native File menu", error));
+    if (isTauri()) {
+      void installNativeFileMenu(typeof navigator !== "undefined" && /Mac|iPhone|iPad/.test(navigator.platform))
+        .catch((error: unknown) => console.error("Could not install native File menu", error));
+    }
     return () => window.removeEventListener("campaign-file-command", handleFileCommand);
   }, []);
   return (

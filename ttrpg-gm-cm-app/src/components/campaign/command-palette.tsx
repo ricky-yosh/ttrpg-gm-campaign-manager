@@ -1,17 +1,21 @@
 import { useEffect, useState } from "react";
 import { Autocomplete } from "@base-ui/react/autocomplete";
-import { LayoutTemplateIcon, SearchIcon, UserRoundIcon, type LucideIcon } from "lucide-react";
+import {
+  ArrowLeftIcon, ArrowRightIcon, CircleHelpIcon, FilePlus2Icon, FolderOpenIcon, LayoutTemplateIcon,
+  MapIcon, PanelTopCloseIcon, SaveIcon, SearchIcon, SettingsIcon, UserPlusIcon, UserRoundIcon,
+  type LucideIcon,
+} from "lucide-react";
 import { Dialog, DialogDescription, DialogPopup, DialogTitle } from "@/components/ui/dialog";
 import { Kbd } from "@/components/ui/kbd";
 import { useCampaign } from "@/lib/campaign-data";
 
 type PaletteItem = {
   id: string;
-  kind: "create-workspace" | "character";
   label: string;
   description: string;
   keywords: string[];
   icon: LucideIcon;
+  onSelect: () => void;
 };
 
 type PaletteGroup = {
@@ -24,11 +28,27 @@ export function CommandPalette({
   onOpenChange,
   onCreateWorkspace,
   onOpenCharacter,
+  onOpenSettings,
+  onCreateNpc,
+  onOpenMap,
+  onGoBack,
+  onGoForward,
+  canGoBack,
+  canGoForward,
+  onCloseActiveTab,
 }: {
   open: boolean;
   onOpenChange: (open: boolean) => void;
   onCreateWorkspace: () => void;
   onOpenCharacter: (name: string) => void;
+  onOpenSettings: () => void;
+  onCreateNpc: () => void;
+  onOpenMap: () => void;
+  onGoBack: () => void;
+  onGoForward: () => void;
+  canGoBack: boolean;
+  canGoForward: boolean;
+  onCloseActiveTab: () => void;
 }) {
   const { campaign } = useCampaign();
   const paletteGroups: PaletteGroup[] = [
@@ -37,11 +57,99 @@ export function CommandPalette({
       items: [
         {
           id: "create-workspace",
-          kind: "create-workspace",
           label: "Create new workspace",
           description: "Open an empty workspace tab",
           keywords: ["tab", "new", "workspace"],
           icon: LayoutTemplateIcon,
+          onSelect: onCreateWorkspace,
+        },
+        {
+          id: "new-campaign",
+          label: "New campaign",
+          description: "Create a campaign",
+          keywords: ["file", "campaign", "create"],
+          icon: FilePlus2Icon,
+          onSelect: () => window.dispatchEvent(new CustomEvent("campaign-file-command", { detail: "new" })),
+        },
+        {
+          id: "open-campaign",
+          label: "Open campaign",
+          description: "Choose a campaign to open",
+          keywords: ["file", "load"],
+          icon: FolderOpenIcon,
+          onSelect: () => window.dispatchEvent(new CustomEvent("campaign-file-command", { detail: "open" })),
+        },
+        {
+          id: "save-campaign",
+          label: "Save campaign",
+          description: "Save changes to the current campaign",
+          keywords: ["file", "write", "persist"],
+          icon: SaveIcon,
+          onSelect: () => window.dispatchEvent(new CustomEvent("campaign-file-command", { detail: "save" })),
+        },
+        {
+          id: "save-campaign-as",
+          label: "Save campaign as…",
+          description: "Save a copy to another location",
+          keywords: ["file", "copy", "duplicate", "export"],
+          icon: SaveIcon,
+          onSelect: () => window.dispatchEvent(new CustomEvent("campaign-file-command", { detail: "save-as" })),
+        },
+        {
+          id: "create-npc",
+          label: "Create new NPC",
+          description: "Add a character to this campaign",
+          keywords: ["character", "person", "npc", "new"],
+          icon: UserPlusIcon,
+          onSelect: onCreateNpc,
+        },
+        {
+          id: "open-map",
+          label: "Open map",
+          description: "Open the map workspace",
+          keywords: ["location", "world", "atlas"],
+          icon: MapIcon,
+          onSelect: onOpenMap,
+        },
+        {
+          id: "settings",
+          label: "Open settings",
+          description: "Change appearance and app preferences",
+          keywords: ["preferences", "appearance", "theme", "dark", "light"],
+          icon: SettingsIcon,
+          onSelect: onOpenSettings,
+        },
+        {
+          id: "shortcuts",
+          label: "Keyboard shortcuts",
+          description: "Show available keyboard shortcuts",
+          keywords: ["help", "keys", "hotkeys"],
+          icon: CircleHelpIcon,
+          onSelect: () => window.dispatchEvent(new Event("app-open-shortcuts")),
+        },
+        ...(canGoBack ? [{
+          id: "go-back",
+          label: "Go back",
+          description: "Return to the previous workspace tab",
+          keywords: ["history", "previous", "back"],
+          icon: ArrowLeftIcon,
+          onSelect: onGoBack,
+        }] : []),
+        ...(canGoForward ? [{
+          id: "go-forward",
+          label: "Go forward",
+          description: "Move to the next workspace tab",
+          keywords: ["history", "next", "forward"],
+          icon: ArrowRightIcon,
+          onSelect: onGoForward,
+        }] : []),
+        {
+          id: "close-tab",
+          label: "Close active tab",
+          description: "Close the current workspace tab",
+          keywords: ["workspace", "remove", "tab"],
+          icon: PanelTopCloseIcon,
+          onSelect: onCloseActiveTab,
         },
       ],
     },
@@ -49,11 +157,11 @@ export function CommandPalette({
       value: "Characters",
       items: campaign.npcs.map(({ id, name }) => ({
         id,
-        kind: "character",
         label: name,
         description: "Open character tab",
         keywords: ["character", "npc", "person"],
         icon: UserRoundIcon,
+        onSelect: () => onOpenCharacter(id),
       })),
     },
   ];
@@ -67,8 +175,7 @@ export function CommandPalette({
   const selectItem = (item: PaletteItem) => {
     setQuery("");
     onOpenChange(false);
-    if (item.kind === "create-workspace") onCreateWorkspace();
-    else onOpenCharacter(item.id);
+    item.onSelect();
   };
 
   return (

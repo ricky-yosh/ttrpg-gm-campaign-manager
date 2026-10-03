@@ -8,7 +8,7 @@ import { SidebarTrigger } from "@/components/ui/sidebar";
 import { CommandPalette } from "@/components/campaign/command-palette";
 import { CampaignControls } from "@/components/campaign/campaign-controls";
 
-export function Topbar({ canGoBack, canGoForward, onGoBack, onGoForward, isCommandPaletteOpen, onCommandPaletteOpenChange, onCreateWorkspace, onOpenCharacter, onOpenSettings, npcOpen, onNpcOpenChange }: {
+export function Topbar({ canGoBack, canGoForward, onGoBack, onGoForward, isCommandPaletteOpen, onCommandPaletteOpenChange, onCreateWorkspace, onOpenCharacter, onOpenSettings, onOpenMap, onCloseActiveTab, npcOpen, onNpcOpenChange }: {
   canGoBack: boolean;
   canGoForward: boolean;
   onGoBack: () => void;
@@ -18,6 +18,8 @@ export function Topbar({ canGoBack, canGoForward, onGoBack, onGoForward, isComma
   onCreateWorkspace: () => void;
   onOpenCharacter: (name: string) => void;
   onOpenSettings: () => void;
+  onOpenMap: () => void;
+  onCloseActiveTab: () => void;
   npcOpen: boolean;
   onNpcOpenChange: (open: boolean) => void;
 }) {
@@ -159,6 +161,14 @@ export function Topbar({ canGoBack, canGoForward, onGoBack, onGoForward, isComma
         onOpenChange={onCommandPaletteOpenChange}
         onCreateWorkspace={onCreateWorkspace}
         onOpenCharacter={onOpenCharacter}
+        onOpenSettings={onOpenSettings}
+        onCreateNpc={() => onNpcOpenChange(true)}
+        onOpenMap={onOpenMap}
+        onGoBack={onGoBack}
+        onGoForward={onGoForward}
+        canGoBack={canGoBack}
+        canGoForward={canGoForward}
+        onCloseActiveTab={onCloseActiveTab}
       />
     </header>
   );
