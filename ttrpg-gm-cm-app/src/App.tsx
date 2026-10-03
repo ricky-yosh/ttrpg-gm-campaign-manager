@@ -3,7 +3,7 @@ import { Dialog, DialogDescription, DialogPopup, DialogTitle } from "@/component
 import { isTauri } from "@tauri-apps/api/core";
 import { getCurrentWindow } from "@tauri-apps/api/window";
 import { CampaignControls } from "@/components/campaign/campaign-controls";
-import { leaveCampaign, saveCampaign, setUnsavedChoiceHandler, updateCampaign, useCampaign, type LeaveIntent, type UnsavedChoice } from "@/lib/campaign-data";
+import { leaveCampaign, listenForCampaignOpens, saveCampaign, setUnsavedChoiceHandler, updateCampaign, useCampaign, type LeaveIntent, type UnsavedChoice } from "@/lib/campaign-data";
 import { useEffect, useRef, useState } from "react";
 import { AppSidebar } from "@/components/campaign/app-sidebar";
 import { Workspaces, type NavigationState, type WorkspaceHandle } from "@/components/campaign/workspaces";
@@ -31,6 +31,15 @@ function App() {
       setLeaveIntent(intent);
     }));
     return () => { stop(); choiceResolver.current?.("cancel"); choiceResolver.current = null; };
+  }, []);
+  useEffect(() => {
+    let disposed = false;
+    let stop: (() => void) | undefined;
+    void listenForCampaignOpens().then((unlisten) => {
+      if (disposed) unlisten();
+      else stop = unlisten;
+    });
+    return () => { disposed = true; stop?.(); };
   }, []);
   useEffect(() => {
     if (isLeaving || !path || revision === savedRevision) return;

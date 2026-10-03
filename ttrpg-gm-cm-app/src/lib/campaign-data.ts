@@ -1,6 +1,7 @@
 import { useSyncExternalStore } from "react";
 import { invoke, isTauri } from "@tauri-apps/api/core";
 import { open, save } from "@tauri-apps/plugin-dialog";
+import { listen } from "@tauri-apps/api/event";
 import type { SerializedDockview } from "dockview-react";
 import type { Value } from "platejs";
 
@@ -114,6 +115,64 @@ export function saveCharacterNotes(id: string, notes: Value) {
   updateCampaign({ npcs: snapshot.campaign.npcs.map((item) => item.id === id ? { ...item, notes: structuredClone(notes) } : item) });
 }
 
+function campaignPackageName(name: string) {
+  const safeName = name
+    .replace(/[<>:"/\\|?*]/g, "-").replace(/\p{Cc}/gu, "-")
+    .replace(/\s+/g, " ")
+    .replace(/[. ]+$/g, "").trim() || "Campaign";
+  return safeName.replace(/\.campaign$/i, "") || "Campaign";
+}
+
+async function chooseCampaignPackagePath(): Promise<string | null> {
+  const packageName = campaignPackageName(snapshot.campaign.name);
+  const selectedPath = await save({
+    title: "Save campaign package",
+    defaultPath: packageName,
+    filters: [{ name: "Campaign package", extensions: ["campaign"] }],
+  });
+  if (!selectedPath) return null;
+  return `${selectedPath.replace(/\.campaign$/i, "")}.campaign`;
+}
+
+async function loadCampaignPath(path: string) {
+  const campaign = await invoke<Campaign>("open_campaign", { path });
+  snapshot = { ...snapshot, campaign, path, revision: 0, savedRevision: 0,
+    status: "Saved", error: "", generation: snapshot.generation + 1 }; emit();
+}
+
+export async function openCampaignAt(path: string): Promise<boolean> {
+  // A Finder-opened campaign replaces the untouched sample on cold start without a discard prompt.
+  if (snapshot.generation === 0 && snapshot.path === null && snapshot.revision === 0) {
+    try {
+      await loadCampaignPath(path);
+      return true;
+    } catch (error) {
+      snapshot = { ...snapshot, error: String(error) }; emit();
+      return false;
+    }
+  }
+  return leaveCampaign("switch", async () => {
+    await loadCampaignPath(path);
+    return true;
+  });
+}
+
+export async function listenForCampaignOpens() {
+  if (!isTauri()) return () => {};
+  const opening = new Set<string>();
+  const handlePaths = (paths: string[]) => {
+    for (const path of paths) {
+      if (opening.has(path)) continue;
+      opening.add(path);
+      void openCampaignAt(path).finally(() => opening.delete(path));
+    }
+  };
+  const unlisten = await listen<string[]>("campaign-open-requested", (event) => handlePaths(event.payload));
+  const initialPaths = await invoke<string[]>("take_opened_campaigns");
+  handlePaths(initialPaths);
+  return unlisten;
+}
+
 let saving: Promise<boolean> | null = null;
 export function saveCampaign(explicit = true): Promise<boolean> {
   if (!explicit && snapshot.isLeaving) return Promise.resolve(false);
@@ -121,13 +180,7 @@ export function saveCampaign(explicit = true): Promise<boolean> {
   saving = (async () => {
     try {
       if (!isTauri()) throw new Error("Use the desktop app (pnpm tauri dev) to save campaign folders.");
-      const packageName = snapshot.campaign.name
-        .replace(/[<>:"/\\|?*]/g, "-").split(String.fromCharCode(0)).join("-")
-        .replace(/\s+/g, " ").replace(/[. ]+$/g, "").trim() || "Campaign";
-      const path = snapshot.path ?? await save({
-        title: "Save campaign package",
-        defaultPath: `${packageName}.campaign`,
-      });
+      const path = snapshot.path ?? await chooseCampaignPackagePath();
       if (!path) return false;
       do {
         const { campaign, revision } = snapshot;
@@ -182,11 +235,12 @@ export async function replaceCampaign(name?: string) {
       return true;
     }
     if (!isTauri()) throw new Error("Use the desktop app (pnpm tauri dev) to open campaign files.");
-    const path = await open({ title: "Open campaign package", directory: true, multiple: false });
+    const isMacOS = typeof navigator !== "undefined" && /Mac/i.test(navigator.platform);
+    const path = isMacOS
+      ? await open({ title: "Open campaign package", multiple: false, filters: [{ name: "Campaign Package", extensions: ["campaign"] }] })
+      : await open({ title: "Open campaign package", directory: true, multiple: false });
     if (!path) return false;
-    const campaign = await invoke<Campaign>("open_campaign", { path });
-    snapshot = { ...snapshot, campaign, path, revision: 0, savedRevision: 0,
-      status: "Saved", error: "", generation: snapshot.generation + 1 }; emit();
+    await loadCampaignPath(path);
     return true;
   });
 }
