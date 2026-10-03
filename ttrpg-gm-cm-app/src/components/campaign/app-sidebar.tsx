@@ -4,7 +4,7 @@ import { appCommands } from "@/lib/app-commands";
 import { useSessionStore } from "@/stores/session-store";
 import {
   ArrowLeftIcon, BookOpenIcon, ChevronsUpDownIcon, CircleHelpIcon, Dice5Icon, FlagIcon, FolderOpenIcon,
-  LayoutDashboardIcon, MapIcon, PackageIcon, PaletteIcon, PuzzleIcon, ScrollTextIcon, SettingsIcon, UsersIcon,
+  LayoutDashboardIcon, MapIcon, PackageIcon, PaletteIcon, PuzzleIcon, ScrollTextIcon, SettingsIcon, UserPlusIcon, UsersIcon,
 } from "lucide-react";
 import {
   Sidebar, SidebarContent, SidebarFooter, SidebarGroup, SidebarGroupContent,
@@ -131,9 +131,16 @@ export function AppSidebar() {
                     <span>All sections</span>
                   </SidebarMenuButton>
                 </SidebarMenuItem>
+                {section === "Characters" && (
+                  <SidebarMenuItem>
+                    <SidebarMenuButton tooltip="New NPC" onClick={appCommands.createNpc}>
+                      <UserPlusIcon aria-hidden="true" />
+                      <span>New NPC</span>
+                    </SidebarMenuButton>
+                  </SidebarMenuItem>
+                )}
               </SidebarMenu>
               <div className="px-2 pb-2 pt-4 text-xs font-semibold text-muted-foreground group-data-[collapsible=icon]:hidden">{section}</div>
-              {section === "Characters" && <Button variant="outline" onClick={appCommands.createNpc}>New NPC</Button>}
               <SidebarMenu>
                 {section === "Characters" ? ids.map((id, index) => (
                   <SidebarMenuItem key={id}>

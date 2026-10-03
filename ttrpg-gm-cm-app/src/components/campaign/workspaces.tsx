@@ -339,7 +339,7 @@ export function Workspaces({ ref, isDark, onSearch }: {
             <Tooltip>
               <TooltipTrigger render={
                 <Button
-                  variant="ghost"
+                  variant="sidebar"
                   size="icon"
                   aria-label={isCollapsed ? "Expand workspaces" : "Collapse workspaces"}
                   aria-expanded={!isCollapsed}
@@ -374,29 +374,24 @@ export function Workspaces({ ref, isDark, onSearch }: {
                     draggedWorkspace.current = null;
                   }}
                 >
-                  <Tooltip>
-                    <TooltipTrigger render={
-                      <TabsTrigger
-                        value={id}
-                        aria-label={title}
-                        aria-keyshortcuts="Delete Alt+ArrowUp Alt+ArrowDown"
-                        variant={isCollapsed ? "workspace-icon" : "workspace"}
-                        onKeyDown={(event) => {
-                          if (event.key === "Delete") {
-                            event.preventDefault();
-                            requestCloseWorkspace(id);
-                          } else if (event.altKey && (event.key === "ArrowUp" || event.key === "ArrowDown")) {
-                            event.preventDefault();
-                            event.stopPropagation();
-                            moveWorkspace(id, Math.max(0, Math.min(workspaceTabs.length - 1, index + (event.key === "ArrowUp" ? -1 : 1))));
-                          }
-                        }}
-                      >
-                        <span className="truncate">{isCollapsed ? id.split(":")[1] : title}</span>
-                      </TabsTrigger>
-                    } />
-                    <TooltipContent side="right">{title}</TooltipContent>
-                  </Tooltip>
+                  <TabsTrigger
+                    value={id}
+                    aria-label={title}
+                    aria-keyshortcuts="Delete Alt+ArrowUp Alt+ArrowDown"
+                    variant={isCollapsed ? "workspace-icon" : "workspace"}
+                    onKeyDown={(event) => {
+                      if (event.key === "Delete") {
+                        event.preventDefault();
+                        requestCloseWorkspace(id);
+                      } else if (event.altKey && (event.key === "ArrowUp" || event.key === "ArrowDown")) {
+                        event.preventDefault();
+                        event.stopPropagation();
+                        moveWorkspace(id, Math.max(0, Math.min(workspaceTabs.length - 1, index + (event.key === "ArrowUp" ? -1 : 1))));
+                      }
+                    }}
+                  >
+                    <span className="truncate">{isCollapsed ? id.split(":")[1] : title}</span>
+                  </TabsTrigger>
                   {!isCollapsed && (
                     <Button
                       variant="ghost"
@@ -412,15 +407,10 @@ export function Workspaces({ ref, isDark, onSearch }: {
               ))}
             </TabsList>
           </div>
-          <Tooltip>
-            <TooltipTrigger render={
-              <Button variant="ghost" size={isCollapsed ? "icon" : "default"} aria-label="New workspace" className={cn(isCollapsed ? "self-center" : "justify-start")} onClick={createWorkspace}>
-                <PlusIcon data-icon="inline-start" />
-                {!isCollapsed && "New workspace"}
-              </Button>
-            } />
-            <TooltipContent side="right">New workspace</TooltipContent>
-          </Tooltip>
+          <Button variant="sidebar" size={isCollapsed ? "icon" : "default"} aria-label="New workspace" className={cn(isCollapsed ? "self-center" : "justify-start")} onClick={createWorkspace}>
+            <PlusIcon data-icon="inline-start" />
+            {!isCollapsed && "New workspace"}
+          </Button>
           <SidebarResizeHandle
             label="Resize workspace sidebar"
             width={sidebarWidth}
