@@ -318,6 +318,13 @@ export function Workspaces({ ref, isDark, onSearch }: {
     api.current = null;
   }, []);
 
+  const newWorkspaceButton = (
+    <Button variant="sidebar" size={isCollapsed ? "icon" : "default"} aria-label="New workspace" className={cn(isCollapsed ? "self-center" : "justify-start")} onClick={createWorkspace}>
+      <PlusIcon data-icon="inline-start" />
+      {!isCollapsed && "New workspace"}
+    </Button>
+  );
+
   return (
     <WorkspaceContext.Provider value={{ isDark, panels: panels.current, onSearch, onPanelReady }}>
       <Tabs
@@ -354,26 +361,8 @@ export function Workspaces({ ref, isDark, onSearch }: {
           </div>
           <div className="min-h-0 flex-1 overflow-y-auto">
             <TabsList variant="workspace" id="workspace-navigation-tabs" aria-label="Workspaces" className="w-full items-stretch justify-start">
-              {workspaceTabs.map(({ id, title }, index) => (
-                <div
-                  key={id}
-                  className="relative flex items-center"
-                  draggable
-                  onDragStart={(event) => {
-                    draggedWorkspace.current = id;
-                    event.dataTransfer.effectAllowed = "move";
-                    event.dataTransfer.setData("text/plain", id);
-                  }}
-                  onDragEnd={() => { draggedWorkspace.current = null; }}
-                  onDragOver={(event) => {
-                    if (draggedWorkspace.current) event.preventDefault();
-                  }}
-                  onDrop={(event) => {
-                    event.preventDefault();
-                    if (draggedWorkspace.current) moveWorkspace(draggedWorkspace.current, index);
-                    draggedWorkspace.current = null;
-                  }}
-                >
+              {workspaceTabs.map(({ id, title }, index) => {
+                const tab = (
                   <TabsTrigger
                     value={id}
                     aria-label={title}
@@ -392,25 +381,56 @@ export function Workspaces({ ref, isDark, onSearch }: {
                   >
                     <span className="truncate">{isCollapsed ? id.split(":")[1] : title}</span>
                   </TabsTrigger>
-                  {!isCollapsed && (
-                    <Button
-                      variant="ghost"
-                      size="icon-xs"
-                      className="absolute right-1"
-                      aria-label={`Close ${title}`}
-                      onClick={() => requestCloseWorkspace(id)}
-                    >
-                      <XIcon />
-                    </Button>
-                  )}
-                </div>
-              ))}
+                );
+
+                return (
+                  <div
+                    key={id}
+                    className="relative flex items-center"
+                    draggable
+                    onDragStart={(event) => {
+                      draggedWorkspace.current = id;
+                      event.dataTransfer.effectAllowed = "move";
+                      event.dataTransfer.setData("text/plain", id);
+                    }}
+                    onDragEnd={() => { draggedWorkspace.current = null; }}
+                    onDragOver={(event) => {
+                      if (draggedWorkspace.current) event.preventDefault();
+                    }}
+                    onDrop={(event) => {
+                      event.preventDefault();
+                      if (draggedWorkspace.current) moveWorkspace(draggedWorkspace.current, index);
+                      draggedWorkspace.current = null;
+                    }}
+                  >
+                    {isCollapsed ? (
+                      <Tooltip>
+                        <TooltipTrigger render={tab} />
+                        <TooltipContent side="right">{title}</TooltipContent>
+                      </Tooltip>
+                    ) : tab}
+                    {!isCollapsed && (
+                      <Button
+                        variant="ghost"
+                        size="icon-xs"
+                        className="absolute right-1"
+                        aria-label={`Close ${title}`}
+                        onClick={() => requestCloseWorkspace(id)}
+                      >
+                        <XIcon />
+                      </Button>
+                    )}
+                  </div>
+                );
+              })}
             </TabsList>
           </div>
-          <Button variant="sidebar" size={isCollapsed ? "icon" : "default"} aria-label="New workspace" className={cn(isCollapsed ? "self-center" : "justify-start")} onClick={createWorkspace}>
-            <PlusIcon data-icon="inline-start" />
-            {!isCollapsed && "New workspace"}
-          </Button>
+          {isCollapsed ? (
+            <Tooltip>
+              <TooltipTrigger render={newWorkspaceButton} />
+              <TooltipContent side="right">New workspace</TooltipContent>
+            </Tooltip>
+          ) : newWorkspaceButton}
           <SidebarResizeHandle
             label="Resize workspace sidebar"
             width={sidebarWidth}
