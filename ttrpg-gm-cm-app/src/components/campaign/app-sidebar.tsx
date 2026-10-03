@@ -147,20 +147,24 @@ export function AppSidebar() {
       </SidebarContent>
       <SidebarSeparator />
       <SidebarFooter>
-        <SidebarMenu>
-          <SidebarMenuItem>
-            <SidebarMenuButton tooltip="Keyboard shortcuts" onClick={appCommands.openShortcuts} title="Keyboard shortcuts">
-              <CircleHelpIcon aria-hidden="true" />
-              <span>Keyboard shortcuts</span>
-            </SidebarMenuButton>
-          </SidebarMenuItem>
-          <SidebarMenuItem>
-            <SidebarMenuButton tooltip="Settings" isActive={section === "Settings"} onClick={() => selectSection("Settings")}>
-              <SettingsIcon aria-hidden="true" />
-              <span>Settings</span>
-            </SidebarMenuButton>
-          </SidebarMenuItem>
-        </SidebarMenu>
+        {section === null && (
+          <div key="root-actions" className="animate-in fade-in slide-in-from-left-2 duration-200">
+            <SidebarMenu>
+              <SidebarMenuItem>
+                <SidebarMenuButton tooltip="Keyboard shortcuts" onClick={appCommands.openShortcuts} title="Keyboard shortcuts">
+                  <CircleHelpIcon aria-hidden="true" />
+                  <span>Keyboard shortcuts</span>
+                </SidebarMenuButton>
+              </SidebarMenuItem>
+              <SidebarMenuItem>
+                <SidebarMenuButton tooltip="Settings" onClick={() => selectSection("Settings")}>
+                  <SettingsIcon aria-hidden="true" />
+                  <span>Settings</span>
+                </SidebarMenuButton>
+              </SidebarMenuItem>
+            </SidebarMenu>
+          </div>
+        )}
       </SidebarFooter>
       {!isMobile && (
         <SidebarResizeHandle
