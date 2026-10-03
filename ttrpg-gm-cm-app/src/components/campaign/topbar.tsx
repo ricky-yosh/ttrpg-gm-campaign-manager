@@ -8,7 +8,7 @@ import { SidebarTrigger } from "@/components/ui/sidebar";
 import { CommandPalette } from "@/components/campaign/command-palette";
 import { CampaignControls } from "@/components/campaign/campaign-controls";
 
-export function Topbar({ canGoBack, canGoForward, onGoBack, onGoForward, isCommandPaletteOpen, onCommandPaletteOpenChange, onCreateWorkspace, onOpenCharacter, npcOpen, onNpcOpenChange }: {
+export function Topbar({ canGoBack, canGoForward, onGoBack, onGoForward, isCommandPaletteOpen, onCommandPaletteOpenChange, onCreateWorkspace, onOpenCharacter, onOpenSettings, npcOpen, onNpcOpenChange }: {
   canGoBack: boolean;
   canGoForward: boolean;
   onGoBack: () => void;
@@ -17,6 +17,7 @@ export function Topbar({ canGoBack, canGoForward, onGoBack, onGoForward, isComma
   onCommandPaletteOpenChange: (open: boolean) => void;
   onCreateWorkspace: () => void;
   onOpenCharacter: (name: string) => void;
+  onOpenSettings: () => void;
   npcOpen: boolean;
   onNpcOpenChange: (open: boolean) => void;
 }) {
@@ -43,6 +44,28 @@ export function Topbar({ canGoBack, canGoForward, onGoBack, onGoForward, isComma
     window.addEventListener("keydown", handleSearchShortcut);
     return () => window.removeEventListener("keydown", handleSearchShortcut);
   }, [isMacOS]);
+
+  useEffect(() => {
+    const handleOpenSettings = () => onOpenSettings();
+    const handleSettingsShortcut = (event: KeyboardEvent) => {
+      const hasPrimaryModifier = isMacOS ? event.metaKey && !event.ctrlKey : event.ctrlKey && !event.metaKey;
+      const target = event.target instanceof HTMLElement ? event.target : null;
+      if (
+        event.repeat || event.altKey || event.shiftKey || !hasPrimaryModifier || event.key !== "," ||
+        target?.closest('[role="dialog"]')
+      ) return;
+
+      event.preventDefault();
+      onOpenSettings();
+    };
+
+    window.addEventListener("app-open-settings", handleOpenSettings);
+    window.addEventListener("keydown", handleSettingsShortcut);
+    return () => {
+      window.removeEventListener("app-open-settings", handleOpenSettings);
+      window.removeEventListener("keydown", handleSettingsShortcut);
+    };
+  }, [isMacOS, onOpenSettings]);
 
   useEffect(() => {
     if (!isTauri()) return;

@@ -8,9 +8,9 @@ import { Input } from "@/components/ui/input";
 import { Field, FieldGroup, FieldLabel } from "@/components/ui/field";
 import { Dialog, DialogDescription, DialogPopup, DialogTitle } from "@/components/ui/dialog";
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuSeparator, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
-import { createNpc, replaceCampaign, saveCampaign, useCampaign } from "@/lib/campaign-data";
+import { createNpc, replaceCampaign, saveCampaign, saveCampaignAs, useCampaign } from "@/lib/campaign-data";
 
-type FileCommand = "new" | "open" | "save";
+type FileCommand = "new" | "open" | "save" | "save-as";
 let nativeMenuPromise: Promise<void> | null = null;
 
 function installNativeFileMenu(isMacOS: boolean) {
@@ -22,16 +22,29 @@ function installNativeFileMenu(isMacOS: boolean) {
         await MenuItem.new({ id: "campaign-open", text: "Open Campaign…", accelerator: "CmdOrCtrl+O", action: () => window.dispatchEvent(new CustomEvent<FileCommand>("campaign-file-command", { detail: "open" })) }),
         await PredefinedMenuItem.new({ item: "Separator" }),
         await MenuItem.new({ id: "campaign-save", text: "Save Campaign", accelerator: "CmdOrCtrl+S", action: () => window.dispatchEvent(new CustomEvent<FileCommand>("campaign-file-command", { detail: "save" })) }),
+        await MenuItem.new({ id: "campaign-save-as", text: "Save As…", accelerator: "CmdOrCtrl+Shift+S", action: () => window.dispatchEvent(new CustomEvent<FileCommand>("campaign-file-command", { detail: "save-as" })) }),
       ];
 
       const existingItems = await menu.items();
       let fileMenu: Submenu | undefined;
+      let appMenu: Submenu | undefined;
       for (const item of existingItems) {
-        if (item instanceof Submenu && await item.text() === "File") {
-          fileMenu = item;
-          break;
+        if (item instanceof Submenu) {
+          const text = await item.text();
+          if (text === "File") fileMenu = item;
+          else if (!appMenu) appMenu = item;
         }
       }
+
+      if (isMacOS && appMenu) {
+        await appMenu.insert(await MenuItem.new({
+          id: "app-settings",
+          text: "Settings…",
+          accelerator: "CmdOrCtrl+,",
+          action: () => window.dispatchEvent(new CustomEvent("app-open-settings")),
+        }), 1);
+      }
+
       if (fileMenu) await fileMenu.prepend(items);
       else if (isMacOS) await menu.insert(await Submenu.new({ text: "File", items }), 1);
       else await menu.prepend(await Submenu.new({ text: "File", items }));
@@ -69,6 +82,7 @@ export function CampaignControls({ npcOpen, onNpcOpenChange, onOpenNpc }: {
         setCampaignOpen(true);
       } else if (command === "open") void run(() => replaceCampaign());
       else if (command === "save") void run(() => saveCampaign());
+      else if (command === "save-as") void run(() => saveCampaignAs());
     };
     window.addEventListener("campaign-file-command", handleFileCommand);
     void installNativeFileMenu(typeof navigator !== "undefined" && /Mac|iPhone|iPad/.test(navigator.platform))
@@ -99,6 +113,9 @@ export function CampaignControls({ npcOpen, onNpcOpenChange, onOpenNpc }: {
           <DropdownMenuSeparator />
           <DropdownMenuItem disabled={busy || status === "Saving…"} onClick={() => void run(() => saveCampaign())}>
             <SaveIcon />Save campaign
+          </DropdownMenuItem>
+          <DropdownMenuItem disabled={busy || status === "Saving…"} onClick={() => void run(() => saveCampaignAs())}>
+            <SaveIcon />Save as…
           </DropdownMenuItem>
         </DropdownMenuContent>
       </DropdownMenu>}

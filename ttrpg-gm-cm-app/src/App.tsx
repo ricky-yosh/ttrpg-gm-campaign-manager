@@ -5,12 +5,25 @@ import { getCurrentWindow } from "@tauri-apps/api/window";
 import { leaveCampaign, listenForCampaignOpens, saveCampaign, setUnsavedChoiceHandler, updateCampaign, useCampaign, type LeaveIntent, type UnsavedChoice } from "@/lib/campaign-data";
 import { useEffect, useRef, useState } from "react";
 import { AppSidebar } from "@/components/campaign/app-sidebar";
+import { SettingsPanel, type AppearanceMode } from "@/components/campaign/settings-panel";
 import { Workspaces, type NavigationState, type WorkspaceHandle } from "@/components/campaign/workspaces";
 import { Topbar } from "@/components/campaign/topbar";
 import { SidebarProvider } from "@/components/ui/sidebar";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import "./App.css";
 import "dockview-react/dist/styles/dockview.css";
+
+const APPEARANCE_STORAGE_KEY = "ttrpg-gm-cm-appearance";
+
+function readAppearance(): AppearanceMode {
+  try {
+    const stored = localStorage.getItem(APPEARANCE_STORAGE_KEY);
+    if (stored === "light" || stored === "dark" || stored === "system") return stored;
+  } catch {
+    // Continue with the system preference when local storage is unavailable.
+  }
+  return "system";
+}
 
 function App() {
   const { campaign, generation, revision, savedRevision, path, isLeaving } = useCampaign();
@@ -60,7 +73,8 @@ function App() {
     }).then((unlisten) => { if (disposed) unlisten(); else stop = unlisten; });
     return () => { disposed = true; stop?.(); };
   }, []);
-  const [isDark, setIsDark] = useState(false);
+  const [appearance, setAppearance] = useState<AppearanceMode>(readAppearance);
+  const [isDark, setIsDark] = useState(() => appearance === "dark" || (appearance === "system" && window.matchMedia("(prefers-color-scheme: dark)").matches));
   const [isCommandPaletteOpen, setIsCommandPaletteOpen] = useState(false);
   const [navigation, setNavigation] = useState<NavigationState>({ canGoBack: false, canGoForward: false });
   const workspaces = useRef<WorkspaceHandle>(null);
@@ -68,15 +82,26 @@ function App() {
   const openMap = () => workspaces.current?.openMap();
 
   useEffect(() => {
-    const preference = window.matchMedia("(prefers-color-scheme: dark)");
+    const systemPreference = window.matchMedia("(prefers-color-scheme: dark)");
     const syncTheme = () => {
-      setIsDark(preference.matches);
-      document.documentElement.classList.toggle("dark", preference.matches);
+      const dark = appearance === "system" ? systemPreference.matches : appearance === "dark";
+      setIsDark(dark);
+      document.documentElement.classList.toggle("dark", dark);
+      document.documentElement.style.colorScheme = dark ? "dark" : "light";
     };
     syncTheme();
-    preference.addEventListener("change", syncTheme);
-    return () => preference.removeEventListener("change", syncTheme);
-  }, []);
+    systemPreference.addEventListener("change", syncTheme);
+    return () => systemPreference.removeEventListener("change", syncTheme);
+  }, [appearance]);
+
+  const updateAppearance = (nextAppearance: AppearanceMode) => {
+    setAppearance(nextAppearance);
+    try {
+      localStorage.setItem(APPEARANCE_STORAGE_KEY, nextAppearance);
+    } catch {
+      // The current session still follows the selected appearance.
+    }
+  };
 
   useEffect(() => {
     const handleCloseTabShortcut = (event: KeyboardEvent) => {
@@ -127,6 +152,7 @@ function App() {
           onCommandPaletteOpenChange={setIsCommandPaletteOpen}
           onCreateWorkspace={() => workspaces.current?.createWorkspace()}
           onOpenCharacter={openCharacter}
+          onOpenSettings={() => setSection("Settings")}
           npcOpen={npcOpen}
           onNpcOpenChange={setNpcOpen}
         />
@@ -134,10 +160,9 @@ function App() {
           <AppSidebar onCreateNpc={() => setNpcOpen(true)} section={section} onSelectSection={setSection} onOpenCharacter={openCharacter} onOpenMap={openMap} />
           <main aria-label="Campaign workspace" className="relative flex min-h-0 min-w-0 flex-1 flex-col">
             {section === "Settings" && (
-              <section className="relative z-10 flex min-h-0 flex-1 flex-col gap-2 bg-background p-6" aria-labelledby="settings-title">
-                <h1 id="settings-title" className="text-xl font-semibold">Settings</h1>
-                <p className="text-sm text-muted-foreground">There are no app settings to configure yet.</p>
-              </section>
+              <div className="relative z-10 flex min-h-0 flex-1 flex-col">
+                <SettingsPanel appearance={appearance} onAppearanceChange={updateAppearance} />
+              </div>
             )}
             <div className="absolute inset-0 flex" aria-hidden={section === "Settings"} inert={section === "Settings"}>
               <Workspaces key={generation} ref={workspaces} isDark={isDark} onSearch={() => setIsCommandPaletteOpen(true)} onNavigationChange={setNavigation} />

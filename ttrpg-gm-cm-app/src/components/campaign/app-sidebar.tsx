@@ -1,7 +1,7 @@
 import { useEffect, useState } from "react";
 import {
   ArrowLeftIcon, BookOpenIcon, ChevronsUpDownIcon, CircleHelpIcon, Dice5Icon, FlagIcon, LayoutDashboardIcon,
-  MapIcon, PackageIcon, PuzzleIcon, ScrollTextIcon, SettingsIcon, UsersIcon,
+  MapIcon, PackageIcon, PaletteIcon, PuzzleIcon, ScrollTextIcon, SettingsIcon, UsersIcon,
 } from "lucide-react";
 import {
   Sidebar, SidebarContent, SidebarFooter, SidebarGroup, SidebarGroupContent,
@@ -102,6 +102,31 @@ export function AppSidebar({ section, onSelectSection, onOpenCharacter, onCreate
             </SidebarGroupContent>
           </SidebarGroup>
           </div>
+        ) : section === "Settings" ? (
+          <div key="settings" className="animate-in fade-in slide-in-from-right-2 duration-200">
+            <SidebarGroup>
+              <SidebarGroupLabel className="sr-only">Settings navigation</SidebarGroupLabel>
+              <SidebarGroupContent>
+                <SidebarMenu>
+                  <SidebarMenuItem>
+                    <SidebarMenuButton tooltip="All sections" onClick={() => onSelectSection(null)}>
+                      <ArrowLeftIcon aria-hidden="true" />
+                      <span>All sections</span>
+                    </SidebarMenuButton>
+                  </SidebarMenuItem>
+                </SidebarMenu>
+                <div className="px-2 pb-2 pt-4 text-xs font-semibold text-muted-foreground group-data-[collapsible=icon]:hidden">Settings</div>
+                <SidebarMenu>
+                  <SidebarMenuItem>
+                    <SidebarMenuButton tooltip="Appearance" isActive onClick={() => selectSection("Settings")}>
+                      <PaletteIcon aria-hidden="true" />
+                      <span>Appearance</span>
+                    </SidebarMenuButton>
+                  </SidebarMenuItem>
+                </SidebarMenu>
+              </SidebarGroupContent>
+            </SidebarGroup>
+          </div>
         ) : (
           <div key="sections" className="animate-in fade-in slide-in-from-left-2 duration-200">
           <SidebarGroup>
@@ -171,6 +196,10 @@ export function AppSidebar({ section, onSelectSection, onOpenCharacter, onCreate
                 <div className="flex items-center justify-between gap-4 text-sm">
                   <dt>Open search and command palette</dt>
                   <Kbd>{isMacOS ? "⌘ K" : "Ctrl K"}</Kbd>
+                </div>
+                <div className="flex items-center justify-between gap-4 text-sm">
+                  <dt>Open settings</dt>
+                  <Kbd>{isMacOS ? "⌘ ," : "Ctrl ,"}</Kbd>
                 </div>
                 <div className="flex items-center justify-between gap-4 text-sm">
                   <dt>Toggle sidebar</dt>

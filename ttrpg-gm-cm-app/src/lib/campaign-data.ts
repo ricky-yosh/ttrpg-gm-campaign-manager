@@ -175,13 +175,13 @@ export async function listenForCampaignOpens() {
 }
 
 let saving: Promise<boolean> | null = null;
-export function saveCampaign(explicit = true): Promise<boolean> {
+function runCampaignSave(chooseNewPath: boolean, explicit: boolean): Promise<boolean> {
   if (!explicit && snapshot.isLeaving) return Promise.resolve(false);
-  if (saving) return saving;
+  if (saving) return chooseNewPath ? saving.then(() => runCampaignSave(true, explicit)) : saving;
   saving = (async () => {
     try {
       if (!isTauri()) throw new Error("Use the desktop app (pnpm tauri dev) to save campaign folders.");
-      const path = snapshot.path ?? await chooseCampaignPackagePath();
+      const path = chooseNewPath || !snapshot.path ? await chooseCampaignPackagePath() : snapshot.path;
       if (!path) return false;
       do {
         const { campaign, revision } = snapshot;
@@ -196,6 +196,12 @@ export function saveCampaign(explicit = true): Promise<boolean> {
     }
   })().finally(() => { saving = null; });
   return saving;
+}
+export function saveCampaign(explicit = true): Promise<boolean> {
+  return runCampaignSave(false, explicit);
+}
+export function saveCampaignAs(): Promise<boolean> {
+  return runCampaignSave(true, true);
 }
 export type UnsavedChoice = "save" | "discard" | "cancel";
 export type LeaveIntent = "close" | "switch";
