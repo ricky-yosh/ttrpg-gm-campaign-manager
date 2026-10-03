@@ -2,7 +2,8 @@ import { MonitorIcon, MoonIcon, SunIcon } from "lucide-react";
 import { FieldDescription, FieldLegend, FieldSet } from "@/components/ui/field";
 import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group";
 
-export type AppearanceMode = "system" | "light" | "dark";
+import type { AppearanceMode } from "@/stores/preferences-store";
+export type { AppearanceMode } from "@/stores/preferences-store";
 
 export function SettingsPanel({ appearance, onAppearanceChange }: {
   appearance: AppearanceMode;

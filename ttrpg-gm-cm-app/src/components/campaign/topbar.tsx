@@ -6,23 +6,13 @@ import { Button } from "@/components/ui/button";
 import { Kbd } from "@/components/ui/kbd";
 import { SidebarTrigger } from "@/components/ui/sidebar";
 import { CommandPalette } from "@/components/campaign/command-palette";
+import { appCommands } from "@/lib/app-commands";
+import { selectCanGoBack, selectCanGoForward, useSessionStore } from "@/stores/session-store";
 import { CampaignControls } from "@/components/campaign/campaign-controls";
 
-export function Topbar({ canGoBack, canGoForward, onGoBack, onGoForward, isCommandPaletteOpen, onCommandPaletteOpenChange, onCreateWorkspace, onOpenCharacter, onOpenSettings, onOpenMap, onCloseActiveTab, npcOpen, onNpcOpenChange }: {
-  canGoBack: boolean;
-  canGoForward: boolean;
-  onGoBack: () => void;
-  onGoForward: () => void;
-  isCommandPaletteOpen: boolean;
-  onCommandPaletteOpenChange: (open: boolean) => void;
-  onCreateWorkspace: () => void;
-  onOpenCharacter: (name: string) => void;
-  onOpenSettings: () => void;
-  onOpenMap: () => void;
-  onCloseActiveTab: () => void;
-  npcOpen: boolean;
-  onNpcOpenChange: (open: boolean) => void;
-}) {
+export function Topbar() {
+  const canGoBack = useSessionStore(selectCanGoBack);
+  const canGoForward = useSessionStore(selectCanGoForward);
   const isMacOS = typeof navigator !== "undefined" && /Mac|iPhone|iPad/.test(navigator.platform);
   const [isFullscreen, setIsFullscreen] = useState(false);
 
@@ -40,7 +30,7 @@ export function Topbar({ canGoBack, canGoForward, onGoBack, onGoForward, isComma
       ) return;
 
       event.preventDefault();
-      onCommandPaletteOpenChange(true);
+      appCommands.openCommandPalette();
     };
 
     window.addEventListener("keydown", handleSearchShortcut);
@@ -48,7 +38,6 @@ export function Topbar({ canGoBack, canGoForward, onGoBack, onGoForward, isComma
   }, [isMacOS]);
 
   useEffect(() => {
-    const handleOpenSettings = () => onOpenSettings();
     const handleSettingsShortcut = (event: KeyboardEvent) => {
       const hasPrimaryModifier = isMacOS ? event.metaKey && !event.ctrlKey : event.ctrlKey && !event.metaKey;
       const target = event.target instanceof HTMLElement ? event.target : null;
@@ -58,16 +47,14 @@ export function Topbar({ canGoBack, canGoForward, onGoBack, onGoForward, isComma
       ) return;
 
       event.preventDefault();
-      onOpenSettings();
+      appCommands.openSettings();
     };
 
-    window.addEventListener("app-open-settings", handleOpenSettings);
     window.addEventListener("keydown", handleSettingsShortcut);
     return () => {
-      window.removeEventListener("app-open-settings", handleOpenSettings);
       window.removeEventListener("keydown", handleSettingsShortcut);
     };
-  }, [isMacOS, onOpenSettings]);
+  }, [isMacOS]);
 
   useEffect(() => {
     if (!isTauri()) return;
@@ -101,7 +88,7 @@ export function Topbar({ canGoBack, canGoForward, onGoBack, onGoForward, isComma
     >
       <div className="flex h-full shrink-0 items-center">
         <div className="macos-traffic-light-space" aria-hidden="true" data-tauri-drag-region />
-        <CampaignControls npcOpen={npcOpen} onNpcOpenChange={onNpcOpenChange} onOpenNpc={onOpenCharacter} />
+        <CampaignControls />
         <div className="flex h-full w-12 shrink-0 items-center justify-center">
           <SidebarTrigger data-tauri-drag-region="false" title="Toggle sidebar" />
         </div>
@@ -112,7 +99,7 @@ export function Topbar({ canGoBack, canGoForward, onGoBack, onGoForward, isComma
             size="icon-sm"
             aria-label="Back"
             disabled={!canGoBack}
-            onClick={onGoBack}
+            onClick={appCommands.goBack}
             title="Back"
           >
             <ArrowLeftIcon />
@@ -123,7 +110,7 @@ export function Topbar({ canGoBack, canGoForward, onGoBack, onGoForward, isComma
             size="icon-sm"
             aria-label="Forward"
             disabled={!canGoForward}
-            onClick={onGoForward}
+            onClick={appCommands.goForward}
             title="Forward"
           >
             <ArrowRightIcon />
@@ -138,7 +125,7 @@ export function Topbar({ canGoBack, canGoForward, onGoBack, onGoForward, isComma
         className="mx-auto min-w-0 w-full max-w-80 flex-1 justify-start"
         aria-label="Search campaign"
         title={`Search campaign (${isMacOS ? "⌘K" : "Ctrl+K"})`}
-        onClick={() => onCommandPaletteOpenChange(true)}
+        onClick={() => appCommands.openCommandPalette()}
       >
         <SearchIcon data-icon="inline-start" />
         <span className="min-w-0 truncate">Search campaign…</span>
@@ -156,20 +143,7 @@ export function Topbar({ canGoBack, canGoForward, onGoBack, onGoForward, isComma
           <PlayIcon className="size-3" />
         </Button>
       </div>
-      <CommandPalette
-        open={isCommandPaletteOpen}
-        onOpenChange={onCommandPaletteOpenChange}
-        onCreateWorkspace={onCreateWorkspace}
-        onOpenCharacter={onOpenCharacter}
-        onOpenSettings={onOpenSettings}
-        onCreateNpc={() => onNpcOpenChange(true)}
-        onOpenMap={onOpenMap}
-        onGoBack={onGoBack}
-        onGoForward={onGoForward}
-        canGoBack={canGoBack}
-        canGoForward={canGoForward}
-        onCloseActiveTab={onCloseActiveTab}
-      />
+      <CommandPalette />
     </header>
   );
 }

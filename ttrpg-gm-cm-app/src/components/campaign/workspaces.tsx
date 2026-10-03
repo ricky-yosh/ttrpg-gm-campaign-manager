@@ -11,6 +11,7 @@ import { Dialog, DialogDescription, DialogPopup, DialogTitle } from "@/component
 import { getCampaign, updateCampaign } from "@/lib/campaign-data";
 import { cn } from "@/lib/utils";
 import { MapPrototypePanel } from "@/components/campaign/map-prototype-panel";
+import { useSessionStore, type NavigationDestination } from "@/stores/session-store";
 
 export type WorkspaceHandle = {
   createWorkspace: () => void;
@@ -21,8 +22,6 @@ export type WorkspaceHandle = {
   goForward: () => void;
 };
 
-export type NavigationState = { canGoBack: boolean; canGoForward: boolean };
-type Destination = { workspaceId: string; name: string };
 
 const WorkspaceContext = createContext<{
   isDark: boolean;
@@ -96,11 +95,10 @@ function WorkspacePanel({ api }: IDockviewPanelProps) {
 
 const workspaceComponents = { workspace: WorkspacePanel };
 
-export function Workspaces({ ref, isDark, onSearch, onNavigationChange }: {
+export function Workspaces({ ref, isDark, onSearch }: {
   ref: Ref<WorkspaceHandle>;
   isDark: boolean;
   onSearch: () => void;
-  onNavigationChange: (state: NavigationState) => void;
 }) {
   const generation = useRef(getCampaign().generation).current;
   const initialState = useRef(getCampaign().campaign.workspace).current;
@@ -109,71 +107,77 @@ export function Workspaces({ ref, isDark, onSearch, onNavigationChange }: {
   const panels = useRef(new Map<string, DockviewApi>());
   const nextId = useRef(initialState?.nextId ?? 1);
   const subscriptions = useRef<{ dispose: () => void }[]>([]);
-  const [isCollapsed, setIsCollapsed] = useState(initialState?.collapsed ?? false);
-  const [sidebarWidth, setSidebarWidth] = useState(initialState?.sidebarWidth ?? 192);
-  const [workspaceTabs, setWorkspaceTabs] = useState<{ id: string; title: string }[]>([]);
-  const [activeWorkspace, setActiveWorkspace] = useState<string | null>(null);
+  const isCollapsed = useSessionStore((state) => state.workspaceCollapsed);
+  const sidebarWidth = useSessionStore((state) => state.workspaceSidebarWidth);
+  const workspaceTabs = useSessionStore((state) => state.workspaceTabs);
+  const activeWorkspace = useSessionStore((state) => state.activeWorkspaceId);
+  const setIsCollapsed = (collapsed: boolean) => useSessionStore.getState().setWorkspaceSidebar({ collapsed });
+  const setSidebarWidth = (width: number) => useSessionStore.getState().setWorkspaceSidebar({ width });
   const [workspaceToDelete, setWorkspaceToDelete] = useState<{ id: string; title: string } | null>(null);
   const draggedWorkspace = useRef<string | null>(null);
-  const history = useRef<{ entries: Destination[]; index: number }>(initialState ? structuredClone(initialState.history) : { entries: [], index: -1 });
   const isNavigating = useRef(false);
 
   const captureWorkspace = () => {
     const container = api.current;
     if (getCampaign().generation !== generation || !initialized.current || !container || container.panels.some((panel) => !panels.current.has(panel.id))) return;
+    const session = useSessionStore.getState();
+    if (session.generation !== generation) return;
     const workspace = {
       layout: container.toJSON(),
       panels: Object.fromEntries(container.panels.map((panel) => [panel.id, panels.current.get(panel.id)!.toJSON()])),
-      nextId: nextId.current, sidebarWidth, collapsed: isCollapsed,
-      history: structuredClone(history.current),
+      nextId: nextId.current, sidebarWidth: session.workspaceSidebarWidth, collapsed: session.workspaceCollapsed,
+      history: structuredClone(session.navigation),
     };
-    if (JSON.stringify(getCampaign().campaign.workspace) !== JSON.stringify(workspace)) updateCampaign({ workspace });
+    const campaign = getCampaign().campaign;
+    if (JSON.stringify(campaign.workspace) !== JSON.stringify(workspace) || campaign.section !== session.section || JSON.stringify(campaign.sidebar) !== JSON.stringify(session.sidebar)) {
+      updateCampaign({ workspace, section: session.section, sidebar: session.sidebar });
+    }
   };
   const captureRef = useRef(captureWorkspace);
   captureRef.current = captureWorkspace;
   const scheduleCapture = () => queueMicrotask(() => captureRef.current());
-  useEffect(scheduleCapture, [isCollapsed, sidebarWidth]);
+  useEffect(() => useSessionStore.subscribe((state, previous) => {
+    if (state.generation !== generation) return;
+    if (state.section !== previous.section || state.sidebar !== previous.sidebar || state.navigation !== previous.navigation
+      || state.workspaceSidebarWidth !== previous.workspaceSidebarWidth || state.workspaceCollapsed !== previous.workspaceCollapsed) scheduleCapture();
+  }), [generation]);
   useEffect(() => {
     window.addEventListener("campaign-workspace-change", scheduleCapture);
     return () => window.removeEventListener("campaign-workspace-change", scheduleCapture);
   }, []);
 
-  const findDestination = (direction: -1 | 1) => {
-    const { entries, index } = history.current;
-    for (let next = index + direction; next >= 0 && next < entries.length; next += direction) {
-      if (api.current?.getPanel(entries[next].workspaceId)) return next;
-    }
-    return -1;
-  };
-
-  const syncNavigation = () => onNavigationChange({
-    canGoBack: findDestination(-1) !== -1,
-    canGoForward: findDestination(1) !== -1,
-  });
-
-  const recordVisit = () => {
-    if (isNavigating.current) return;
+  const recordVisit = (record = true, reconcile = false) => {
+    if (isNavigating.current || !initialized.current || useSessionStore.getState().generation !== generation) return;
     const workspaceId = api.current?.activePanel?.id;
-    const panel = workspaceId && panels.current.get(workspaceId)?.activePanel;
-    if (!workspaceId || !panel) return;
-    const name = panel.params?.name;
-    if (typeof name !== "string") return;
-    const current = history.current;
-    const previous = current.entries[current.index];
-    if (previous?.workspaceId === workspaceId && previous.name === name) return;
-    current.entries = [...current.entries.slice(0, current.index + 1), { workspaceId, name }].slice(-100);
-    current.index = current.entries.length - 1;
-    syncNavigation();
-    scheduleCapture();
+    if (!workspaceId) return;
+    const workspace = panels.current.get(workspaceId);
+    if (!workspace) return;
+    const panel = workspace.activePanel;
+    if (!panel) {
+      useSessionStore.getState().setWorkspaceDestination(null);
+      return;
+    }
+    const section = useSessionStore.getState().section;
+    // Settings overlays Dockview; activation in a hidden view must not replace it.
+    if (section === "Settings" && record) return;
+    const visibleSection = section === "Settings" ? null : section;
+    let destination: NavigationDestination;
+    if (panel.id === "map:prototype") destination = { kind: "map", workspaceId, section: visibleSection };
+    else if (typeof panel.params?.name === "string") destination = { kind: "character", workspaceId, characterId: panel.params.name, section: visibleSection };
+    else return;
+    if (record) useSessionStore.getState().visitDestination(destination);
+    else if (reconcile) useSessionStore.getState().reconcileWorkspaceDestination(destination);
+    else useSessionStore.getState().setWorkspaceDestination(destination);
   };
 
   const openCharacterInWorkspace = (workspace: DockviewApi, name: string) => {
     const npc = getCampaign().campaign.npcs.find((item) => item.id === name);
-    if (!npc) return;
+    if (!npc) return false;
     const id = `character:${name}`;
     const existing = workspace.getPanel(id);
     if (existing) existing.api.setActive();
     else workspace.addPanel({ id, title: npc.name, component: "character", params: { name } });
+    return true;
   };
 
   const openMapInWorkspace = (workspace: DockviewApi) => {
@@ -184,19 +188,21 @@ export function Workspaces({ ref, isDark, onSearch, onNavigationChange }: {
   };
 
   const navigate = (direction: -1 | 1) => {
-    const index = findDestination(direction);
-    if (index === -1) return;
-    const destination = history.current.entries[index];
-    const workspace = panels.current.get(destination.workspaceId);
-    if (!workspace) return;
     isNavigating.current = true;
     try {
-      history.current.index = index;
-      api.current?.getPanel(destination.workspaceId)?.api.setActive();
-      openCharacterInWorkspace(workspace, destination.name);
+      useSessionStore.getState().navigate(direction, (destination) => {
+        if (destination.kind === "settings" || destination.kind === "section") return true;
+        const panel = api.current?.getPanel(destination.workspaceId);
+        const workspace = panels.current.get(destination.workspaceId);
+        if (!panel || !workspace) return false;
+        if (destination.kind === "character" && !getCampaign().campaign.npcs.some((npc) => npc.id === destination.characterId)) return false;
+        panel.api.setActive();
+        if (destination.kind === "character") return openCharacterInWorkspace(workspace, destination.characterId);
+        if (destination.kind === "map") openMapInWorkspace(workspace);
+        return true;
+      });
     } finally {
       isNavigating.current = false;
-      syncNavigation();
       scheduleCapture();
     }
   };
@@ -209,11 +215,19 @@ export function Workspaces({ ref, isDark, onSearch, onNavigationChange }: {
     const listeners = [
       workspace.onDidLayoutChange(scheduleCapture),
       workspace.onWillMutateLayout(({ kind }) => { isChangingLayout = kind !== "add"; }),
-      workspace.onDidMutateLayout(() => { isChangingLayout = false; }),
+      workspace.onDidMutateLayout(() => {
+        const wasChangingLayout = isChangingLayout;
+        isChangingLayout = false;
+        if (wasChangingLayout && api.current?.activePanel?.id === workspaceId) recordVisit(false, true);
+      }),
       workspace.onDidActivePanelChange(() => {
-        if (!isChangingLayout && api.current?.activePanel?.id === workspaceId) recordVisit();
+        if (api.current?.activePanel?.id === workspaceId) recordVisit(!isChangingLayout);
       }),
     ];
+    if (api.current?.activePanel?.id === workspaceId) {
+      recordVisit(false);
+      if (!useSessionStore.getState().navigation.entries.length) recordVisit();
+    }
     scheduleCapture();
     return { dispose: () => listeners.forEach((listener) => listener.dispose()) };
   };
@@ -221,8 +235,11 @@ export function Workspaces({ ref, isDark, onSearch, onNavigationChange }: {
   const syncWorkspaceTabs = () => {
     const container = api.current;
     if (!container) return;
-    setWorkspaceTabs(container.groups.flatMap((group) => group.panels.map((panel) => ({ id: panel.id, title: panel.title ?? "Workspace" }))));
-    setActiveWorkspace(container.activePanel?.id ?? null);
+    if (useSessionStore.getState().generation !== generation) return;
+    useSessionStore.getState().setWorkspaceSnapshot(
+      container.groups.flatMap((group) => group.panels.map((panel) => ({ id: panel.id, title: panel.title ?? "Workspace" }))),
+      container.activePanel?.id ?? null,
+    );
     scheduleCapture();
   };
 
@@ -245,7 +262,7 @@ export function Workspaces({ ref, isDark, onSearch, onNavigationChange }: {
       api.current?.getPanel(workspaceToDelete.id)?.api.close();
     } finally {
       isNavigating.current = false;
-      syncNavigation();
+      recordVisit(false, true);
     }
     setWorkspaceToDelete(null);
   };
@@ -253,6 +270,7 @@ export function Workspaces({ ref, isDark, onSearch, onNavigationChange }: {
   const createWorkspace = () => {
     const container = api.current;
     if (!container) return;
+    if (initialized.current) useSessionStore.getState().leaveSettings();
     const number = nextId.current++;
     const workspace = container.addPanel({
       id: `workspace:${number}`,
@@ -273,13 +291,19 @@ export function Workspaces({ ref, isDark, onSearch, onNavigationChange }: {
       const active = api.current?.activePanel;
       const workspace = active && panels.current.get(active.id);
       if (!workspace) return;
+      if (!getCampaign().campaign.npcs.some((npc) => npc.id === name)) return;
+      useSessionStore.getState().leaveSettings();
       openCharacterInWorkspace(workspace, name);
       recordVisit();
     },
     openMap: () => {
       const active = api.current?.activePanel;
       const workspace = active && panels.current.get(active.id);
-      if (workspace) openMapInWorkspace(workspace);
+      if (workspace) {
+        useSessionStore.getState().leaveSettings();
+        openMapInWorkspace(workspace);
+        recordVisit();
+      }
     },
     closeActiveTab: () => {
       const active = api.current?.activePanel;
@@ -320,7 +344,7 @@ export function Workspaces({ ref, isDark, onSearch, onNavigationChange }: {
                   aria-label={isCollapsed ? "Expand workspaces" : "Collapse workspaces"}
                   aria-expanded={!isCollapsed}
                   aria-controls="workspace-navigation-tabs"
-                  onClick={() => setIsCollapsed((collapsed) => !collapsed)}
+                  onClick={() => setIsCollapsed(!isCollapsed)}
                 >
                   {isCollapsed ? <ChevronRightIcon /> : <ChevronLeftIcon />}
                 </Button>
@@ -425,7 +449,7 @@ export function Workspaces({ ref, isDark, onSearch, onNavigationChange }: {
                 syncWorkspaceTabs();
                 recordVisit();
               }), container.onDidRemovePanel(() => {
-                syncNavigation();
+                syncWorkspaceTabs();
                 // Keep one workspace available after closing the last tab.
                 queueMicrotask(() => {
                   if (api.current !== container) return;
@@ -437,10 +461,10 @@ export function Workspaces({ ref, isDark, onSearch, onNavigationChange }: {
                 container.fromJSON(initialState.layout);
                 container.groups.forEach((group) => { group.header.hidden = true; });
                 syncWorkspaceTabs();
-                syncNavigation();
               }
               if (!container.panels.length) createWorkspace();
               initialized.current = true;
+              if (!useSessionStore.getState().navigation.entries.length) recordVisit();
               scheduleCapture();
             }}
           />

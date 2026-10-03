@@ -1,0 +1,14 @@
+import { campaignStore } from "./campaign-data.ts";
+import { hydrateSession, useSessionStore } from "../stores/session-store.ts";
+
+// Hydrate synchronously on replacement so old views cannot publish into the next session.
+const initial = campaignStore.getState();
+hydrateSession(initial.campaign, initial.generation);
+const unsubscribe = campaignStore.subscribe((state, previous) => {
+  if (state.generation !== previous.generation) hydrateSession(state.campaign, state.generation);
+  else if (state.campaign.npcs !== previous.campaign.npcs) {
+    useSessionStore.getState().setCharacterIds(state.campaign.npcs.map((npc) => npc.id));
+  }
+});
+
+if (import.meta.hot) import.meta.hot.dispose(unsubscribe);

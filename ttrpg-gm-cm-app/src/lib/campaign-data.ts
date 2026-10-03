@@ -1,4 +1,6 @@
-import { useSyncExternalStore } from "react";
+import { useStore } from "zustand";
+import { createCampaignStore, type CampaignSnapshot } from "../stores/campaign-store.ts";
+import type { StoredNavigationHistory } from "../stores/session-store.ts";
 import { invoke, isTauri } from "@tauri-apps/api/core";
 import { open, save } from "@tauri-apps/plugin-dialog";
 import { listen } from "@tauri-apps/api/event";
@@ -66,7 +68,7 @@ export type WorkspaceState = {
   nextId: number;
   sidebarWidth: number;
   collapsed: boolean;
-  history: { entries: { workspaceId: string; name: string }[]; index: number };
+  history: StoredNavigationHistory;
 };
 export type Campaign = {
   format: "ttrpg-campaign";
@@ -89,31 +91,31 @@ export function emptyCampaign(name: string): Campaign {
 
 const demo = emptyCampaign("My campaign");
 demo.npcs = demoCharacters.map((name) => ({ id: crypto.randomUUID(), name, notes: initialCharacterNotes[name] }));
-let snapshot = { campaign: demo, path: null as string | null, revision: 0, savedRevision: 0,
-  status: "Choose Save to keep this campaign", error: "", generation: 0, isLeaving: false };
-const listeners = new Set<() => void>();
-const emit = () => listeners.forEach((listener) => listener());
-export function useCampaign() {
-  return useSyncExternalStore((listener) => { listeners.add(listener); return () => { listeners.delete(listener); }; }, () => snapshot);
+export const campaignStore = createCampaignStore({ campaign: demo, path: null, revision: 0, savedRevision: 0,
+  status: "Choose Save to keep this campaign", error: "", generation: 0, isLeaving: false });
+export function useCampaign(): CampaignSnapshot;
+export function useCampaign<T>(selector: (state: CampaignSnapshot) => T): T;
+export function useCampaign(selector?: (state: CampaignSnapshot) => unknown) {
+  return useStore(campaignStore, selector ?? ((state) => state));
 }
-export function getCampaign() { return snapshot; }
+export function getCampaign() { return campaignStore.getState(); }
 export function updateCampaign(change: Partial<Campaign>) {
-  snapshot = { ...snapshot, campaign: { ...snapshot.campaign, ...change, updatedAt: new Date().toISOString() },
-    revision: snapshot.revision + 1, status: "Unsaved changes", error: "" };
-  emit();
+  campaignStore.setState((state) => ({ campaign: { ...state.campaign, ...change, updatedAt: new Date().toISOString() },
+    revision: state.revision + 1, status: "Unsaved changes", error: "" }));
 }
 export function createNpc(name: string) {
   const npc: Npc = { id: crypto.randomUUID(), name: name.trim(), notes: [{ type: "p", children: [{ text: "" }] }] };
-  updateCampaign({ npcs: [...snapshot.campaign.npcs, npc] });
+  updateCampaign({ npcs: [...getCampaign().campaign.npcs, npc] });
   return npc.id;
 }
 export function getCharacterNotes(id: string): Value {
-  return snapshot.campaign.npcs.find((npc) => npc.id === id)?.notes ?? [{ type: "p", children: [{ text: "" }] }];
+  return getCampaign().campaign.npcs.find((npc) => npc.id === id)?.notes ?? [{ type: "p", children: [{ text: "" }] }];
 }
 export function saveCharacterNotes(id: string, notes: Value) {
-  const npc = snapshot.campaign.npcs.find((item) => item.id === id);
+  const { campaign } = getCampaign();
+  const npc = campaign.npcs.find((item) => item.id === id);
   if (!npc || JSON.stringify(npc.notes) === JSON.stringify(notes)) return;
-  updateCampaign({ npcs: snapshot.campaign.npcs.map((item) => item.id === id ? { ...item, notes: structuredClone(notes) } : item) });
+  updateCampaign({ npcs: campaign.npcs.map((item) => item.id === id ? { ...item, notes: structuredClone(notes) } : item) });
 }
 
 function campaignPackageName(name: string) {
@@ -125,7 +127,7 @@ function campaignPackageName(name: string) {
 }
 
 async function chooseCampaignPackagePath(): Promise<string | null> {
-  const packageName = campaignPackageName(snapshot.campaign.name);
+  const packageName = campaignPackageName(getCampaign().campaign.name);
   const selectedPath = await save({
     title: "Save campaign package",
     defaultPath: packageName,
@@ -137,18 +139,19 @@ async function chooseCampaignPackagePath(): Promise<string | null> {
 
 async function loadCampaignPath(path: string) {
   const campaign = await invoke<Campaign>("open_campaign", { path });
-  snapshot = { ...snapshot, campaign, path, revision: 0, savedRevision: 0,
-    status: "Saved", error: "", generation: snapshot.generation + 1 }; emit();
+  campaignStore.setState((state) => ({ campaign, path, revision: 0, savedRevision: 0,
+    status: "Saved", error: "", generation: state.generation + 1 }));
 }
 
 export async function openCampaignAt(path: string): Promise<boolean> {
   // A Finder-opened campaign replaces the untouched sample on cold start without a discard prompt.
-  if (snapshot.generation === 0 && snapshot.path === null && snapshot.revision === 0) {
+  const state = getCampaign();
+  if (state.generation === 0 && state.path === null && state.revision === 0) {
     try {
       await loadCampaignPath(path);
       return true;
     } catch (error) {
-      snapshot = { ...snapshot, error: String(error) }; emit();
+      campaignStore.setState({ error: String(error) });
       return false;
     }
   }
@@ -175,23 +178,34 @@ export async function listenForCampaignOpens() {
 }
 
 let saving: Promise<boolean> | null = null;
+const queuedSaves = new Set<Promise<boolean>>();
 function runCampaignSave(chooseNewPath: boolean, explicit: boolean): Promise<boolean> {
-  if (!explicit && snapshot.isLeaving) return Promise.resolve(false);
-  if (saving) return chooseNewPath ? saving.then(() => runCampaignSave(true, explicit)) : saving;
+  if (!explicit && getCampaign().isLeaving) return Promise.resolve(false);
+  const generation = getCampaign().generation;
+  const isCurrentCampaign = () => getCampaign().generation === generation;
+  if (saving) {
+    if (!chooseNewPath) return saving;
+    const queued = saving.then(() => isCurrentCampaign() ? runCampaignSave(true, explicit) : false)
+      .finally(() => { queuedSaves.delete(queued); });
+    queuedSaves.add(queued);
+    return queued;
+  }
   saving = (async () => {
     try {
       if (!isTauri()) throw new Error("Use the desktop app (pnpm tauri dev) to save campaign folders.");
-      const path = chooseNewPath || !snapshot.path ? await chooseCampaignPackagePath() : snapshot.path;
-      if (!path) return false;
+      const currentPath = getCampaign().path;
+      const path = chooseNewPath || !currentPath ? await chooseCampaignPackagePath() : currentPath;
+      if (!path || !isCurrentCampaign()) return false;
       do {
-        const { campaign, revision } = snapshot;
-        snapshot = { ...snapshot, status: "Saving…", error: "" }; emit();
+        const { campaign, revision } = getCampaign();
+        campaignStore.setState({ status: "Saving…", error: "" });
         await invoke("save_campaign", { path, campaign });
-        snapshot = { ...snapshot, path, savedRevision: revision, status: "Saved" }; emit();
-      } while (snapshot.revision !== snapshot.savedRevision);
+        if (!isCurrentCampaign()) return false;
+        campaignStore.setState({ path, savedRevision: revision, status: "Saved" });
+      } while (getCampaign().revision !== getCampaign().savedRevision);
       return true;
     } catch (error) {
-      snapshot = { ...snapshot, status: "Save failed — changes kept in memory", error: String(error) }; emit();
+      if (isCurrentCampaign()) campaignStore.setState({ status: "Save failed — changes kept in memory", error: String(error) });
       return false;
     }
   })().finally(() => { saving = null; });
@@ -213,21 +227,24 @@ export function setUnsavedChoiceHandler(handler: (intent: LeaveIntent) => Promis
 
 // Pause autosave for the whole transition, including any native file dialog.
 export async function leaveCampaign(intent: LeaveIntent, action: () => Promise<boolean | void>): Promise<boolean> {
-  if (snapshot.isLeaving) return false;
-  snapshot = { ...snapshot, isLeaving: true }; emit();
+  if (getCampaign().isLeaving) return false;
+  campaignStore.setState({ isLeaving: true });
   try {
-    if (saving) await saving;
-    if (!snapshot.path || snapshot.revision !== snapshot.savedRevision) {
+    // Save As requests may be waiting behind the active save. Finish the whole queue
+    // before replacing the document or deciding whether it has unsaved changes.
+    while (saving || queuedSaves.size) await Promise.all([...(saving ? [saving] : []), ...queuedSaves]);
+    const state = getCampaign();
+    if (!state.path || state.revision !== state.savedRevision) {
       const choice = chooseUnsaved ? await chooseUnsaved(intent) : "save";
       if (choice === "cancel") return false;
       if (choice === "save" && !await saveCampaign()) return false;
     }
     return await action() !== false;
   } catch (error) {
-    snapshot = { ...snapshot, error: String(error) }; emit();
+    campaignStore.setState({ error: String(error) });
     return false;
   } finally {
-    snapshot = { ...snapshot, isLeaving: false }; emit();
+    campaignStore.setState({ isLeaving: false });
   }
 }
 
@@ -236,9 +253,9 @@ export async function replaceCampaign(name?: string) {
     // New campaigns are drafts. Choose a folder only on the first explicit Save.
     if (name !== undefined) {
       if (!name.trim()) return false;
-      snapshot = { ...snapshot, campaign: emptyCampaign(name.trim()), path: null,
+      campaignStore.setState((state) => ({ campaign: emptyCampaign(name.trim()), path: null,
         revision: 1, savedRevision: 0, status: "Unsaved campaign — choose Save to keep it",
-        error: "", generation: snapshot.generation + 1 }; emit();
+        error: "", generation: state.generation + 1 }));
       return true;
     }
     if (!isTauri()) throw new Error("Use the desktop app (pnpm tauri dev) to open campaign files.");

@@ -50,17 +50,37 @@ struct Workspace {
 }
 #[derive(Debug, Serialize, Deserialize)]
 struct NavigationHistory {
+    #[serde(deserialize_with = "deserialize_destinations")]
     entries: Vec<Destination>,
     index: i32,
 }
 #[derive(Debug, Serialize, Deserialize)]
-#[serde(rename_all = "camelCase")]
-struct Destination {
-    workspace_id: String,
-    name: String,
+#[serde(tag = "kind", rename_all = "camelCase", rename_all_fields = "camelCase")]
+enum Destination {
+    Character { workspace_id: String, character_id: String, section: Option<String> },
+    Map { workspace_id: String, section: Option<String> },
+    Workspace { workspace_id: String, section: Option<String> },
+    Settings,
+    Section { section: Option<String> },
 }
 
-fn validate_layout(layout: &Value, component: &str) -> Result<(), String> {
+// Existing campaign packages used untyped NPC destinations. Normalize on read so
+// the next save writes the current format without changing database versions.
+fn deserialize_destinations<'de, D>(deserializer: D) -> Result<Vec<Destination>, D::Error>
+where D: serde::Deserializer<'de> {
+    #[derive(Deserialize)]
+    #[serde(untagged)]
+    enum StoredDestination {
+        Current(Destination),
+        Legacy { #[serde(rename = "workspaceId")] workspace_id: String, name: String },
+    }
+    Ok(Vec::<StoredDestination>::deserialize(deserializer)?.into_iter().map(|entry| match entry {
+        StoredDestination::Current(destination) => destination,
+        StoredDestination::Legacy { workspace_id, name } => Destination::Character { workspace_id, character_id: name, section: None },
+    }).collect())
+}
+
+fn validate_layout(layout: &Value, components: &[&str]) -> Result<(), String> {
     let grid = layout.get("grid").ok_or("Workspace has no grid.")?;
     if !grid["width"].is_number()
         || !grid["height"].is_number()
@@ -75,7 +95,7 @@ fn validate_layout(layout: &Value, component: &str) -> Result<(), String> {
         .as_object()
         .ok_or("Workspace has no panels.")?;
     for (id, panel) in panels {
-        if panel["id"].as_str() != Some(id) || panel["contentComponent"].as_str() != Some(component)
+        if panel["id"].as_str() != Some(id) || !panel["contentComponent"].as_str().is_some_and(|component| components.contains(&component))
         {
             return Err("Unknown workspace panel.".into());
         }
@@ -127,7 +147,7 @@ impl Campaign {
             {
                 return Err("Invalid workspace state.".into());
             }
-            validate_layout(&workspace.layout, "workspace")?;
+            validate_layout(&workspace.layout, &["workspace"])?;
             let panel_ids = workspace.layout["panels"]
                 .as_object()
                 .ok_or("Workspace has no panels.")?;
@@ -136,7 +156,7 @@ impl Campaign {
                     .panels
                     .get(id)
                     .ok_or("Missing workspace contents.")?;
-                validate_layout(layout, "character")?;
+                validate_layout(layout, &["character", "map"])?;
             }
         }
         let mut ids = HashSet::new();
@@ -544,6 +564,44 @@ mod tests {
                     "caption": [{"text": "Forest trail"}], "children": [{"text": ""}]}
             ]}]
         })).unwrap()
+    }
+
+    #[test]
+    fn legacy_navigation_history_is_normalized_on_read() {
+        let history: NavigationHistory = serde_json::from_value(json!({
+            "entries": [{"workspaceId": "workspace:1", "name": "npc-1"}], "index": 0
+        })).unwrap();
+        assert_eq!(serde_json::to_value(history).unwrap(), json!({
+            "entries": [{"kind": "character", "workspaceId": "workspace:1", "characterId": "npc-1", "section": null}], "index": 0
+        }));
+    }
+
+    #[test]
+    fn map_tabs_and_typed_history_round_trip() {
+        let folder = tempfile::tempdir().unwrap();
+        let path = folder.path().join("map.campaign");
+        let mut value = serde_json::to_value(example()).unwrap();
+        value["workspace"]["layout"]["panels"] = json!({
+            "workspace:1": {"id": "workspace:1", "contentComponent": "workspace"}
+        });
+        value["workspace"]["panels"] = json!({
+            "workspace:1": {
+                "grid": {"root": {"type": "branch", "data": []}, "height": 600, "width": 800, "orientation": "HORIZONTAL"},
+                "panels": {"map:prototype": {"id": "map:prototype", "contentComponent": "map"}}
+            }
+        });
+        value["workspace"]["history"] = json!({"entries": [
+            {"kind": "character", "workspaceId": "workspace:1", "characterId": "npc-1", "section": "Characters"},
+            {"kind": "map", "workspaceId": "workspace:1", "section": "Locations & Maps"},
+            {"kind": "settings"},
+            {"kind": "section", "section": null},
+            {"kind": "workspace", "workspaceId": "workspace:1", "section": null}
+        ], "index": 4});
+        let expected = value.clone();
+        write_campaign(&path, serde_json::from_value(value.clone()).unwrap()).unwrap();
+        assert_eq!(serde_json::to_value(read_campaign(&path).unwrap()).unwrap(), expected);
+        value["workspace"]["panels"]["workspace:1"]["panels"]["map:prototype"]["contentComponent"] = json!("unknown");
+        assert!(serde_json::from_value::<Campaign>(value).unwrap().validate().is_err());
     }
 
     #[test]

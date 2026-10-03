@@ -1,4 +1,6 @@
-import { useEffect, useState } from "react";
+import { useShallow } from "zustand/react/shallow";
+import { appCommands } from "@/lib/app-commands";
+import { useSessionStore } from "@/stores/session-store";
 import {
   ArrowLeftIcon, BookOpenIcon, ChevronsUpDownIcon, CircleHelpIcon, Dice5Icon, FlagIcon, LayoutDashboardIcon,
   MapIcon, PackageIcon, PaletteIcon, PuzzleIcon, ScrollTextIcon, SettingsIcon, UsersIcon,
@@ -11,7 +13,7 @@ import {
 import { Dialog, DialogDescription, DialogPopup, DialogTitle } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
 import { Kbd } from "@/components/ui/kbd";
-import { updateCampaign, useCampaign } from "@/lib/campaign-data";
+import { useCampaign } from "@/lib/campaign-data";
 import { SidebarResizeHandle } from "@/components/ui/sidebar-resize-handle";
 
 const destinations = [
@@ -25,30 +27,19 @@ const destinations = [
   { label: "Puzzles", icon: PuzzleIcon },
 ];
 
-type AppSidebarProps = {
-  section: string | null;
-  onSelectSection: (section: string | null) => void;
-  onOpenCharacter: (name: string) => void;
-  onCreateNpc: () => void;
-  onOpenMap: () => void;
-};
-
-export function AppSidebar({ section, onSelectSection, onOpenCharacter, onCreateNpc, onOpenMap }: AppSidebarProps) {
-  const { campaign } = useCampaign();
+export function AppSidebar() {
+  const campaignName = useCampaign((state) => state.campaign.name);
+  const ids = useCampaign(useShallow((state) => state.campaign.npcs.map((npc) => npc.id)));
+  const names = useCampaign(useShallow((state) => state.campaign.npcs.map((npc) => npc.name)));
+  const section = useSessionStore((state) => state.section);
+  const sidebarWidth = useSessionStore((state) => state.sidebar.width);
+  const isShortcutsOpen = useSessionStore((state) => state.shortcutsOpen);
+  const setIsShortcutsOpen = useSessionStore((state) => state.setShortcutsOpen);
+  const setSidebarWidth = (width: number) => useSessionStore.getState().setSidebar({ width });
   const { isMobile, setOpenMobile, open, setOpen } = useSidebar();
-  const [sidebarWidth, setSidebarWidth] = useState(campaign.sidebar.width);
-  useEffect(() => {
-    if (campaign.sidebar.width !== sidebarWidth || campaign.sidebar.open !== open) updateCampaign({ sidebar: { width: sidebarWidth, open } });
-  }, [sidebarWidth, open, campaign.sidebar]);
-  const [isShortcutsOpen, setIsShortcutsOpen] = useState(false);
   const isMacOS = typeof navigator !== "undefined" && /Mac|iPhone|iPad/.test(navigator.platform);
-  useEffect(() => {
-    const handleOpenShortcuts = () => setIsShortcutsOpen(true);
-    window.addEventListener("app-open-shortcuts", handleOpenShortcuts);
-    return () => window.removeEventListener("app-open-shortcuts", handleOpenShortcuts);
-  }, []);
   const selectSection = (nextSection: string) => {
-    onSelectSection(nextSection);
+    appCommands.selectSection(nextSection);
     if (isMobile) setOpenMobile(false);
   };
 
@@ -57,10 +48,10 @@ export function AppSidebar({ section, onSelectSection, onOpenCharacter, onCreate
       <SidebarHeader>
         <SidebarMenu>
           <SidebarMenuItem>
-            <SidebarMenuButton size="lg" aria-disabled="true" title={campaign.name}>
+            <SidebarMenuButton size="lg" aria-disabled="true" title={campaignName}>
               <Dice5Icon aria-hidden="true" />
               <span className="flex flex-1 flex-col gap-0.5 group-data-[collapsible=icon]:hidden">
-                <span>{campaign.name}</span>
+                <span>{campaignName}</span>
                 <span className="text-xs text-muted-foreground">D&D 5.5e</span>
               </span>
               <ChevronsUpDownIcon className="group-data-[collapsible=icon]:hidden" aria-hidden="true" />
@@ -77,25 +68,25 @@ export function AppSidebar({ section, onSelectSection, onOpenCharacter, onCreate
             <SidebarGroupContent>
               <SidebarMenu>
                 <SidebarMenuItem>
-                  <SidebarMenuButton tooltip="All sections" onClick={() => onSelectSection(null)}>
+                  <SidebarMenuButton tooltip="All sections" onClick={() => appCommands.selectSection(null)}>
                     <ArrowLeftIcon aria-hidden="true" />
                     <span>All sections</span>
                   </SidebarMenuButton>
                 </SidebarMenuItem>
               </SidebarMenu>
               <div className="px-2 pb-2 pt-4 text-xs font-semibold text-muted-foreground group-data-[collapsible=icon]:hidden">{section}</div>
-              {section === "Characters" && <Button variant="outline" onClick={onCreateNpc}>New NPC</Button>}
+              {section === "Characters" && <Button variant="outline" onClick={appCommands.createNpc}>New NPC</Button>}
               <SidebarMenu>
-                {section === "Characters" ? campaign.npcs.map(({ id, name }) => (
+                {section === "Characters" ? ids.map((id, index) => (
                   <SidebarMenuItem key={id}>
-                    <SidebarMenuButton tooltip={name} onClick={() => onOpenCharacter(id)}>
+                    <SidebarMenuButton tooltip={names[index]} onClick={() => appCommands.openCharacter(id)}>
                       <UsersIcon aria-hidden="true" />
-                      <span>{name}</span>
+                      <span>{names[index]}</span>
                     </SidebarMenuButton>
                   </SidebarMenuItem>
                 )) : section === "Locations & Maps" ? (
                   <SidebarMenuItem>
-                    <SidebarMenuButton tooltip="Map prototype" onClick={onOpenMap}>
+                    <SidebarMenuButton tooltip="Map prototype" onClick={appCommands.openMap}>
                       <MapIcon aria-hidden="true" />
                       <span>Map prototype</span>
                     </SidebarMenuButton>
@@ -114,7 +105,7 @@ export function AppSidebar({ section, onSelectSection, onOpenCharacter, onCreate
               <SidebarGroupContent>
                 <SidebarMenu>
                   <SidebarMenuItem>
-                    <SidebarMenuButton tooltip="All sections" onClick={() => onSelectSection(null)}>
+                    <SidebarMenuButton tooltip="All sections" onClick={() => appCommands.selectSection(null)}>
                       <ArrowLeftIcon aria-hidden="true" />
                       <span>All sections</span>
                     </SidebarMenuButton>
@@ -158,7 +149,7 @@ export function AppSidebar({ section, onSelectSection, onOpenCharacter, onCreate
       <SidebarFooter>
         <SidebarMenu>
           <SidebarMenuItem>
-            <SidebarMenuButton tooltip="Keyboard shortcuts" onClick={() => setIsShortcutsOpen(true)} title="Keyboard shortcuts">
+            <SidebarMenuButton tooltip="Keyboard shortcuts" onClick={appCommands.openShortcuts} title="Keyboard shortcuts">
               <CircleHelpIcon aria-hidden="true" />
               <span>Keyboard shortcuts</span>
             </SidebarMenuButton>

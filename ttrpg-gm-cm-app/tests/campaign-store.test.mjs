@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import { mockIPC } from "@tauri-apps/api/mocks";
-import { createNpc, emptyCampaign, getCampaign, leaveCampaign, replaceCampaign, saveCampaign, saveCharacterNotes, setUnsavedChoiceHandler } from "../src/lib/campaign-data.ts";
+import { campaignStore, createNpc, emptyCampaign, getCampaign, leaveCampaign, replaceCampaign, saveCampaign, saveCampaignAs, saveCharacterNotes, setUnsavedChoiceHandler } from "../src/lib/campaign-data.ts";
 
 test("save queue retains edits during a write and failed opens retain the active campaign", async () => {
   globalThis.window = {};
@@ -111,4 +111,157 @@ test("unsaved drafts can be canceled or discarded without a disk write", async (
     assert.deepEqual(commands, ["plugin:dialog|save"]);
     stopDeferred();
   } finally { unregister(); }
+});
+
+test("NPC updates preserve unrelated selector references and notify synchronously", () => {
+  const first = createNpc("First selector NPC");
+  const second = createNpc("Second selector NPC");
+  const untouched = getCampaign().campaign.npcs.find((npc) => npc.id === second);
+  let notifications = 0;
+  const unsubscribe = campaignStore.subscribe((state) => {
+    notifications += 1;
+    assert.equal(state, getCampaign());
+  });
+  try {
+    const notes = [{ type: "p", children: [{ text: "Selected NPC changed" }] }];
+    saveCharacterNotes(first, notes);
+    assert.equal(notifications, 1);
+    assert.equal(getCampaign().campaign.npcs.find((npc) => npc.id === second), untouched);
+    saveCharacterNotes(first, notes);
+    assert.equal(notifications, 1, "identical notes must not create a revision or notification");
+  } finally { unsubscribe(); }
+});
+
+test("Save As queues after a save and retains the active path on cancel or failure", async () => {
+  globalThis.window = {};
+  globalThis.isTauri = true;
+  const stopChoices = setUnsavedChoiceHandler(async () => "discard");
+  await replaceCampaign("Save As regression");
+  stopChoices();
+  const npc = createNpc("Saved NPC");
+  const writes = [];
+  const paths = ["/tmp/original.campaign", "/tmp/renamed.campaign"];
+  let dialogs = 0;
+  let release;
+  let failWrite = false;
+  mockIPC(async (command, payload) => {
+    if (command === "plugin:dialog|save") {
+      dialogs += 1;
+      return paths.shift() ?? null;
+    }
+    if (command === "save_campaign") {
+      if (failWrite) throw new Error("Save As write failed");
+      writes.push({ path: payload.path, campaign: structuredClone(payload.campaign) });
+      if (writes.length === 1) await new Promise((resolve) => { release = resolve; });
+    }
+  });
+  const saving = saveCampaign();
+  await new Promise((resolve) => setImmediate(resolve));
+  const copying = saveCampaignAs();
+  saveCharacterNotes(npc, [{ type: "p", children: [{ text: "Edit during original save" }] }]);
+  assert.equal(dialogs, 1, "Save As must wait for the active save before choosing a path");
+  release();
+  assert.equal(await saving, true);
+  assert.equal(await copying, true);
+  assert.deepEqual(writes.map((write) => write.path), ["/tmp/original.campaign", "/tmp/original.campaign", "/tmp/renamed.campaign"]);
+  assert.equal(writes[2].campaign.npcs.find((item) => item.id === npc).notes[0].children[0].text, "Edit during original save");
+  assert.equal(getCampaign().path, "/tmp/renamed.campaign");
+  assert.equal(getCampaign().revision, getCampaign().savedRevision);
+
+  assert.equal(await saveCampaignAs(), false);
+  assert.equal(getCampaign().path, "/tmp/renamed.campaign");
+  saveCharacterNotes(npc, [{ type: "p", children: [{ text: "Retain unsaved copy" }] }]);
+  paths.push("/tmp/failed-copy.campaign");
+  failWrite = true;
+  assert.equal(await saveCampaignAs(), false);
+  assert.equal(getCampaign().path, "/tmp/renamed.campaign");
+  assert.notEqual(getCampaign().revision, getCampaign().savedRevision);
+});
+
+test("campaign replacement waits for every queued Save As dialog and write", async () => {
+  globalThis.window = {};
+  globalThis.isTauri = true;
+  const stopChoices = setUnsavedChoiceHandler(async () => "discard");
+  try { await replaceCampaign("Original queued campaign"); } finally { stopChoices(); }
+  const replacement = emptyCampaign("Replacement campaign");
+  const originalId = getCampaign().campaign.id;
+  const writes = [];
+  let dialogs = 0;
+  let opens = 0;
+  let releaseWrite;
+  let chooseCopy;
+  mockIPC(async (command, payload) => {
+    if (command === "plugin:dialog|save") {
+      if (++dialogs === 1) return "/tmp/queued-original.campaign";
+      return new Promise((resolve) => { chooseCopy = resolve; });
+    }
+    if (command === "save_campaign") {
+      writes.push({ path: payload.path, campaignId: payload.campaign.id });
+      if (writes.length === 1) await new Promise((resolve) => { releaseWrite = resolve; });
+    }
+    if (command === "plugin:dialog|open") {
+      opens += 1;
+      return "/tmp/replacement.campaign";
+    }
+    if (command === "open_campaign") return replacement;
+  });
+  const saving = saveCampaign();
+  await new Promise((resolve) => setImmediate(resolve));
+  const firstCopy = saveCampaignAs();
+  const secondCopy = saveCampaignAs();
+  const replacing = replaceCampaign();
+  releaseWrite();
+  await saving;
+  await new Promise((resolve) => setImmediate(resolve));
+  assert.equal(opens, 0);
+  assert.equal(getCampaign().campaign.id, originalId);
+  chooseCopy("/tmp/first-copy.campaign");
+  await firstCopy;
+  await new Promise((resolve) => setImmediate(resolve));
+  assert.equal(opens, 0, "replacement must also wait for the second queued copy");
+  chooseCopy("/tmp/second-copy.campaign");
+  assert.equal(await secondCopy, true);
+  assert.equal(await replacing, true);
+  assert.deepEqual(writes, [
+    { path: "/tmp/queued-original.campaign", campaignId: originalId },
+    { path: "/tmp/first-copy.campaign", campaignId: originalId },
+    { path: "/tmp/second-copy.campaign", campaignId: originalId },
+  ]);
+  assert.equal(getCampaign().campaign.id, replacement.id);
+  assert.equal(getCampaign().path, "/tmp/replacement.campaign");
+});
+
+test("stale save dialogs and write completions cannot update another campaign generation", async () => {
+  globalThis.window = {};
+  globalThis.isTauri = true;
+  let choosePath;
+  let finishWrite;
+  let writes = 0;
+  mockIPC(async (command) => {
+    if (command === "plugin:dialog|save") return new Promise((resolve) => { choosePath = resolve; });
+    if (command === "save_campaign") {
+      writes += 1;
+      await new Promise((resolve) => { finishWrite = resolve; });
+    }
+  });
+  const replaceSnapshot = (name) => {
+    campaignStore.setState((state) => ({
+      campaign: emptyCampaign(name), path: `/tmp/${name}.campaign`, generation: state.generation + 1,
+      revision: 0, savedRevision: 0, status: "Saved", error: "",
+    }));
+    return getCampaign();
+  };
+
+  const choosing = saveCampaignAs();
+  const afterDialogReplacement = replaceSnapshot("After dialog");
+  choosePath("/tmp/stale-dialog.campaign");
+  assert.equal(await choosing, false);
+  assert.equal(writes, 0);
+  assert.equal(getCampaign(), afterDialogReplacement);
+
+  const writing = saveCampaign();
+  const afterWriteReplacement = replaceSnapshot("After write");
+  finishWrite();
+  assert.equal(await writing, false);
+  assert.equal(getCampaign(), afterWriteReplacement);
 });

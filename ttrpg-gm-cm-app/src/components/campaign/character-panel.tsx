@@ -355,8 +355,7 @@ function FormattingToolbar() {
 
 export function CharacterPanel({ params, api }: IDockviewPanelProps) {
   const id = typeof params.name === "string" ? params.name : "";
-  const { campaign } = useCampaign();
-  const npc = campaign.npcs.find((item) => item.id === id);
+  const npc = useCampaign((state) => state.campaign.npcs.find((item) => item.id === id));
   const name = npc?.name ?? "Character";
   const scrollRef = useRef<HTMLElement>(null);
   const initialScrollTop = useRef(typeof params.scrollTop === "number" ? params.scrollTop : 0);
