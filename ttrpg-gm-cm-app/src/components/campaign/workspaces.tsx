@@ -117,6 +117,26 @@ export function Workspaces({ ref, isDark, onSearch }: {
   const draggedWorkspace = useRef<string | null>(null);
   const isNavigating = useRef(false);
 
+  useEffect(() => {
+    const isMacOS = /Mac|iPhone|iPad/.test(navigator.platform);
+    const handleWorkspaceSidebarShortcut = (event: KeyboardEvent) => {
+      const hasPrimaryModifier = isMacOS ? event.metaKey && !event.ctrlKey : event.ctrlKey && !event.metaKey;
+      const target = event.target instanceof HTMLElement ? event.target : null;
+      if (
+        event.repeat || event.altKey || event.shiftKey || !hasPrimaryModifier ||
+        (event.code !== "Backslash" && event.key !== "\\") ||
+        target?.closest('[role="dialog"], [contenteditable="true"]')
+      ) return;
+
+      event.preventDefault();
+      const state = useSessionStore.getState();
+      state.setWorkspaceSidebar({ collapsed: !state.workspaceCollapsed });
+    };
+
+    window.addEventListener("keydown", handleWorkspaceSidebarShortcut);
+    return () => window.removeEventListener("keydown", handleWorkspaceSidebarShortcut);
+  }, []);
+
   const captureWorkspace = () => {
     const container = api.current;
     if (getCampaign().generation !== generation || !initialized.current || !container || container.panels.some((panel) => !panels.current.has(panel.id))) return;

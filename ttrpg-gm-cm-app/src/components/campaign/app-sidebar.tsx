@@ -270,6 +270,10 @@ export function AppSidebar() {
                   <dt>Toggle sidebar</dt>
                   <Kbd>{isMacOS ? "⌘ B" : "Ctrl B"}</Kbd>
                 </div>
+                <div className="flex items-center justify-between gap-4 text-sm">
+                  <dt>Toggle workspaces sidebar</dt>
+                  <Kbd>{isMacOS ? "⌘ \\" : "Ctrl \\"}</Kbd>
+                </div>
               </dl>
             </section>
 

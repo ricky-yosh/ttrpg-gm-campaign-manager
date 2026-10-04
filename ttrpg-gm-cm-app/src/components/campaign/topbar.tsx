@@ -1,7 +1,7 @@
 import { useEffect, useState } from "react";
 import { isTauri } from "@tauri-apps/api/core";
 import { getCurrentWindow } from "@tauri-apps/api/window";
-import { ArrowLeftIcon, ArrowRightIcon, MoreHorizontalIcon, PauseIcon, PlayIcon, SearchIcon, SquareIcon } from "lucide-react";
+import { ArrowLeftIcon, ArrowRightIcon, MonitorIcon, MoreHorizontalIcon, NotebookTextIcon, PauseIcon, PlayIcon, SearchIcon, SquareIcon } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Kbd } from "@/components/ui/kbd";
 import { SidebarTrigger } from "@/components/ui/sidebar";
@@ -11,7 +11,10 @@ import { selectCanGoBack, selectCanGoForward, useSessionStore } from "@/stores/s
 import { CampaignControls } from "@/components/campaign/campaign-controls";
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
 
-export function Topbar() {
+export function Topbar({ isPresenterView, onTogglePresenterView }: {
+  isPresenterView: boolean;
+  onTogglePresenterView: () => void;
+}) {
   const canGoBack = useSessionStore(selectCanGoBack);
   const canGoForward = useSessionStore(selectCanGoForward);
   const presentationStartedAt = useSessionStore((state) => state.presentationStartedAt);
@@ -195,6 +198,16 @@ export function Topbar() {
           }}
         >
           {isPresenting ? <SquareIcon className="size-3" /> : <PlayIcon className="size-3" />}
+        </Button>
+        <Button
+          data-tauri-drag-region="false"
+          variant="outline"
+          size="icon-sm"
+          aria-label={isPresenterView ? "Return to GM View" : "Enter Presenter View"}
+          title={isPresenterView ? "Return to GM View" : "Enter Presenter View"}
+          onClick={onTogglePresenterView}
+        >
+          {isPresenterView ? <NotebookTextIcon className="size-3.5" /> : <MonitorIcon className="size-3.5" />}
         </Button>
       </div>
       <CommandPalette />

@@ -10,6 +10,7 @@ import { AppSidebar } from "@/components/campaign/app-sidebar";
 import { SettingsPanel } from "@/components/campaign/settings-panel";
 import { Workspaces, type WorkspaceHandle } from "@/components/campaign/workspaces";
 import { Topbar } from "@/components/campaign/topbar";
+import { PresenterView } from "@/components/campaign/presenter-view";
 import { leaveCampaign, listenForCampaignOpens, saveCampaign, setUnsavedChoiceHandler, useCampaign, type LeaveIntent, type UnsavedChoice } from "@/lib/campaign-data";
 import { appCommands, registerWorkspaceCommands } from "@/lib/app-commands";
 import { useSessionStore } from "@/stores/session-store";
@@ -36,9 +37,10 @@ function App() {
   })));
   const section = useSessionStore((state) => state.section);
   const sidebarOpen = useSessionStore((state) => state.sidebar.open);
-  const isPresenting = useSessionStore((state) => state.presentationStartedAt !== null);
+  const isPresenting = useSessionStore((state) => state.presentationStartedAt !== null || state.presentationPaused);
   const { appearance, isDark, setAppearance } = useAppearance();
   const [leaveIntent, setLeaveIntent] = useState<LeaveIntent | null>(null);
+  const [isPresenterView, setIsPresenterView] = useState(false);
   const choiceResolver = useRef<((choice: UnsavedChoice) => void) | null>(null);
   const workspaces = useRef<WorkspaceHandle>(null);
   useLayoutEffect(() => registerWorkspaceCommands(generation, () => workspaces.current), [generation]);
@@ -115,19 +117,22 @@ function App() {
       <div className="relative h-svh overflow-hidden" data-presenting={isPresenting ? "true" : undefined}>
         <CampaignAutosave />
         <SidebarProvider key={generation} open={sidebarOpen} onOpenChange={(open) => useSessionStore.getState().setSidebar({ open })} inert={isLeaving} className="h-full flex-col overflow-hidden">
-          <Topbar />
-          <div className="flex min-h-0 flex-1">
-            <AppSidebar />
-            <main aria-label="Campaign workspace" className="relative flex min-h-0 min-w-0 flex-1 flex-col">
-              {section === "Settings" && (
-                <div className="relative z-10 flex min-h-0 flex-1 flex-col">
-                  <SettingsPanel appearance={appearance} onAppearanceChange={setAppearance} />
+          <Topbar isPresenterView={isPresenterView} onTogglePresenterView={() => setIsPresenterView((current) => !current)} />
+          <div className="relative flex min-h-0 flex-1">
+            <div className="absolute inset-0 flex" aria-hidden={isPresenterView} inert={isPresenterView}>
+              <AppSidebar />
+              <main aria-label="Campaign workspace" className="relative flex min-h-0 min-w-0 flex-1 flex-col">
+                {section === "Settings" && (
+                  <div className="relative z-10 flex min-h-0 flex-1 flex-col">
+                    <SettingsPanel appearance={appearance} onAppearanceChange={setAppearance} />
+                  </div>
+                )}
+                <div className="absolute inset-0 flex" aria-hidden={section === "Settings"} inert={section === "Settings"}>
+                  <Workspaces key={generation} ref={workspaces} isDark={isDark} onSearch={appCommands.openCommandPalette} />
                 </div>
-              )}
-              <div className="absolute inset-0 flex" aria-hidden={section === "Settings"} inert={section === "Settings"}>
-                <Workspaces key={generation} ref={workspaces} isDark={isDark} onSearch={appCommands.openCommandPalette} />
-              </div>
-            </main>
+              </main>
+            </div>
+            {isPresenterView && <PresenterView />}
           </div>
         </SidebarProvider>
         {isPresenting && <div className="presenter-frame" aria-hidden="true" />}
