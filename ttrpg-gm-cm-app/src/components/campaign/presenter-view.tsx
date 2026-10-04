@@ -1,7 +1,8 @@
-import { useEffect, useImperativeHandle, useRef, type Ref } from "react";
+import { useEffect, useImperativeHandle, useRef, useState, type Ref } from "react";
 import { DockviewReact, themeDark, themeLight, type DockviewApi, type IDockviewPanelProps } from "dockview-react";
 import { MapIcon, UsersIcon } from "lucide-react";
 import { Empty, EmptyDescription, EmptyHeader, EmptyMedia, EmptyTitle } from "@/components/ui/empty";
+import { WorkspaceEmptyState } from "@/components/campaign/workspace-empty-state";
 
 export type PresenterSection = "map" | "npcs";
 export type PresenterWorkspaceHandle = {
@@ -46,6 +47,8 @@ export function PresenterView({ ref, isDark, onActiveSelectionChange }: {
 }) {
   const api = useRef<DockviewApi | null>(null);
   const activeSubscription = useRef<{ dispose: () => void } | null>(null);
+  const layoutSubscription = useRef<{ dispose: () => void } | null>(null);
+  const [hasPanels, setHasPanels] = useState(false);
 
   const addOrActivate = (params: PresenterPanelParams) => {
     const currentApi = api.current;
@@ -72,10 +75,16 @@ export function PresenterView({ ref, isDark, onActiveSelectionChange }: {
     closeActiveTab: () => api.current?.activePanel?.api.close(),
   }));
 
-  useEffect(() => () => activeSubscription.current?.dispose(), []);
+  useEffect(() => () => {
+    activeSubscription.current?.dispose();
+    layoutSubscription.current?.dispose();
+  }, []);
 
   const handleReady = ({ api: dockviewApi }: { api: DockviewApi }) => {
     api.current = dockviewApi;
+    setHasPanels(dockviewApi.panels.length > 0);
+    layoutSubscription.current?.dispose();
+    layoutSubscription.current = dockviewApi.onDidLayoutChange(() => setHasPanels(dockviewApi.panels.length > 0));
     activeSubscription.current?.dispose();
     activeSubscription.current = dockviewApi.onDidActivePanelChange(({ panel }) => {
       const params = panel?.params as PresenterPanelParams | undefined;
@@ -89,7 +98,7 @@ export function PresenterView({ ref, isDark, onActiveSelectionChange }: {
   };
 
   return (
-    <main aria-label="Presenter View" className="flex min-h-0 min-w-0 flex-1 flex-col bg-background">
+    <main aria-label="Presenter View" className="relative flex min-h-0 min-w-0 flex-1 flex-col bg-background">
       <DockviewReact
         className="campaign-dockview"
         theme={isDark ? themeDark : themeLight}
@@ -98,6 +107,12 @@ export function PresenterView({ ref, isDark, onActiveSelectionChange }: {
         disableFloatingGroups
         onReady={handleReady}
       />
+      {!hasPanels && (
+        <WorkspaceEmptyState
+          className="absolute inset-0 h-full"
+          description="Choose a view from the Presenter sidebar to open it here."
+        />
+      )}
     </main>
   );
 }

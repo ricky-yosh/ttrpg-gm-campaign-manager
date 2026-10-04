@@ -1,9 +1,9 @@
 import { createContext, useContext, useEffect, useImperativeHandle, useRef, useState, type Ref } from "react";
 import { DockviewReact, themeDark, themeLight, type DockviewApi, type IDockviewPanelProps } from "dockview-react";
-import { ChevronLeftIcon, ChevronRightIcon, PlusIcon, SearchIcon, XIcon } from "lucide-react";
+import { ChevronLeftIcon, ChevronRightIcon, PlusIcon, XIcon } from "lucide-react";
 import { CharacterPanel } from "@/components/campaign/character-panel";
 import { Button } from "@/components/ui/button";
-import { Empty, EmptyContent, EmptyDescription, EmptyHeader, EmptyMedia, EmptyTitle } from "@/components/ui/empty";
+import { WorkspaceEmptyState } from "@/components/campaign/workspace-empty-state";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { SidebarResizeHandle } from "@/components/ui/sidebar-resize-handle";
@@ -76,18 +76,11 @@ function WorkspacePanel({ api }: IDockviewPanelProps) {
         }}
       />
       {!hasPanels && (
-        <Empty aria-label="Workspace empty state" className="absolute inset-0 h-full">
-          <EmptyHeader>
-            <EmptyMedia variant="icon"><SearchIcon aria-hidden="true" /></EmptyMedia>
-            <EmptyTitle>Nothing open</EmptyTitle>
-            <EmptyDescription>Choose a section from the sidebar or search your campaign to open something in this workspace.</EmptyDescription>
-          </EmptyHeader>
-          <EmptyContent>
-            <Button variant="outline" onClick={onSearch}>
-              <SearchIcon data-icon="inline-start" />Search campaign
-            </Button>
-          </EmptyContent>
-        </Empty>
+        <WorkspaceEmptyState
+          className="absolute inset-0 h-full"
+          description="Choose a section from the sidebar or search your campaign to open something in this workspace."
+          onSearch={onSearch}
+        />
       )}
     </div>
   );
