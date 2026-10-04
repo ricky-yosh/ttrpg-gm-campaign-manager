@@ -5,12 +5,13 @@ import { useEffect, useState } from "react";
 import { Autocomplete } from "@base-ui/react/autocomplete";
 import {
   ArrowLeftIcon, ArrowRightIcon, CircleHelpIcon, FilePlus2Icon, FolderOpenIcon, LayoutTemplateIcon,
-  MapIcon, PanelTopCloseIcon, SaveIcon, SearchIcon, SettingsIcon, UserPlusIcon, UserRoundIcon,
+  MapIcon, MonitorIcon, PanelLeftCloseIcon, PanelLeftIcon, PanelTopCloseIcon, SaveIcon, SearchIcon, SettingsIcon, UserPlusIcon, UserRoundIcon,
   type LucideIcon,
 } from "lucide-react";
 import { Dialog, DialogDescription, DialogPopup, DialogTitle } from "@/components/ui/dialog";
 import { Kbd } from "@/components/ui/kbd";
 import { useCampaign } from "@/lib/campaign-data";
+import { useSidebar } from "@/components/ui/sidebar";
 
 type PaletteItem = {
   id: string;
@@ -26,9 +27,13 @@ type PaletteGroup = {
   items: PaletteItem[];
 };
 
-export function CommandPalette() {
+export function CommandPalette({ isPresenterView, onTogglePresenterView }: {
+  isPresenterView: boolean;
+  onTogglePresenterView: () => void;
+}) {
   const open = useSessionStore((state) => state.commandPaletteOpen);
   const onOpenChange = useSessionStore((state) => state.setCommandPaletteOpen);
+  const { toggleSidebar } = useSidebar();
   const canGoBack = useSessionStore(selectCanGoBack);
   const canGoForward = useSessionStore(selectCanGoForward);
   const ids = useCampaign(useShallow((state) => state.campaign.npcs.map((npc) => npc.id)));
@@ -37,6 +42,33 @@ export function CommandPalette() {
     {
       value: "Actions",
       items: [
+        {
+          id: "toggle-sidebar",
+          label: "Toggle sidebar",
+          description: "Show or hide the current navigation sidebar",
+          keywords: ["navigation", "panel", "show", "hide"],
+          icon: PanelLeftIcon,
+          onSelect: toggleSidebar,
+        },
+        ...(!isPresenterView ? [{
+          id: "toggle-workspaces-sidebar",
+          label: "Toggle workspaces sidebar",
+          description: "Show or hide the workspace list",
+          keywords: ["workspace", "panel", "show", "hide"],
+          icon: PanelLeftCloseIcon,
+          onSelect: () => {
+            const state = useSessionStore.getState();
+            state.setWorkspaceSidebar({ collapsed: !state.workspaceCollapsed });
+          },
+        }] : []),
+        {
+          id: "toggle-presenter-view",
+          label: "Toggle Presenter View",
+          description: isPresenterView ? "Return to GM View" : "Switch to Presenter View",
+          keywords: ["presentation", "gm", "view", "mode"],
+          icon: MonitorIcon,
+          onSelect: onTogglePresenterView,
+        },
         {
           id: "create-workspace",
           label: "Create new workspace",

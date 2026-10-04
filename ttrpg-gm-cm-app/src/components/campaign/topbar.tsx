@@ -210,7 +210,7 @@ export function Topbar({ isPresenterView, onTogglePresenterView }: {
           {isPresenterView ? <NotebookTextIcon className="size-3.5" /> : <MonitorIcon className="size-3.5" />}
         </Button>
       </div>
-      <CommandPalette />
+      <CommandPalette isPresenterView={isPresenterView} onTogglePresenterView={onTogglePresenterView} />
     </header>
   );
 }
