@@ -329,7 +329,6 @@ export function Workspaces({ ref, isDark, onSearch }: {
       const active = api.current?.activePanel;
       const workspace = active && panels.current.get(active.id);
       if (workspace?.activePanel) workspace.activePanel.api.close();
-      else if (active) requestCloseWorkspace(active.id);
     },
   }));
 

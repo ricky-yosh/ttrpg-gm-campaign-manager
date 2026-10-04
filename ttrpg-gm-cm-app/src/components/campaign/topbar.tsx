@@ -12,9 +12,10 @@ import { CampaignControls } from "@/components/campaign/campaign-controls";
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
 import { closePlayerPresentationWindow, openPlayerPresentationWindow, publishPresentationStatus } from "@/lib/presentation-window";
 
-export function Topbar({ isPresenterView, onTogglePresenterView }: {
+export function Topbar({ isPresenterView, onTogglePresenterView, onCloseActiveTab }: {
   isPresenterView: boolean;
   onTogglePresenterView: () => void;
+  onCloseActiveTab: () => void;
 }) {
   const canGoBack = useSessionStore(selectCanGoBack);
   const canGoForward = useSessionStore(selectCanGoForward);
@@ -221,7 +222,7 @@ export function Topbar({ isPresenterView, onTogglePresenterView }: {
           {isPresenterView ? <NotebookTextIcon className="size-3.5" /> : <MonitorIcon className="size-3.5" />}
         </Button>
       </div>
-      <CommandPalette isPresenterView={isPresenterView} onTogglePresenterView={onTogglePresenterView} />
+      <CommandPalette isPresenterView={isPresenterView} onTogglePresenterView={onTogglePresenterView} onCloseActiveTab={onCloseActiveTab} />
     </header>
   );
 }

@@ -51,6 +51,10 @@ function App() {
   const presenterWorkspace = useRef<PresenterWorkspaceHandle>(null);
   const choiceResolver = useRef<((choice: UnsavedChoice) => void) | null>(null);
   const workspaces = useRef<WorkspaceHandle>(null);
+  const closeActiveTab = () => {
+    if (isPresenterView) presenterWorkspace.current?.closeActiveTab();
+    else appCommands.closeActiveTab();
+  };
   useLayoutEffect(() => registerWorkspaceCommands(generation, () => workspaces.current), [generation]);
 
   const resolveChoice = (choice: UnsavedChoice) => {
@@ -126,11 +130,11 @@ function App() {
       if (!hasPrimaryModifier || event.altKey || event.shiftKey || event.key.toLowerCase() !== "w") return;
       event.preventDefault();
       event.stopPropagation();
-      appCommands.closeActiveTab();
+      closeActiveTab();
     };
     document.addEventListener("keydown", handleCloseTabShortcut, true);
     return () => document.removeEventListener("keydown", handleCloseTabShortcut, true);
-  }, []);
+  }, [isPresenterView]);
   useEffect(() => {
     const clearTabDragging = () => { delete document.documentElement.dataset.tabDragging; };
     const startTabDragging = (event: PointerEvent) => {
@@ -164,7 +168,11 @@ function App() {
           inert={isLeaving}
           className="h-full flex-col overflow-hidden"
         >
-          <Topbar isPresenterView={isPresenterView} onTogglePresenterView={() => setIsPresenterView((current) => !current)} />
+          <Topbar
+            isPresenterView={isPresenterView}
+            onTogglePresenterView={() => setIsPresenterView((current) => !current)}
+            onCloseActiveTab={closeActiveTab}
+          />
           <div className="relative flex min-h-0 flex-1">
             <AppSidebar
               isPresenterView={isPresenterView}

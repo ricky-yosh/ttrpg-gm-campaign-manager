@@ -27,9 +27,10 @@ type PaletteGroup = {
   items: PaletteItem[];
 };
 
-export function CommandPalette({ isPresenterView, onTogglePresenterView }: {
+export function CommandPalette({ isPresenterView, onTogglePresenterView, onCloseActiveTab }: {
   isPresenterView: boolean;
   onTogglePresenterView: () => void;
+  onCloseActiveTab: () => void;
 }) {
   const open = useSessionStore((state) => state.commandPaletteOpen);
   const onOpenChange = useSessionStore((state) => state.setCommandPaletteOpen);
@@ -160,10 +161,10 @@ export function CommandPalette({ isPresenterView, onTogglePresenterView }: {
         {
           id: "close-tab",
           label: "Close active tab",
-          description: "Close the current workspace tab",
+          description: "Close the current view tab",
           keywords: ["workspace", "remove", "tab"],
           icon: PanelTopCloseIcon,
-          onSelect: appCommands.closeActiveTab,
+          onSelect: onCloseActiveTab,
         },
       ],
     },

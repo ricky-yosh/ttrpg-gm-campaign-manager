@@ -7,6 +7,7 @@ export type PresenterSection = "map" | "npcs";
 export type PresenterWorkspaceHandle = {
   openMap: () => void;
   openNpc: (id: string, name: string) => void;
+  closeActiveTab: () => void;
 };
 
 type PresenterPanelParams = { section: PresenterSection; npcId?: string; npcName?: string };
@@ -68,6 +69,7 @@ export function PresenterView({ ref, isDark, onActiveSelectionChange }: {
   useImperativeHandle(ref, () => ({
     openMap: () => addOrActivate({ section: "map" }),
     openNpc: (id, name) => addOrActivate({ section: "npcs", npcId: id, npcName: name }),
+    closeActiveTab: () => api.current?.activePanel?.api.close(),
   }));
 
   useEffect(() => () => activeSubscription.current?.dispose(), []);
