@@ -23,6 +23,7 @@ import {
 } from "@/components/ui/dropdown-menu";
 
 type RecentCampaign = { name: string; path: string };
+type PresenterSidebarSection = "home" | "npcs";
 const RECENT_CAMPAIGNS_KEY = "ttrpg-gm-cm.recent-campaigns";
 
 function readRecentCampaigns(): RecentCampaign[] {
@@ -58,62 +59,90 @@ const destinations = [
   { label: "Puzzles", icon: PuzzleIcon },
 ];
 
-function PresenterSidebarContent({ section, selectedNpcId, onSelectMap, onSelectNpc }: {
-  section: PresenterSection;
+function PresenterSidebarContent({ navigationSection, activeSection, selectedNpcId, onSelectMap, onShowNpcs, onShowAllSections, onSelectNpc }: {
+  navigationSection: PresenterSidebarSection;
+  activeSection: PresenterSection;
   selectedNpcId: string | null;
   onSelectMap: () => void;
+  onShowNpcs: () => void;
+  onShowAllSections: () => void;
   onSelectNpc: (id: string, name: string) => void;
 }) {
   const ids = useCampaign(useShallow((state) => state.campaign.npcs.map((npc) => npc.id)));
   const names = useCampaign(useShallow((state) => state.campaign.npcs.map((npc) => npc.name)));
 
   return (
-    <>
-      <SidebarGroup>
-        <SidebarGroupLabel>Player views</SidebarGroupLabel>
-        <SidebarGroupContent>
-          <SidebarMenu>
-            <SidebarMenuItem>
-              <SidebarMenuButton isActive={section === "map"} tooltip="Map" onClick={onSelectMap}>
-                <MapIcon aria-hidden="true" />
-                <span>Map</span>
-              </SidebarMenuButton>
-            </SidebarMenuItem>
-          </SidebarMenu>
-        </SidebarGroupContent>
-      </SidebarGroup>
-      <SidebarGroup>
-        <SidebarGroupLabel>NPCs</SidebarGroupLabel>
-        <SidebarGroupContent>
-          <nav aria-label="NPC references">
+    navigationSection === "npcs" ? (
+      <div key="presenter-npcs" className="animate-in fade-in slide-in-from-right-2 duration-200">
+        <SidebarGroup>
+          <SidebarGroupLabel className="sr-only">NPC navigation</SidebarGroupLabel>
+          <SidebarGroupContent>
             <SidebarMenu>
-              {ids.length ? ids.map((id, index) => (
-                <SidebarMenuItem key={id}>
-                  <SidebarMenuButton
-                    tooltip={names[index]}
-                    isActive={section === "npcs" && selectedNpcId === id}
-                    onClick={() => onSelectNpc(id, names[index])}
-                  >
-                    <UsersIcon aria-hidden="true" />
-                    <span>{names[index]}</span>
+              <SidebarMenuItem>
+                <SidebarMenuButton tooltip="All sections" onClick={onShowAllSections}>
+                  <ArrowLeftIcon aria-hidden="true" />
+                  <span>All sections</span>
+                </SidebarMenuButton>
+              </SidebarMenuItem>
+            </SidebarMenu>
+            <div className="px-2 pb-2 pt-4 text-xs font-semibold text-muted-foreground group-data-[collapsible=icon]:hidden">NPCs</div>
+            <nav aria-label="NPC references">
+              <SidebarMenu>
+                {ids.length ? ids.map((id, index) => (
+                  <SidebarMenuItem key={id}>
+                    <SidebarMenuButton
+                      tooltip={names[index]}
+                      isActive={activeSection === "npcs" && selectedNpcId === id}
+                      onClick={() => onSelectNpc(id, names[index])}
+                    >
+                      <UsersIcon aria-hidden="true" />
+                      <span>{names[index]}</span>
+                    </SidebarMenuButton>
+                  </SidebarMenuItem>
+                )) : (
+                  <li className="px-2 py-2 text-sm text-muted-foreground">No NPCs in this campaign yet.</li>
+                )}
+              </SidebarMenu>
+            </nav>
+          </SidebarGroupContent>
+        </SidebarGroup>
+      </div>
+    ) : (
+      <div key="presenter-sections" className="animate-in fade-in slide-in-from-left-2 duration-200">
+        <SidebarGroup>
+          <SidebarGroupLabel>Presentation</SidebarGroupLabel>
+          <SidebarGroupContent>
+            <nav aria-label="Presenter navigation">
+              <SidebarMenu>
+                <SidebarMenuItem>
+                  <SidebarMenuButton isActive={activeSection === "map"} tooltip="Map" onClick={onSelectMap}>
+                    <MapIcon aria-hidden="true" />
+                    <span>Map</span>
                   </SidebarMenuButton>
                 </SidebarMenuItem>
-              )) : (
-                <li className="px-2 py-2 text-sm text-muted-foreground">No NPCs in this campaign yet.</li>
-              )}
-            </SidebarMenu>
-          </nav>
-        </SidebarGroupContent>
-      </SidebarGroup>
-    </>
+                <SidebarMenuItem>
+                  <SidebarMenuButton tooltip="NPCs" onClick={onShowNpcs}>
+                    <UsersIcon aria-hidden="true" />
+                    <span>NPCs</span>
+                  </SidebarMenuButton>
+                </SidebarMenuItem>
+              </SidebarMenu>
+            </nav>
+          </SidebarGroupContent>
+        </SidebarGroup>
+      </div>
+    )
   );
 }
 
-export function AppSidebar({ isPresenterView = false, presenterSection = "map", selectedNpcId = null, onSelectMap = () => {}, onSelectNpc = () => {} }: {
+export function AppSidebar({ isPresenterView = false, presenterSection = "map", presenterSidebarSection = "home", selectedNpcId = null, onSelectMap = () => {}, onShowPresenterNpcs = () => {}, onShowPresenterSections = () => {}, onSelectNpc = () => {} }: {
   isPresenterView?: boolean;
   presenterSection?: PresenterSection;
+  presenterSidebarSection?: PresenterSidebarSection;
   selectedNpcId?: string | null;
   onSelectMap?: () => void;
+  onShowPresenterNpcs?: () => void;
+  onShowPresenterSections?: () => void;
   onSelectNpc?: (id: string, name: string) => void;
 } = {}) {
   const { campaignName, campaignPath, campaignStatus, isLeaving } = useCampaign(useShallow((state) => ({
@@ -181,7 +210,7 @@ export function AppSidebar({ isPresenterView = false, presenterSection = "map", 
       <SidebarSeparator />
       <SidebarContent>
         {isPresenterView ? (
-          <PresenterSidebarContent section={presenterSection} selectedNpcId={selectedNpcId} onSelectMap={onSelectMap} onSelectNpc={onSelectNpc} />
+          <PresenterSidebarContent navigationSection={presenterSidebarSection} activeSection={presenterSection} selectedNpcId={selectedNpcId} onSelectMap={onSelectMap} onShowNpcs={onShowPresenterNpcs} onShowAllSections={onShowPresenterSections} onSelectNpc={onSelectNpc} />
         ) : section && section !== "Settings" ? (
           <div key={`section:${section}`} className="animate-in fade-in slide-in-from-right-2 duration-200">
           <SidebarGroup>

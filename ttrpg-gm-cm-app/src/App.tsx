@@ -43,6 +43,7 @@ function App() {
   const [leaveIntent, setLeaveIntent] = useState<LeaveIntent | null>(null);
   const [isPresenterView, setIsPresenterView] = useState(false);
   const [presenterSection, setPresenterSection] = useState<PresenterSection>("map");
+  const [presenterSidebarSection, setPresenterSidebarSection] = useState<"home" | "npcs">("home");
   const [selectedPresenterNpcId, setSelectedPresenterNpcId] = useState<string | null>(null);
   const presenterWorkspace = useRef<PresenterWorkspaceHandle>(null);
   const choiceResolver = useRef<((choice: UnsavedChoice) => void) | null>(null);
@@ -135,8 +136,11 @@ function App() {
             <AppSidebar
               isPresenterView={isPresenterView}
               presenterSection={presenterSection}
+              presenterSidebarSection={presenterSidebarSection}
               selectedNpcId={selectedPresenterNpcId}
               onSelectMap={() => presenterWorkspace.current?.openMap()}
+              onShowPresenterNpcs={() => setPresenterSidebarSection("npcs")}
+              onShowPresenterSections={() => setPresenterSidebarSection("home")}
               onSelectNpc={(id, name) => {
                 setSelectedPresenterNpcId(id);
                 setPresenterSection("npcs");
