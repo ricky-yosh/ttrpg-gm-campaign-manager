@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useId, useMemo, useRef, useState } from "react";
 import { useEditorRef, useEditorSelector, Plate, PlateContent, PlateElement, usePath, usePlateEditor, useSelected, withHOC } from "platejs/react";
 import type { PlateElementProps } from "platejs/react";
 import { KEYS, type TMediaElement } from "platejs";
@@ -8,11 +8,16 @@ import { CaptionPlugin, CaptionTextarea } from "@platejs/caption/react";
 import { ListPlugin } from "@platejs/list-classic/react";
 import { ImagePlugin } from "@platejs/media/react";
 import { Resizable, ResizableProvider, ResizeHandle, useResizableValue } from "@platejs/resizable";
-import { BoldIcon, Heading1Icon, Heading2Icon, Heading3Icon, ImageIcon, ItalicIcon, ListIcon, ListOrderedIcon, PilcrowIcon, QuoteIcon, UnderlineIcon } from "lucide-react";
+import { BoldIcon, Heading1Icon, Heading2Icon, Heading3Icon, ImageIcon, ItalicIcon, ListIcon, ListOrderedIcon, PencilIcon, PilcrowIcon, QuoteIcon, UnderlineIcon } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
 import { Separator } from "@/components/ui/separator";
 import { cn } from "cn";
-import { getCharacterNotes, saveCharacterNotes, useCampaign } from "@/lib/campaign-data";
+import { useCampaign, type NpcPresentation, type NpcReference } from "@/lib/campaign-data";
+import { NpcImageField } from "@/components/campaign/npc-image-field";
+import { Dnd55eStatblock } from "@/components/campaign/npc-statblock";
+import type { Value } from "platejs";
+import { saveNpcChanges } from "@/lib/campaign-data";
 
 const MAX_IMAGE_SIZE = 10 * 1024 * 1024;
 const MAX_IMAGE_DISPLAY_HEIGHT = 448;
@@ -355,22 +360,75 @@ function FormattingToolbar() {
 
 export function CharacterPanel({ params, api }: IDockviewPanelProps) {
   const id = typeof params.name === "string" ? params.name : "";
+  const panelId = useId();
   const npc = useCampaign((state) => state.campaign.npcs.find((item) => item.id === id));
-  const name = npc?.name ?? "Character";
   const scrollRef = useRef<HTMLElement>(null);
   const initialScrollTop = useRef(typeof params.scrollTop === "number" ? params.scrollTop : 0);
+  const editor = usePlateEditor({
+    id: `character-notes:${id}`,
+    plugins: characterEditorPlugins,
+    value: () => structuredClone(npc?.notes ?? [{ type: "p", children: [{ text: "" }] }]),
+  });
+  const [isEditing, setIsEditing] = useState(false);
+  const [isWide, setIsWide] = useState(false);
+  const [draftName, setDraftName] = useState(npc?.name ?? "");
+  const [draftPresentation, setDraftPresentation] = useState<NpcPresentation | null>(
+    npc?.presentation ? structuredClone(npc.presentation) : null,
+  );
+  const [draftNotes, setDraftNotes] = useState<Value>(structuredClone(npc?.notes ?? [{ type: "p", children: [{ text: "" }] }]));
+
   useEffect(() => {
     const frame = requestAnimationFrame(() => { if (scrollRef.current) scrollRef.current.scrollTop = initialScrollTop.current; });
     return () => cancelAnimationFrame(frame);
   }, []);
-  const editor = usePlateEditor({
-    id: `character-notes:${id}`,
-    plugins: characterEditorPlugins,
-    value: () => structuredClone(getCharacterNotes(id)),
-  });
+
   useEffect(() => {
-    if (npc && JSON.stringify(editor.children) !== JSON.stringify(npc.notes)) editor.tf.setValue(structuredClone(npc.notes));
-  }, [editor, npc]);
+    const element = scrollRef.current;
+    if (!element) return;
+    const updateWidth = () => setIsWide(element.clientWidth >= 900);
+    updateWidth();
+    const observer = new ResizeObserver(updateWidth);
+    observer.observe(element);
+    return () => observer.disconnect();
+  }, []);
+
+  useEffect(() => {
+    if (!npc) return;
+    const notes = structuredClone(npc.notes);
+    setDraftName(npc.name);
+    setDraftPresentation(structuredClone(npc.presentation));
+    setDraftNotes(notes);
+    setIsEditing(false);
+    editor.tf.setValue(notes);
+  }, [editor, id, npc]);
+
+  const hasChanges = useMemo(() => {
+    if (!npc || !draftPresentation) return false;
+    return draftName !== npc.name
+      || JSON.stringify(draftPresentation) !== JSON.stringify(npc.presentation)
+      || JSON.stringify(draftNotes) !== JSON.stringify(npc.notes);
+  }, [draftName, draftNotes, draftPresentation, npc]);
+
+  const updatePresentation = (change: Partial<NpcPresentation>) => {
+    setDraftPresentation((current) => current ? { ...current, ...change } : current);
+  };
+
+  const handleCancel = () => {
+    if (!npc) return;
+    const notes = structuredClone(npc.notes);
+    setDraftName(npc.name);
+    setDraftPresentation(structuredClone(npc.presentation));
+    setDraftNotes(notes);
+    editor.tf.setValue(notes);
+    setIsEditing(false);
+  };
+
+  const handleSave = () => {
+    if (!npc || !draftPresentation) return;
+    saveNpcChanges(id, { name: draftName.trim() || npc.name, notes: draftNotes, presentation: draftPresentation });
+    setIsEditing(false);
+  };
+
   const handleEditorKeyDown = (event: React.KeyboardEvent<HTMLDivElement>) => {
     if (event.key !== "Enter" || event.shiftKey || event.altKey || event.ctrlKey || event.metaKey) return;
 
@@ -407,30 +465,216 @@ export function CharacterPanel({ params, api }: IDockviewPanelProps) {
     return true;
   };
 
+  if (!npc || !draftPresentation) {
+    return <article className="h-full overflow-auto p-8"><p className="text-sm text-muted-foreground">This NPC is no longer available.</p></article>;
+  }
+
+  const presentation = draftPresentation;
+  const reference = presentation.gmReference;
+  const setReference = (key: keyof NpcReference, value: string) => {
+    updatePresentation({ gmReference: { ...reference, [key]: value } });
+  };
+  const imageUrl = (image: NpcPresentation["banner"]) => image?.url ?? null;
+  const toImage = (url: string | null): NpcPresentation["banner"] => url ? { type: "img", url } : null;
+
+  const referenceGroups: { title: string; fields: { key: keyof NpcReference; label: string }[] }[] = [
+    { title: "Background", fields: [{ key: "background", label: "Background" }] },
+    { title: "Characteristics", fields: [
+      { key: "wants", label: "Wants" }, { key: "ideals", label: "Ideals" }, { key: "bond", label: "Bond" },
+      { key: "flaw", label: "Flaw" }, { key: "secrets", label: "Secrets" }, { key: "reaction", label: "Reaction" },
+    ] },
+    { title: "Roleplaying", fields: [
+      { key: "personality", label: "Personality" }, { key: "mannerisms", label: "Mannerisms" },
+      { key: "notableActions", label: "Notable actions" }, { key: "voice", label: "Voice" },
+    ] },
+    { title: "Relationships", fields: [
+      { key: "allies", label: "Allies" }, { key: "enemies", label: "Enemies" }, { key: "other", label: "Other" },
+    ] },
+  ];
+
+  const renderReference = () => (
+    <div className="space-y-4">
+      <h2 className="text-base font-semibold">GM Reference</h2>
+      {referenceGroups.map((group) => {
+        const fields = group.fields.filter(({ key }) => isEditing || reference[key].trim());
+        if (!fields.length) return null;
+        return (
+          <section key={group.title} className="border-t pt-3 first:border-0 first:pt-0">
+            <h2 className="mb-2 text-sm font-semibold">{group.title}</h2>
+            <div className="space-y-2.5">
+              {fields.map(({ key, label }) => (
+                <div key={key} className="space-y-1">
+                  <h3 className="text-sm font-medium text-muted-foreground">{label}</h3>
+                  {isEditing ? (
+                    <textarea
+                      aria-label={label}
+                      value={reference[key]}
+                      onChange={(event) => setReference(key, event.currentTarget.value)}
+                      rows={key === "background" ? 4 : 2}
+                      placeholder={`Add ${label.toLowerCase()}…`}
+                      className="w-full resize-y rounded-md border border-input bg-background px-3 py-2 text-sm leading-6 outline-none placeholder:text-muted-foreground focus-visible:border-ring focus-visible:ring-3 focus-visible:ring-ring/50"
+                    />
+                  ) : <p className="whitespace-pre-wrap text-sm leading-6">{reference[key]}</p>}
+                </div>
+              ))}
+            </div>
+          </section>
+        );
+      })}
+    </div>
+  );
+
+  const renderPortrait = () => (
+    <div className={cn(isWide && "w-full max-w-[48%]")}>
+      <NpcImageField
+        editable={isEditing}
+        label="Portrait"
+        value={imageUrl(presentation.portrait)}
+        onChange={(url) => updatePresentation({ portrait: toImage(url) })}
+        aspectRatio="4 / 5"
+        fit="contain"
+      />
+    </div>
+  );
+
+  const renderPublicDescription = (withPortrait = false) => (
+    <section aria-labelledby={`${panelId}-player-description-heading`} className="rounded-xl border bg-card p-4">
+      <div className="mb-3 flex items-center gap-2">
+        <h2 id={`${panelId}-player-description-heading`} className="font-semibold">Description for Players</h2>
+        <span className="rounded-full bg-primary/10 px-2 py-0.5 text-xs font-medium text-primary">Public</span>
+      </div>
+      <div className={cn("flex flex-col gap-4", withPortrait && "sm:flex-row")}>
+        {withPortrait && (
+          <div className="w-full shrink-0 sm:w-1/3">
+            <NpcImageField
+              editable={isEditing}
+              label="Portrait"
+              value={imageUrl(presentation.portrait)}
+              onChange={(url) => updatePresentation({ portrait: toImage(url) })}
+              aspectRatio="4 / 5"
+              fit="contain"
+            />
+          </div>
+        )}
+        <div className="min-w-0 flex-1">
+          {isEditing ? (
+            <textarea
+              aria-label="Description for Players"
+              value={presentation.playerDescription}
+              onChange={(event) => updatePresentation({ playerDescription: event.currentTarget.value })}
+              rows={4}
+              placeholder="Write a few sentences players can see when this NPC is presented…"
+              className="w-full resize-y rounded-md border border-input bg-background px-3 py-2 text-sm leading-6 outline-none placeholder:text-muted-foreground focus-visible:border-ring focus-visible:ring-3 focus-visible:ring-ring/50"
+            />
+          ) : (
+            <p className="whitespace-pre-wrap text-sm leading-6 text-muted-foreground">
+              {presentation.playerDescription || "No player description has been added yet."}
+            </p>
+          )}
+        </div>
+      </div>
+    </section>
+  );
+
+  const renderStatblock = () => presentation.statblock.fieldSetId === "dnd-5.5e" ? (
+    <div className={cn(isWide && "mb-5 ml-6 w-[48%] float-right")}>
+      <p className="mb-2 text-xs font-medium uppercase tracking-wide text-muted-foreground">D&amp;D 5.5e Statblock</p>
+      <Dnd55eStatblock
+        value={presentation.statblock.data}
+        editable={isEditing}
+        onChange={(data) => updatePresentation({ statblock: { ...presentation.statblock, data } })}
+        fallbackName={npc.name}
+        tokenImage={presentation.statblock.tokenImage?.url ?? null}
+        onTokenImageChange={(url) => updatePresentation({ statblock: {
+          ...presentation.statblock,
+          tokenImage: url ? { type: "img", url } : null,
+        } })}
+      />
+    </div>
+  ) : (
+    <section className={cn("rounded-xl border bg-card p-4", isWide && "mb-5 ml-6 w-[48%] float-right")}>
+      <h2 className="font-semibold">Statblock</h2>
+      <p className="mt-2 text-sm text-muted-foreground">
+        This statblock uses the unsupported ruleset <span className="font-medium">{presentation.statblock.fieldSetId}</span> (version {presentation.statblock.fieldSetVersion}). Its data is preserved, but this view cannot edit or display it yet.
+      </p>
+    </section>
+  );
+
+  const renderNotes = () => (
+    <section aria-label={`${npc.name} GM notes`} className="overflow-hidden rounded-xl border bg-card">
+      <div className="border-b px-4 py-3">
+        <h2 className="font-semibold">GM Notes</h2>
+        <p className="text-xs text-muted-foreground">Private reference notes</p>
+      </div>
+      <Plate editor={editor} onValueChange={({ value }) => setDraftNotes(value)}>
+        {isEditing && <FormattingToolbar />}
+        <PlateContent
+          aria-label={`${npc.name} private notes`}
+          placeholder="Add private notes about this NPC…"
+          readOnly={!isEditing}
+          onKeyDown={isEditing ? handleEditorKeyDown : undefined}
+          className="min-h-40 px-4 py-3 text-sm leading-6 outline-none [&_p]:mb-3 [&_p:last-child]:mb-0 [&_h1]:mb-3 [&_h1]:mt-5 [&_h1]:text-xl [&_h1]:font-semibold [&_h1]:leading-tight [&_h1:first-child]:mt-0 [&_h2]:mb-2 [&_h2]:mt-4 [&_h2]:text-lg [&_h2]:font-semibold [&_h2]:leading-tight [&_h2:first-child]:mt-0 [&_h3]:mb-2 [&_h3]:mt-3 [&_h3]:text-base [&_h3]:font-semibold [&_h3]:leading-tight [&_h3:first-child]:mt-0 [&_blockquote]:my-4 [&_blockquote]:border-l-2 [&_blockquote]:border-border [&_blockquote]:pl-4 [&_blockquote]:italic [&_ul]:my-3 [&_ul]:list-disc [&_ul]:pl-6 [&_ol]:my-3 [&_ol]:list-decimal [&_ol]:pl-6 [&_li]:pl-1"
+        />
+      </Plate>
+    </section>
+  );
+
   return (
     <article ref={scrollRef} className="h-full overflow-auto p-8" onScroll={(event) => {
       api.updateParameters({ scrollTop: event.currentTarget.scrollTop });
       window.dispatchEvent(new Event("campaign-workspace-change"));
     }}>
-      <p className="mb-2 text-xs font-medium uppercase tracking-wide text-muted-foreground">NPC</p>
-      <h1 className="text-2xl font-semibold">{name}</h1>
-      <p className="mt-3 max-w-prose text-sm text-muted-foreground">
-        Private campaign notes. Use Save to keep your changes.
-      </p>
-      <section aria-label={`${name} notes`} className="mt-6 max-w-3xl overflow-hidden rounded-xl border bg-card">
-        <Plate
-          editor={editor}
-          onValueChange={({ value }) => saveCharacterNotes(id, value)}
-        >
-          <FormattingToolbar />
-          <PlateContent
-            aria-label={`${name} notes editor`}
-            placeholder="Add notes about this character…"
-            onKeyDown={handleEditorKeyDown}
-            className="min-h-60 px-4 py-3 text-sm leading-6 outline-none [&_p]:mb-3 [&_p:last-child]:mb-0 [&_h1]:mb-3 [&_h1]:mt-5 [&_h1]:text-xl [&_h1]:font-semibold [&_h1]:leading-tight [&_h1:first-child]:mt-0 [&_h2]:mb-2 [&_h2]:mt-4 [&_h2]:text-lg [&_h2]:font-semibold [&_h2]:leading-tight [&_h2:first-child]:mt-0 [&_h3]:mb-2 [&_h3]:mt-3 [&_h3]:text-base [&_h3]:font-semibold [&_h3]:leading-tight [&_h3:first-child]:mt-0 [&_blockquote]:my-4 [&_blockquote]:border-l-2 [&_blockquote]:border-border [&_blockquote]:pl-4 [&_blockquote]:italic [&_ul]:my-3 [&_ul]:list-disc [&_ul]:pl-6 [&_ol]:my-3 [&_ol]:list-decimal [&_ol]:pl-6 [&_li]:pl-1"
-          />
-        </Plate>
-      </section>
+      <header className="mb-5 flex flex-wrap items-start justify-between gap-4">
+        <div className="min-w-0 flex-1">
+          <p className="mb-1 text-xs font-medium uppercase tracking-wide text-muted-foreground">NPC</p>
+          {isEditing ? (
+            <Input aria-label="NPC name" value={draftName} onChange={(event) => setDraftName(event.currentTarget.value)} className="max-w-3xl" />
+          ) : <h1 className="font-serif text-2xl font-semibold">{npc.name}</h1>}
+          {!isEditing && <p className="mt-1 text-sm text-muted-foreground">NPC reference</p>}
+        </div>
+        <div className="flex shrink-0 gap-2">
+          {isEditing ? (
+            <>
+              {hasChanges && <span className="self-center text-sm text-muted-foreground">Unsaved changes</span>}
+              <Button type="button" variant="outline" onClick={handleCancel}>Cancel</Button>
+              <Button type="button" onClick={handleSave} disabled={!hasChanges}>Save changes</Button>
+            </>
+          ) : (
+            <Button type="button" variant="outline" onClick={() => setIsEditing(true)}>
+              <PencilIcon aria-hidden="true" /> Edit
+            </Button>
+          )}
+        </div>
+      </header>
+
+      {(isEditing || presentation.banner) && (
+        <NpcImageField
+          editable={isEditing}
+          label="Banner"
+          value={imageUrl(presentation.banner)}
+          onChange={(url) => updatePresentation({ banner: toImage(url) })}
+          aspectRatio="7 / 1"
+          fit="cover"
+          className="mb-5"
+        />
+      )}
+
+      {isWide ? (
+        <div className="flow-root">
+          {renderStatblock()}
+          <div className="mb-5 max-w-[48%]">{renderPublicDescription(true)}</div>
+          <div className="mt-5 space-y-5">{renderReference()}</div>
+          <div className="clear-both pt-5">{renderNotes()}</div>
+        </div>
+      ) : (
+        <div className="space-y-5">
+          {renderPortrait()}
+          {renderStatblock()}
+          {renderPublicDescription()}
+          {renderReference()}
+          {renderNotes()}
+        </div>
+      )}
     </article>
   );
 }

@@ -3,6 +3,8 @@ import { DockviewReact, themeDark, themeLight, type DockviewApi, type IDockviewP
 import { MapIcon, UsersIcon } from "lucide-react";
 import { Empty, EmptyDescription, EmptyHeader, EmptyMedia, EmptyTitle } from "@/components/ui/empty";
 import { WorkspaceEmptyState } from "@/components/campaign/workspace-empty-state";
+import { NpcPlayerCard } from "@/components/campaign/npc-player-card";
+import { useCampaign } from "@/lib/campaign-data";
 
 export type PresenterSection = "map" | "npcs";
 export type PresenterWorkspaceHandle = {
@@ -16,6 +18,21 @@ type PresenterPanelParams = { section: PresenterSection; npcId?: string; npcName
 function PresenterPanel({ params }: IDockviewPanelProps) {
   const isNpc = params?.section === "npcs";
   const npcName = typeof params?.npcName === "string" ? params.npcName : null;
+  const npcId = typeof params?.npcId === "string" ? params.npcId : null;
+  const npc = useCampaign((state) => state.campaign.npcs.find((item) => item.id === npcId));
+
+  if (isNpc && npc) {
+    return (
+      <div className="flex size-full min-h-0 flex-col overflow-auto bg-background p-6">
+        <p className="mb-6 text-xs font-medium uppercase tracking-[0.16em] text-muted-foreground">Player preview</p>
+        <NpcPlayerCard content={{
+          name: npc.name,
+          description: npc.presentation.playerDescription,
+          portraitUrl: npc.presentation.portrait?.url ?? null,
+        }} className="my-auto" />
+      </div>
+    );
+  }
 
   return (
     <div className="flex size-full min-h-0 items-center justify-center bg-background p-6">
@@ -29,7 +46,7 @@ function PresenterPanel({ params }: IDockviewPanelProps) {
           </EmptyTitle>
           <EmptyDescription>
             {isNpc
-              ? "This NPC currently has GM notes only. Public presentation details will be needed before they can appear on the player display."
+              ? "This NPC could not be found. Choose another NPC from the Presenter sidebar."
               : "Map selection and live preview controls will be added here. The separate player display stays in its own window."}
           </EmptyDescription>
         </EmptyHeader>

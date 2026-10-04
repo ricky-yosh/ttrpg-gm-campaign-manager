@@ -12,12 +12,12 @@ import { SettingsPanel } from "@/components/campaign/settings-panel";
 import { Workspaces, type WorkspaceHandle } from "@/components/campaign/workspaces";
 import { Topbar } from "@/components/campaign/topbar";
 import { PresenterView, type PresenterSection, type PresenterWorkspaceHandle } from "@/components/campaign/presenter-view";
-import { leaveCampaign, listenForCampaignOpens, saveCampaign, setUnsavedChoiceHandler, useCampaign, type LeaveIntent, type UnsavedChoice } from "@/lib/campaign-data";
+import { getCampaign, leaveCampaign, listenForCampaignOpens, saveCampaign, setUnsavedChoiceHandler, useCampaign, type LeaveIntent, type UnsavedChoice } from "@/lib/campaign-data";
 import { appCommands, registerWorkspaceCommands } from "@/lib/app-commands";
 import { useSessionStore } from "@/stores/session-store";
 import { useAppearance } from "@/hooks/use-appearance";
 import { cn } from "@/lib/utils";
-import { publishPresentationStatus, type PresentationStatus } from "@/lib/presentation-window";
+import { closePlayerPresentationWindow, publishPresentationContent, publishPresentationStatus, type PlayerPresentationContent, type PresentationStatus } from "@/lib/presentation-window";
 import "@/lib/session-lifecycle";
 import "./App.css";
 import "dockview-react/dist/styles/dockview.css";
@@ -34,14 +34,27 @@ function CampaignAutosave() {
   return null;
 }
 
+function getPlayerPresentationContent(npcId: string | null): PlayerPresentationContent {
+  if (!npcId) return null;
+  const npc = getCampaign().campaign.npcs.find((item) => item.id === npcId);
+  if (!npc) return null;
+  return {
+    name: npc.name,
+    description: npc.presentation.playerDescription,
+    portraitUrl: npc.presentation.portrait?.url ?? null,
+  };
+}
+
 function App() {
-  const { campaignName, generation, isLeaving, hasPath } = useCampaign(useShallow((state) => ({
-    campaignName: state.campaign.name, generation: state.generation, isLeaving: state.isLeaving, hasPath: state.path !== null,
+  const { campaignName, generation, isLeaving, hasPath, campaignRevision } = useCampaign(useShallow((state) => ({
+    campaignName: state.campaign.name, generation: state.generation, isLeaving: state.isLeaving,
+    hasPath: state.path !== null, campaignRevision: state.revision,
   })));
   const section = useSessionStore((state) => state.section);
   const sidebarOpen = useSessionStore((state) => state.sidebar.open);
   const presenterSidebarOpen = useSessionStore((state) => state.presenterSidebar.open);
   const isPresenting = useSessionStore((state) => state.presentationStartedAt !== null || state.presentationPaused);
+  const presentationPaused = useSessionStore((state) => state.presentationPaused);
   const { appearance, isDark, setAppearance } = useAppearance();
   const [leaveIntent, setLeaveIntent] = useState<LeaveIntent | null>(null);
   const [isPresenterView, setIsPresenterView] = useState(false);
@@ -49,6 +62,8 @@ function App() {
   const [presenterSidebarSection, setPresenterSidebarSection] = useState<"home" | "npcs">("home");
   const [selectedPresenterNpcId, setSelectedPresenterNpcId] = useState<string | null>(null);
   const presenterWorkspace = useRef<PresenterWorkspaceHandle>(null);
+  const activePresenterNpcId = useRef<string | null>(null);
+  const lastLivePresentationContent = useRef<PlayerPresentationContent>(null);
   const choiceResolver = useRef<((choice: UnsavedChoice) => void) | null>(null);
   const workspaces = useRef<WorkspaceHandle>(null);
   const closeActiveTab = () => {
@@ -97,32 +112,46 @@ function App() {
     if (!isTauri()) return;
     let disposed = false;
     let unlistenReady: (() => void) | undefined;
-    let unlistenClosed: (() => void) | undefined;
+    let unlistenCloseConfirmed: (() => void) | undefined;
     const status = () => {
       const state = useSessionStore.getState();
       const currentStatus: PresentationStatus = state.presentationPaused
         ? "paused"
         : state.presentationStartedAt === null ? "stopped" : "live";
       void publishPresentationStatus(currentStatus);
+      void publishPresentationContent(currentStatus === "paused"
+        ? lastLivePresentationContent.current
+        : getPlayerPresentationContent(activePresenterNpcId.current));
     };
 
     void Promise.all([
       listen("presentation-player-ready", status),
-      listen("presentation-player-closed", () => {
+      listen("presentation-player-close-confirmed", async () => {
         useSessionStore.getState().stopPresentation();
-        status();
+        try {
+          await closePlayerPresentationWindow();
+        } catch (error) {
+          console.error("Could not close the confirmed player presentation window", error);
+          await publishPresentationStatus("stopped");
+        }
       }),
-    ]).then(([ready, closed]) => {
-      if (disposed) { ready(); closed(); }
-      else { unlistenReady = ready; unlistenClosed = closed; }
+    ]).then(([ready, closeConfirmed]) => {
+      if (disposed) { ready(); closeConfirmed(); }
+      else { unlistenReady = ready; unlistenCloseConfirmed = closeConfirmed; }
     });
 
     return () => {
       disposed = true;
       unlistenReady?.();
-      unlistenClosed?.();
+      unlistenCloseConfirmed?.();
     };
   }, []);
+  useEffect(() => {
+    if (!isPresenting || presentationPaused) return;
+    const content = getPlayerPresentationContent(selectedPresenterNpcId);
+    lastLivePresentationContent.current = content;
+    void publishPresentationContent(content);
+  }, [campaignRevision, isPresenting, presentationPaused, selectedPresenterNpcId]);
   useEffect(() => {
     const handleCloseTabShortcut = (event: KeyboardEvent) => {
       const isMacOS = /Mac|iPhone|iPad/.test(navigator.platform);
@@ -211,6 +240,7 @@ function App() {
                   ref={presenterWorkspace}
                   isDark={isDark}
                   onActiveSelectionChange={(nextSection, npcId) => {
+                    activePresenterNpcId.current = npcId;
                     setPresenterSection(nextSection);
                     setSelectedPresenterNpcId(npcId);
                   }}

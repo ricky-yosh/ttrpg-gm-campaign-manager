@@ -39,7 +39,7 @@ function useWorkspaceContext() {
 const characterComponents = { character: CharacterPanel, map: MapPrototypePanel };
 
 function WorkspacePanel({ api }: IDockviewPanelProps) {
-  const { isDark, panels, onSearch, onPanelReady } = useWorkspaceContext();
+  const { isDark, panels, onPanelReady } = useWorkspaceContext();
   const [hasPanels, setHasPanels] = useState(false);
   const [isVisible, setIsVisible] = useState(api.isVisible);
   const subscription = useRef<{ dispose: () => void } | null>(null);
@@ -79,7 +79,6 @@ function WorkspacePanel({ api }: IDockviewPanelProps) {
         <WorkspaceEmptyState
           className="absolute inset-0 h-full"
           description="Choose a section from the sidebar or search your campaign to open something in this workspace."
-          onSearch={onSearch}
         />
       )}
     </div>

@@ -14,7 +14,7 @@ import {
 import { Dialog, DialogDescription, DialogPopup, DialogTitle } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
 import { Kbd } from "@/components/ui/kbd";
-import { openCampaignAt, useCampaign } from "@/lib/campaign-data";
+import { openCampaignAt, statblockFieldSetLabel, useCampaign } from "@/lib/campaign-data";
 import { SidebarResizeHandle } from "@/components/ui/sidebar-resize-handle";
 import type { PresenterSection } from "@/components/campaign/presenter-view";
 import {
@@ -145,8 +145,9 @@ export function AppSidebar({ isPresenterView = false, presenterSection = "map", 
   onShowPresenterSections?: () => void;
   onSelectNpc?: (id: string, name: string) => void;
 } = {}) {
-  const { campaignName, campaignPath, campaignStatus, isLeaving } = useCampaign(useShallow((state) => ({
-    campaignName: state.campaign.name, campaignPath: state.path, campaignStatus: state.status, isLeaving: state.isLeaving,
+  const { campaignName, campaignPath, campaignStatus, statblockFieldSet, isLeaving } = useCampaign(useShallow((state) => ({
+    campaignName: state.campaign.name, campaignPath: state.path, campaignStatus: state.status,
+    statblockFieldSet: state.campaign.statblockFieldSet, isLeaving: state.isLeaving,
   })));
   const ids = useCampaign(useShallow((state) => state.campaign.npcs.map((npc) => npc.id)));
   const names = useCampaign(useShallow((state) => state.campaign.npcs.map((npc) => npc.name)));
@@ -196,7 +197,7 @@ export function AppSidebar({ isPresenterView = false, presenterSection = "map", 
                     <Dice5Icon aria-hidden="true" />
                     <span className="flex flex-1 flex-col gap-0.5 group-data-[collapsible=icon]:hidden">
                       <span>{campaignName}</span>
-                      <span className="text-xs text-muted-foreground">D&D 5.5e</span>
+                      <span className="text-xs text-muted-foreground">{statblockFieldSetLabel(statblockFieldSet)}</span>
                     </span>
                     <ChevronsUpDownIcon className="group-data-[collapsible=icon]:hidden" aria-hidden="true" />
                   </SidebarMenuButton>

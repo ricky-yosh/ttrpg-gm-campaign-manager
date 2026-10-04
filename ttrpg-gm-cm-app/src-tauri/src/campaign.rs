@@ -19,6 +19,8 @@ pub struct Campaign {
     name: String,
     created_at: String,
     updated_at: String,
+    #[serde(default)]
+    statblock_field_set: StatblockFieldSet,
     npcs: Vec<Npc>,
     workspace: Option<Workspace>,
     section: Option<String>,
@@ -31,6 +33,94 @@ struct Npc {
     id: String,
     name: String,
     notes: Vec<Value>,
+    #[serde(default)]
+    presentation: NpcPresentation,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+struct StatblockFieldSet {
+    id: String,
+    version: u32,
+}
+
+impl Default for StatblockFieldSet {
+    fn default() -> Self {
+        Self {
+            id: "dnd-5.5e".into(),
+            version: 1,
+        }
+    }
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+struct NpcPresentation {
+    banner: Option<NpcImage>,
+    portrait: Option<NpcImage>,
+    player_description: String,
+    #[serde(alias = "reference")]
+    gm_reference: NpcGmReference,
+    statblock: NpcStatblock,
+}
+
+impl Default for NpcPresentation {
+    fn default() -> Self {
+        Self {
+            banner: None,
+            portrait: None,
+            player_description: String::new(),
+            gm_reference: NpcGmReference::default(),
+            statblock: NpcStatblock::default(),
+        }
+    }
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+struct NpcImage {
+    #[serde(rename = "type")]
+    kind: String,
+    url: String,
+}
+
+#[derive(Debug, Clone, Default, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+struct NpcGmReference {
+    background: String,
+    wants: String,
+    ideals: String,
+    bond: String,
+    flaw: String,
+    secrets: String,
+    reaction: String,
+    personality: String,
+    mannerisms: String,
+    notable_actions: String,
+    voice: String,
+    allies: String,
+    enemies: String,
+    other: String,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+struct NpcStatblock {
+    field_set_id: String,
+    field_set_version: u32,
+    token_image: Option<NpcImage>,
+    data: Value,
+}
+
+impl Default for NpcStatblock {
+    fn default() -> Self {
+        Self {
+            field_set_id: "dnd-5.5e".into(),
+            field_set_version: 1,
+            token_image: None,
+            data: Value::Object(Default::default()),
+        }
+    }
 }
 
 #[derive(Debug, Serialize, Deserialize)]
@@ -55,29 +145,58 @@ struct NavigationHistory {
     index: i32,
 }
 #[derive(Debug, Serialize, Deserialize)]
-#[serde(tag = "kind", rename_all = "camelCase", rename_all_fields = "camelCase")]
+#[serde(
+    tag = "kind",
+    rename_all = "camelCase",
+    rename_all_fields = "camelCase"
+)]
 enum Destination {
-    Character { workspace_id: String, character_id: String, section: Option<String> },
-    Map { workspace_id: String, section: Option<String> },
-    Workspace { workspace_id: String, section: Option<String> },
+    Character {
+        workspace_id: String,
+        character_id: String,
+        section: Option<String>,
+    },
+    Map {
+        workspace_id: String,
+        section: Option<String>,
+    },
+    Workspace {
+        workspace_id: String,
+        section: Option<String>,
+    },
     Settings,
-    Section { section: Option<String> },
+    Section {
+        section: Option<String>,
+    },
 }
 
 // Existing campaign packages used untyped NPC destinations. Normalize on read so
 // the next save writes the current format without changing database versions.
 fn deserialize_destinations<'de, D>(deserializer: D) -> Result<Vec<Destination>, D::Error>
-where D: serde::Deserializer<'de> {
+where
+    D: serde::Deserializer<'de>,
+{
     #[derive(Deserialize)]
     #[serde(untagged)]
     enum StoredDestination {
         Current(Destination),
-        Legacy { #[serde(rename = "workspaceId")] workspace_id: String, name: String },
+        Legacy {
+            #[serde(rename = "workspaceId")]
+            workspace_id: String,
+            name: String,
+        },
     }
-    Ok(Vec::<StoredDestination>::deserialize(deserializer)?.into_iter().map(|entry| match entry {
-        StoredDestination::Current(destination) => destination,
-        StoredDestination::Legacy { workspace_id, name } => Destination::Character { workspace_id, character_id: name, section: None },
-    }).collect())
+    Ok(Vec::<StoredDestination>::deserialize(deserializer)?
+        .into_iter()
+        .map(|entry| match entry {
+            StoredDestination::Current(destination) => destination,
+            StoredDestination::Legacy { workspace_id, name } => Destination::Character {
+                workspace_id,
+                character_id: name,
+                section: None,
+            },
+        })
+        .collect())
 }
 
 fn validate_layout(layout: &Value, components: &[&str]) -> Result<(), String> {
@@ -95,7 +214,10 @@ fn validate_layout(layout: &Value, components: &[&str]) -> Result<(), String> {
         .as_object()
         .ok_or("Workspace has no panels.")?;
     for (id, panel) in panels {
-        if panel["id"].as_str() != Some(id) || !panel["contentComponent"].as_str().is_some_and(|component| components.contains(&component))
+        if panel["id"].as_str() != Some(id)
+            || !panel["contentComponent"]
+                .as_str()
+                .is_some_and(|component| components.contains(&component))
         {
             return Err("Unknown workspace panel.".into());
         }
@@ -170,9 +292,37 @@ impl Campaign {
             for node in &npc.notes {
                 validate_node(node)?;
             }
+            if npc.presentation.statblock.field_set_id.is_empty()
+                || npc.presentation.statblock.field_set_version == 0
+            {
+                return Err("NPC statblock field set is invalid.".into());
+            }
+            for image in [
+                npc.presentation.banner.as_ref(),
+                npc.presentation.portrait.as_ref(),
+                npc.presentation.statblock.token_image.as_ref(),
+            ]
+            .into_iter()
+            .flatten()
+            {
+                if image.kind != "img" {
+                    return Err("NPC presentation images must use type 'img'.".into());
+                }
+            }
         }
         Ok(())
     }
+}
+
+fn transform_presentation_images(
+    presentation: &mut NpcPresentation,
+    folder: &Path,
+    saving: bool,
+) -> Result<(), String> {
+    let mut value = serde_json::to_value(&*presentation).map_err(|e| e.to_string())?;
+    transform_images(&mut value, folder, saving)?;
+    *presentation = serde_json::from_value(value).map_err(|e| e.to_string())?;
+    Ok(())
 }
 
 fn validate_node(node: &Value) -> Result<(), String> {
@@ -334,6 +484,14 @@ fn ensure_schema(connection: &mut Connection) -> Result<(), String> {
             npc_id TEXT PRIMARY KEY NOT NULL REFERENCES npc(id) ON DELETE CASCADE,
             document_json TEXT NOT NULL
         );
+        CREATE TABLE IF NOT EXISTS campaign_settings (
+            campaign_id TEXT PRIMARY KEY NOT NULL REFERENCES campaign(id) ON DELETE CASCADE,
+            statblock_field_set_json TEXT NOT NULL
+        );
+        CREATE TABLE IF NOT EXISTS npc_presentation (
+            npc_id TEXT PRIMARY KEY NOT NULL REFERENCES npc(id) ON DELETE CASCADE,
+            presentation_json TEXT NOT NULL
+        );
         CREATE TABLE IF NOT EXISTS workspace_state (
             state_key TEXT PRIMARY KEY NOT NULL,
             value_json TEXT NOT NULL
@@ -368,6 +526,7 @@ fn write_campaign(folder: &Path, mut campaign: Campaign) -> Result<(), String> {
         for node in &mut npc.notes {
             transform_images(node, folder, true)?;
         }
+        transform_presentation_images(&mut npc.presentation, folder, true)?;
     }
 
     let db_path = folder.join("campaign.sqlite");
@@ -411,6 +570,11 @@ fn write_transaction(transaction: &Transaction<'_>, campaign: &Campaign) -> Resu
         updated_at=excluded.updated_at,section=excluded.section,sidebar_width=excluded.sidebar_width,sidebar_open=excluded.sidebar_open",
         params![campaign.id, campaign.name, campaign.schema_version, campaign.created_at, campaign.updated_at,
             campaign.section, campaign.sidebar.width, campaign.sidebar.open as i32]).map_err(|e| e.to_string())?;
+    transaction.execute(
+        "INSERT INTO campaign_settings (campaign_id,statblock_field_set_json) VALUES (?1,?2)
+         ON CONFLICT(campaign_id) DO UPDATE SET statblock_field_set_json=excluded.statblock_field_set_json",
+        params![campaign.id, serde_json::to_string(&campaign.statblock_field_set).map_err(|e| e.to_string())?],
+    ).map_err(|e| e.to_string())?;
     transaction
         .execute("DELETE FROM npc WHERE campaign_id = ?1", [&campaign.id])
         .map_err(|e| e.to_string())?;
@@ -427,6 +591,15 @@ fn write_transaction(transaction: &Transaction<'_>, campaign: &Campaign) -> Resu
                 params![
                     npc.id,
                     serde_json::to_string(&npc.notes).map_err(|e| e.to_string())?
+                ],
+            )
+            .map_err(|e| e.to_string())?;
+        transaction
+            .execute(
+                "INSERT INTO npc_presentation (npc_id,presentation_json) VALUES (?1,?2)",
+                params![
+                    npc.id,
+                    serde_json::to_string(&npc.presentation).map_err(|e| e.to_string())?
                 ],
             )
             .map_err(|e| e.to_string())?;
@@ -485,6 +658,22 @@ fn read_campaign(folder: &Path) -> Result<Campaign, String> {
         .map_err(|e| e.to_string())?
         .ok_or("Campaign database has no campaign record.")?;
     let (id, name, schema_version, created_at, updated_at, section, width, open) = campaign_row;
+    let statblock_field_set = if table_exists(&connection, "campaign_settings")? {
+        connection
+            .query_row(
+                "SELECT statblock_field_set_json FROM campaign_settings WHERE campaign_id=?1",
+                [&id],
+                |row| row.get::<_, String>(0),
+            )
+            .optional()
+            .map_err(|e| e.to_string())?
+            .map(|json| serde_json::from_str(&json).map_err(|e| e.to_string()))
+            .transpose()?
+            .unwrap_or_default()
+    } else {
+        StatblockFieldSet::default()
+    };
+    let has_npc_presentation = table_exists(&connection, "npc_presentation")?;
     let mut statement = connection.prepare("SELECT npc.id,npc.name,npc_notes.document_json FROM npc JOIN npc_notes ON npc_notes.npc_id=npc.id WHERE npc.campaign_id=?1 ORDER BY npc.sort_order").map_err(|e| e.to_string())?;
     let npcs = statement
         .query_map([&id], |row| {
@@ -500,11 +689,39 @@ fn read_campaign(folder: &Path) -> Result<Campaign, String> {
                 id: row.get(0)?,
                 name: row.get(1)?,
                 notes,
+                presentation: NpcPresentation::default(),
             })
         })
         .map_err(|e| e.to_string())?
         .collect::<Result<Vec<_>, _>>()
         .map_err(|e| e.to_string())?;
+    let mut npcs = npcs;
+    if has_npc_presentation {
+        let mut statement = connection.prepare(
+            "SELECT npc_presentation.npc_id,npc_presentation.presentation_json FROM npc_presentation JOIN npc ON npc.id=npc_presentation.npc_id WHERE npc.campaign_id=?1"
+        ).map_err(|e| e.to_string())?;
+        let rows = statement
+            .query_map([&id], |row| {
+                Ok((row.get::<_, String>(0)?, row.get::<_, String>(1)?))
+            })
+            .map_err(|e| e.to_string())?;
+        let mut saved_presentations = HashMap::new();
+        for row in rows {
+            let (npc_id, json) = row.map_err(|e| e.to_string())?;
+            saved_presentations.insert(
+                npc_id,
+                serde_json::from_str::<NpcPresentation>(&json).map_err(|e| e.to_string())?,
+            );
+        }
+        for npc in &mut npcs {
+            if let Some(presentation) = saved_presentations.remove(&npc.id) {
+                npc.presentation = presentation;
+            }
+        }
+        if !saved_presentations.is_empty() {
+            return Err("Campaign contains presentation data for an unknown NPC.".into());
+        }
+    }
     let workspace_json: Option<String> = connection
         .query_row(
             "SELECT value_json FROM workspace_state WHERE state_key='workspace'",
@@ -523,6 +740,7 @@ fn read_campaign(folder: &Path) -> Result<Campaign, String> {
         name,
         created_at,
         updated_at,
+        statblock_field_set,
         npcs,
         workspace,
         section,
@@ -533,8 +751,19 @@ fn read_campaign(folder: &Path) -> Result<Campaign, String> {
         for node in &mut npc.notes {
             transform_images(node, folder, false)?;
         }
+        transform_presentation_images(&mut npc.presentation, folder, false)?;
     }
     Ok(campaign)
+}
+
+fn table_exists(connection: &Connection, name: &str) -> Result<bool, String> {
+    connection
+        .query_row(
+            "SELECT EXISTS(SELECT 1 FROM sqlite_master WHERE type='table' AND name=?1)",
+            [name],
+            |row| row.get(0),
+        )
+        .map_err(|e| e.to_string())
 }
 
 #[tauri::command]
@@ -570,10 +799,14 @@ mod tests {
     fn legacy_navigation_history_is_normalized_on_read() {
         let history: NavigationHistory = serde_json::from_value(json!({
             "entries": [{"workspaceId": "workspace:1", "name": "npc-1"}], "index": 0
-        })).unwrap();
-        assert_eq!(serde_json::to_value(history).unwrap(), json!({
-            "entries": [{"kind": "character", "workspaceId": "workspace:1", "characterId": "npc-1", "section": null}], "index": 0
-        }));
+        }))
+        .unwrap();
+        assert_eq!(
+            serde_json::to_value(history).unwrap(),
+            json!({
+                "entries": [{"kind": "character", "workspaceId": "workspace:1", "characterId": "npc-1", "section": null}], "index": 0
+            })
+        );
     }
 
     #[test]
@@ -599,9 +832,16 @@ mod tests {
         ], "index": 4});
         let expected = value.clone();
         write_campaign(&path, serde_json::from_value(value.clone()).unwrap()).unwrap();
-        assert_eq!(serde_json::to_value(read_campaign(&path).unwrap()).unwrap(), expected);
-        value["workspace"]["panels"]["workspace:1"]["panels"]["map:prototype"]["contentComponent"] = json!("unknown");
-        assert!(serde_json::from_value::<Campaign>(value).unwrap().validate().is_err());
+        assert_eq!(
+            serde_json::to_value(read_campaign(&path).unwrap()).unwrap(),
+            expected
+        );
+        value["workspace"]["panels"]["workspace:1"]["panels"]["map:prototype"]
+            ["contentComponent"] = json!("unknown");
+        assert!(serde_json::from_value::<Campaign>(value)
+            .unwrap()
+            .validate()
+            .is_err());
     }
 
     #[test]
@@ -626,6 +866,68 @@ mod tests {
         assert_eq!(serde_json::to_value(&reopened).unwrap(), expected);
         write_campaign(&moved, reopened).unwrap();
         assert_eq!(fs::read_dir(moved.join("assets")).unwrap().count(), 1);
+    }
+
+    #[test]
+    fn legacy_package_without_npc_presentation_storage_opens_with_defaults() {
+        let folder = tempfile::tempdir().unwrap();
+        let path = folder.path().join("legacy.campaign");
+        write_campaign(&path, example()).unwrap();
+        let connection = Connection::open(path.join("campaign.sqlite")).unwrap();
+        connection
+            .execute_batch("DROP TABLE npc_presentation; DROP TABLE campaign_settings;")
+            .unwrap();
+        let opened = read_campaign(&path).unwrap();
+        let value = serde_json::to_value(opened).unwrap();
+        assert_eq!(
+            value["statblockFieldSet"],
+            json!({"id":"dnd-5.5e","version":1})
+        );
+        assert_eq!(value["npcs"][0]["presentation"]["playerDescription"], "");
+        assert_eq!(
+            value["npcs"][0]["presentation"]["statblock"]["data"],
+            json!({})
+        );
+    }
+
+    #[test]
+    fn npc_presentation_and_all_images_round_trip_through_assets() {
+        let folder = tempfile::tempdir().unwrap();
+        let path = folder.path().join("presentation.campaign");
+        let mut value = serde_json::to_value(example()).unwrap();
+        value["statblockFieldSet"] = json!({"id":"dnd-5.5e","version":1});
+        value["npcs"][0]["presentation"] = json!({
+            "banner":{"type":"img","url":"data:image/png;base64,YmFubmVy"},
+            "portrait":{"type":"img","url":"data:image/jpeg;base64,cG9ydHJhaXQ="},
+            "playerDescription":"A cautious scout.",
+            "gmReference":{
+                "background":"A traveler.","wants":"Safety","ideals":"Truth","bond":"The village",
+                "flaw":"Distrustful","secrets":"Knows the pass","reaction":"Withdraws",
+                "personality":"Patient","mannerisms":"Studies tracks","notableActions":"Leaves markers",
+                "voice":"Soft","allies":"Rangers","enemies":"Bandits","other":""
+            },
+            "statblock":{
+                "fieldSetId":"dnd-5.5e","fieldSetVersion":1,
+                "tokenImage":{"type":"img","url":"data:image/webp;base64,dG9rZW4="},
+                "data":{"armorClass":15,"actions":[{"name":"Track","description":"Follow a trail."}]}
+            }
+        });
+        let expected = value.clone();
+        write_campaign(&path, serde_json::from_value(value).unwrap()).unwrap();
+        let db = Connection::open(path.join("campaign.sqlite")).unwrap();
+        let stored: String = db
+            .query_row(
+                "SELECT presentation_json FROM npc_presentation WHERE npc_id='npc-1'",
+                [],
+                |row| row.get(0),
+            )
+            .unwrap();
+        assert!(stored.contains("assets/"));
+        assert_eq!(fs::read_dir(path.join("assets")).unwrap().count(), 4);
+        assert_eq!(
+            serde_json::to_value(read_campaign(&path).unwrap()).unwrap(),
+            expected
+        );
     }
 
     #[test]
