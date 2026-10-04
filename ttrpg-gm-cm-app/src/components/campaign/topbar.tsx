@@ -10,6 +10,7 @@ import { appCommands } from "@/lib/app-commands";
 import { selectCanGoBack, selectCanGoForward, useSessionStore } from "@/stores/session-store";
 import { CampaignControls } from "@/components/campaign/campaign-controls";
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
+import { closePlayerPresentationWindow, openPlayerPresentationWindow, publishPresentationStatus } from "@/lib/presentation-window";
 
 export function Topbar({ isPresenterView, onTogglePresenterView }: {
   isPresenterView: boolean;
@@ -179,8 +180,10 @@ export function Topbar({ isPresenterView, onTogglePresenterView }: {
             aria-label={presentationPaused ? "Resume presentation" : "Pause presentation"}
             title={presentationPaused ? "Resume presentation" : "Pause presentation"}
             onClick={() => {
-              if (presentationPaused) useSessionStore.getState().resumePresentation();
-              else useSessionStore.getState().pausePresentation();
+              const session = useSessionStore.getState();
+              if (presentationPaused) session.resumePresentation();
+              else session.pausePresentation();
+              void publishPresentationStatus(presentationPaused ? "live" : "paused");
             }}
           >
             {presentationPaused ? <PlayIcon className="size-3" /> : <PauseIcon className="size-3" />}
@@ -193,8 +196,16 @@ export function Topbar({ isPresenterView, onTogglePresenterView }: {
           aria-label={isPresenting ? "Stop presentation" : "Start presentation"}
           title={isPresenting ? "Stop presentation" : "Start presentation"}
           onClick={() => {
-            if (isPresenting) useSessionStore.getState().stopPresentation();
-            else useSessionStore.getState().startPresentation();
+            if (isPresenting) {
+              useSessionStore.getState().stopPresentation();
+              void publishPresentationStatus("stopped");
+              void closePlayerPresentationWindow();
+            } else {
+              void openPlayerPresentationWindow().then(() => {
+                useSessionStore.getState().startPresentation();
+                return publishPresentationStatus("live");
+              }).catch((error: unknown) => console.error("Could not open the player presentation window", error));
+            }
           }}
         >
           {isPresenting ? <SquareIcon className="size-3" /> : <PlayIcon className="size-3" />}

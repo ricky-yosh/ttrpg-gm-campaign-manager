@@ -1,6 +1,7 @@
 import { useEffect, useLayoutEffect, useRef, useState } from "react";
 import { useShallow } from "zustand/react/shallow";
 import { isTauri } from "@tauri-apps/api/core";
+import { listen } from "@tauri-apps/api/event";
 import { getCurrentWindow } from "@tauri-apps/api/window";
 import { Button } from "@/components/ui/button";
 import { Dialog, DialogDescription, DialogPopup, DialogTitle } from "@/components/ui/dialog";
@@ -16,6 +17,7 @@ import { appCommands, registerWorkspaceCommands } from "@/lib/app-commands";
 import { useSessionStore } from "@/stores/session-store";
 import { useAppearance } from "@/hooks/use-appearance";
 import { cn } from "@/lib/utils";
+import { publishPresentationStatus, type PresentationStatus } from "@/lib/presentation-window";
 import "@/lib/session-lifecycle";
 import "./App.css";
 import "dockview-react/dist/styles/dockview.css";
@@ -86,6 +88,36 @@ function App() {
       closing = false;
     }).then((unlisten) => { if (disposed) unlisten(); else stop = unlisten; });
     return () => { disposed = true; stop?.(); };
+  }, []);
+  useEffect(() => {
+    if (!isTauri()) return;
+    let disposed = false;
+    let unlistenReady: (() => void) | undefined;
+    let unlistenClosed: (() => void) | undefined;
+    const status = () => {
+      const state = useSessionStore.getState();
+      const currentStatus: PresentationStatus = state.presentationPaused
+        ? "paused"
+        : state.presentationStartedAt === null ? "stopped" : "live";
+      void publishPresentationStatus(currentStatus);
+    };
+
+    void Promise.all([
+      listen("presentation-player-ready", status),
+      listen("presentation-player-closed", () => {
+        useSessionStore.getState().stopPresentation();
+        status();
+      }),
+    ]).then(([ready, closed]) => {
+      if (disposed) { ready(); closed(); }
+      else { unlistenReady = ready; unlistenClosed = closed; }
+    });
+
+    return () => {
+      disposed = true;
+      unlistenReady?.();
+      unlistenClosed?.();
+    };
   }, []);
   useEffect(() => {
     const handleCloseTabShortcut = (event: KeyboardEvent) => {

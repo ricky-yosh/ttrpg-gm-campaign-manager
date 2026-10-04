@@ -9,6 +9,10 @@
     "opener:default",
     "dialog:allow-open",
     "dialog:allow-save",
-    "core:window:allow-destroy"
+    "core:window:allow-destroy",
+    "core:window:allow-show",
+    "core:window:allow-set-focus",
+    "core:webview:allow-create-webview-window",
+    "core:event:allow-emit"
   ]
 }
