@@ -16,6 +16,7 @@ import { Button } from "@/components/ui/button";
 import { Kbd } from "@/components/ui/kbd";
 import { openCampaignAt, useCampaign } from "@/lib/campaign-data";
 import { SidebarResizeHandle } from "@/components/ui/sidebar-resize-handle";
+import type { PresenterSection } from "@/components/campaign/presenter-view";
 import {
   DropdownMenu, DropdownMenuContent, DropdownMenuGroup, DropdownMenuItem, DropdownMenuLabel,
   DropdownMenuSeparator, DropdownMenuTrigger,
@@ -57,17 +58,77 @@ const destinations = [
   { label: "Puzzles", icon: PuzzleIcon },
 ];
 
-export function AppSidebar() {
+function PresenterSidebarContent({ section, selectedNpcId, onSelectMap, onSelectNpc }: {
+  section: PresenterSection;
+  selectedNpcId: string | null;
+  onSelectMap: () => void;
+  onSelectNpc: (id: string, name: string) => void;
+}) {
+  const ids = useCampaign(useShallow((state) => state.campaign.npcs.map((npc) => npc.id)));
+  const names = useCampaign(useShallow((state) => state.campaign.npcs.map((npc) => npc.name)));
+
+  return (
+    <>
+      <SidebarGroup>
+        <SidebarGroupLabel>Player views</SidebarGroupLabel>
+        <SidebarGroupContent>
+          <SidebarMenu>
+            <SidebarMenuItem>
+              <SidebarMenuButton isActive={section === "map"} tooltip="Map" onClick={onSelectMap}>
+                <MapIcon aria-hidden="true" />
+                <span>Map</span>
+              </SidebarMenuButton>
+            </SidebarMenuItem>
+          </SidebarMenu>
+        </SidebarGroupContent>
+      </SidebarGroup>
+      <SidebarGroup>
+        <SidebarGroupLabel>NPCs</SidebarGroupLabel>
+        <SidebarGroupContent>
+          <nav aria-label="NPC references">
+            <SidebarMenu>
+              {ids.length ? ids.map((id, index) => (
+                <SidebarMenuItem key={id}>
+                  <SidebarMenuButton
+                    tooltip={names[index]}
+                    isActive={section === "npcs" && selectedNpcId === id}
+                    onClick={() => onSelectNpc(id, names[index])}
+                  >
+                    <UsersIcon aria-hidden="true" />
+                    <span>{names[index]}</span>
+                  </SidebarMenuButton>
+                </SidebarMenuItem>
+              )) : (
+                <li className="px-2 py-2 text-sm text-muted-foreground">No NPCs in this campaign yet.</li>
+              )}
+            </SidebarMenu>
+          </nav>
+        </SidebarGroupContent>
+      </SidebarGroup>
+    </>
+  );
+}
+
+export function AppSidebar({ isPresenterView = false, presenterSection = "map", selectedNpcId = null, onSelectMap = () => {}, onSelectNpc = () => {} }: {
+  isPresenterView?: boolean;
+  presenterSection?: PresenterSection;
+  selectedNpcId?: string | null;
+  onSelectMap?: () => void;
+  onSelectNpc?: (id: string, name: string) => void;
+} = {}) {
   const { campaignName, campaignPath, campaignStatus, isLeaving } = useCampaign(useShallow((state) => ({
     campaignName: state.campaign.name, campaignPath: state.path, campaignStatus: state.status, isLeaving: state.isLeaving,
   })));
   const ids = useCampaign(useShallow((state) => state.campaign.npcs.map((npc) => npc.id)));
   const names = useCampaign(useShallow((state) => state.campaign.npcs.map((npc) => npc.name)));
   const section = useSessionStore((state) => state.section);
-  const sidebarWidth = useSessionStore((state) => state.sidebar.width);
+  const sidebarWidth = useSessionStore((state) => isPresenterView ? state.presenterSidebar.width : state.sidebar.width);
   const isShortcutsOpen = useSessionStore((state) => state.shortcutsOpen);
   const setIsShortcutsOpen = useSessionStore((state) => state.setShortcutsOpen);
-  const setSidebarWidth = (width: number) => useSessionStore.getState().setSidebar({ width });
+  const setSidebarWidth = (width: number) => {
+    if (isPresenterView) useSessionStore.getState().setPresenterSidebar({ width });
+    else useSessionStore.getState().setSidebar({ width });
+  };
   const { isMobile, open, setOpen } = useSidebar();
   const [recentCampaigns, setRecentCampaigns] = useState<RecentCampaign[]>(readRecentCampaigns);
   const isMacOS = typeof navigator !== "undefined" && /Mac|iPhone|iPad/.test(navigator.platform);
@@ -119,7 +180,9 @@ export function AppSidebar() {
       </SidebarHeader>
       <SidebarSeparator />
       <SidebarContent>
-        {section && section !== "Settings" ? (
+        {isPresenterView ? (
+          <PresenterSidebarContent section={presenterSection} selectedNpcId={selectedNpcId} onSelectMap={onSelectMap} onSelectNpc={onSelectNpc} />
+        ) : section && section !== "Settings" ? (
           <div key={`section:${section}`} className="animate-in fade-in slide-in-from-right-2 duration-200">
           <SidebarGroup>
             <SidebarGroupLabel className="sr-only">{section} navigation</SidebarGroupLabel>
@@ -210,27 +273,31 @@ export function AppSidebar() {
           </div>
         )}
       </SidebarContent>
-      <SidebarSeparator />
-      <SidebarFooter>
-        {section === null && (
-          <div key="root-actions" className="animate-in fade-in slide-in-from-left-2 duration-200">
-            <SidebarMenu>
-              <SidebarMenuItem>
-                <SidebarMenuButton tooltip="Keyboard shortcuts" onClick={appCommands.openShortcuts} title="Keyboard shortcuts">
-                  <CircleHelpIcon aria-hidden="true" />
-                  <span>Keyboard shortcuts</span>
-                </SidebarMenuButton>
-              </SidebarMenuItem>
-              <SidebarMenuItem>
-                <SidebarMenuButton tooltip="Settings" onClick={() => selectSection("Settings")}>
-                  <SettingsIcon aria-hidden="true" />
-                  <span>Settings</span>
-                </SidebarMenuButton>
-              </SidebarMenuItem>
-            </SidebarMenu>
-          </div>
-        )}
-      </SidebarFooter>
+      {!isPresenterView && (
+        <>
+          <SidebarSeparator />
+          <SidebarFooter>
+            {section === null && (
+              <div key="root-actions" className="animate-in fade-in slide-in-from-left-2 duration-200">
+                <SidebarMenu>
+                  <SidebarMenuItem>
+                    <SidebarMenuButton tooltip="Keyboard shortcuts" onClick={appCommands.openShortcuts} title="Keyboard shortcuts">
+                      <CircleHelpIcon aria-hidden="true" />
+                      <span>Keyboard shortcuts</span>
+                    </SidebarMenuButton>
+                  </SidebarMenuItem>
+                  <SidebarMenuItem>
+                    <SidebarMenuButton tooltip="Settings" onClick={() => selectSection("Settings")}>
+                      <SettingsIcon aria-hidden="true" />
+                      <span>Settings</span>
+                    </SidebarMenuButton>
+                  </SidebarMenuItem>
+                </SidebarMenu>
+              </div>
+            )}
+          </SidebarFooter>
+        </>
+      )}
       {!isMobile && (
         <SidebarResizeHandle
           label="Resize campaign sidebar"

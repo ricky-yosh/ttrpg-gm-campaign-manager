@@ -10,6 +10,7 @@ export type LegacyNavigationHistory = { entries: { workspaceId: string; name: st
 export type StoredNavigationHistory = NavigationHistory | LegacyNavigationHistory;
 type WorkspaceTab = { id: string; title: string };
 type SidebarState = { width: number; open: boolean };
+type PresenterSidebarState = { width: number; open: boolean };
 type CampaignSession = {
   section: string | null;
   sidebar: SidebarState;
@@ -21,6 +22,7 @@ export type SessionState = {
   generation: number;
   section: string | null;
   sidebar: SidebarState;
+  presenterSidebar: PresenterSidebarState;
   commandPaletteOpen: boolean;
   npcDialogOpen: boolean;
   campaignDialogOpen: boolean;
@@ -40,6 +42,7 @@ export type SessionState = {
   openSettings: () => void;
   leaveSettings: () => void;
   setSidebar: (sidebar: Partial<SidebarState>) => void;
+  setPresenterSidebar: (sidebar: Partial<PresenterSidebarState>) => void;
   setCommandPaletteOpen: (open: boolean) => void;
   setNpcDialogOpen: (open: boolean) => void;
   setCampaignDialogOpen: (open: boolean) => void;
@@ -94,6 +97,7 @@ export const useSessionStore = create<SessionState>()((set, get) => ({
   generation: 0,
   section: null,
   sidebar: { width: 256, open: true },
+  presenterSidebar: { width: 256, open: true },
   commandPaletteOpen: false,
   npcDialogOpen: false,
   campaignDialogOpen: false,
@@ -117,6 +121,7 @@ export const useSessionStore = create<SessionState>()((set, get) => ({
   openSettings: () => get().setSection("Settings"),
   leaveSettings: () => { if (get().section === "Settings") set({ section: null }); },
   setSidebar: (sidebar) => set((state) => ({ sidebar: { ...state.sidebar, ...sidebar } })),
+  setPresenterSidebar: (sidebar) => set((state) => ({ presenterSidebar: { ...state.presenterSidebar, ...sidebar } })),
   setCommandPaletteOpen: (commandPaletteOpen) => set({ commandPaletteOpen }),
   setNpcDialogOpen: (npcDialogOpen) => set({ npcDialogOpen }),
   setCampaignDialogOpen: (campaignDialogOpen) => set({ campaignDialogOpen }),
@@ -192,6 +197,7 @@ export function hydrateSession(campaign: CampaignSession, generation: number) {
     generation,
     section: campaign.section,
     sidebar: { ...campaign.sidebar },
+    presenterSidebar: { width: 256, open: true },
     commandPaletteOpen: false,
     npcDialogOpen: false,
     campaignDialogOpen: false,
