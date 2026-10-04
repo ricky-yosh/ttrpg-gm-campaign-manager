@@ -15,6 +15,7 @@ import { leaveCampaign, listenForCampaignOpens, saveCampaign, setUnsavedChoiceHa
 import { appCommands, registerWorkspaceCommands } from "@/lib/app-commands";
 import { useSessionStore } from "@/stores/session-store";
 import { useAppearance } from "@/hooks/use-appearance";
+import { cn } from "@/lib/utils";
 import "@/lib/session-lifecycle";
 import "./App.css";
 import "dockview-react/dist/styles/dockview.css";
@@ -148,7 +149,7 @@ function App() {
               }}
             />
             <div className="relative flex min-h-0 min-w-0 flex-1">
-              <div className="absolute inset-0 flex" hidden={isPresenterView} aria-hidden={isPresenterView} inert={isPresenterView}>
+              <div className={cn("absolute inset-0", isPresenterView ? "hidden" : "flex")} aria-hidden={isPresenterView} inert={isPresenterView}>
                 <main aria-label="Campaign workspace" className="relative flex min-h-0 min-w-0 flex-1 flex-col">
                   {section === "Settings" && (
                     <div className="relative z-10 flex min-h-0 flex-1 flex-col">
@@ -161,11 +162,12 @@ function App() {
                 </main>
               </div>
               <div
-                className={`absolute inset-0 flex ${isPresenterView ? "" : "invisible pointer-events-none"}`}
+                className={cn("absolute inset-0", isPresenterView ? "flex" : "hidden")}
                 aria-hidden={!isPresenterView}
                 inert={!isPresenterView}
               >
                 <PresenterView
+                  key={generation}
                   ref={presenterWorkspace}
                   isDark={isDark}
                   onActiveSelectionChange={(nextSection, npcId) => {
