@@ -4,7 +4,7 @@ import { appCommands } from "@/lib/app-commands";
 import { useSessionStore } from "@/stores/session-store";
 import {
   ArrowLeftIcon, BookOpenIcon, ChevronsUpDownIcon, CircleHelpIcon, Dice5Icon, FlagIcon, FolderOpenIcon,
-  LayoutDashboardIcon, MapIcon, PackageIcon, PaletteIcon, PuzzleIcon, ScrollTextIcon, SettingsIcon, UserPlusIcon, UsersIcon,
+  LayoutDashboardIcon, MapIcon, MonitorIcon, PackageIcon, PaletteIcon, PuzzleIcon, ScrollTextIcon, SettingsIcon, UserPlusIcon, UsersIcon,
 } from "lucide-react";
 import {
   Sidebar, SidebarContent, SidebarFooter, SidebarGroup, SidebarGroupContent,
@@ -175,35 +175,51 @@ export function AppSidebar({ isPresenterView = false, presenterSection = "map", 
       <SidebarHeader>
         <SidebarMenu>
           <SidebarMenuItem>
-            <DropdownMenu>
-              <DropdownMenuTrigger disabled={isLeaving} render={
-                <SidebarMenuButton size="lg" tooltip="Recent campaigns" title="Recent campaigns">
-                  <Dice5Icon aria-hidden="true" />
-                  <span className="flex flex-1 flex-col gap-0.5 group-data-[collapsible=icon]:hidden">
-                    <span>{campaignName}</span>
-                    <span className="text-xs text-muted-foreground">D&D 5.5e</span>
-                  </span>
-                  <ChevronsUpDownIcon className="group-data-[collapsible=icon]:hidden" aria-hidden="true" />
-                </SidebarMenuButton>
-              } />
-              <DropdownMenuContent className="w-64" align="start">
-                <DropdownMenuGroup>
-                  <DropdownMenuLabel>Recent campaigns</DropdownMenuLabel>
-                  {recentCampaigns.length ? recentCampaigns.map((campaign) => (
-                    <DropdownMenuItem key={campaign.path} onClick={() => void openCampaignAt(campaign.path)}>
-                      <span className="flex min-w-0 flex-col">
-                        <span className="truncate">{campaign.name}</span>
-                        <span className="truncate text-xs text-muted-foreground">{campaign.path}</span>
-                      </span>
-                    </DropdownMenuItem>
-                  )) : <DropdownMenuItem disabled>No recent campaigns</DropdownMenuItem>}
-                </DropdownMenuGroup>
-                <DropdownMenuSeparator />
-                <DropdownMenuItem onClick={() => void appCommands.openCampaign()}>
-                  <FolderOpenIcon aria-hidden="true" />Open campaign…
-                </DropdownMenuItem>
-              </DropdownMenuContent>
-            </DropdownMenu>
+            {isPresenterView ? (
+              <SidebarMenuButton
+                render={<div />}
+                size="lg"
+                className="cursor-default hover:bg-transparent hover:text-sidebar-foreground active:bg-transparent active:text-sidebar-foreground"
+                title={`Campaign: ${campaignName} · Presenter View`}
+                aria-label={`Campaign: ${campaignName}. Presenter View.`}
+              >
+                <MonitorIcon aria-hidden="true" />
+                <span className="flex min-w-0 flex-1 flex-col gap-0.5 group-data-[collapsible=icon]:hidden">
+                  <span className="truncate">{campaignName}</span>
+                  <span className="text-xs text-muted-foreground">Presenter View</span>
+                </span>
+              </SidebarMenuButton>
+            ) : (
+              <DropdownMenu>
+                <DropdownMenuTrigger disabled={isLeaving} render={
+                  <SidebarMenuButton size="lg" tooltip="Recent campaigns" title="Recent campaigns">
+                    <Dice5Icon aria-hidden="true" />
+                    <span className="flex flex-1 flex-col gap-0.5 group-data-[collapsible=icon]:hidden">
+                      <span>{campaignName}</span>
+                      <span className="text-xs text-muted-foreground">D&D 5.5e</span>
+                    </span>
+                    <ChevronsUpDownIcon className="group-data-[collapsible=icon]:hidden" aria-hidden="true" />
+                  </SidebarMenuButton>
+                } />
+                <DropdownMenuContent className="w-64" align="start">
+                  <DropdownMenuGroup>
+                    <DropdownMenuLabel>Recent campaigns</DropdownMenuLabel>
+                    {recentCampaigns.length ? recentCampaigns.map((campaign) => (
+                      <DropdownMenuItem key={campaign.path} onClick={() => void openCampaignAt(campaign.path)}>
+                        <span className="flex min-w-0 flex-col">
+                          <span className="truncate">{campaign.name}</span>
+                          <span className="truncate text-xs text-muted-foreground">{campaign.path}</span>
+                        </span>
+                      </DropdownMenuItem>
+                    )) : <DropdownMenuItem disabled>No recent campaigns</DropdownMenuItem>}
+                  </DropdownMenuGroup>
+                  <DropdownMenuSeparator />
+                  <DropdownMenuItem onClick={() => void appCommands.openCampaign()}>
+                    <FolderOpenIcon aria-hidden="true" />Open campaign…
+                  </DropdownMenuItem>
+                </DropdownMenuContent>
+              </DropdownMenu>
+            )}
           </SidebarMenuItem>
         </SidebarMenu>
       </SidebarHeader>
