@@ -5,10 +5,12 @@
   "type": "module",
   "scripts": {
     "dev": "vite",
+    "devtools": "pnpm dlx --allow-build=electron react-devtools",
     "build": "tsc && vite build",
     "lint": "oxlint",
     "preview": "vite preview",
     "tauri": "tauri",
+    "tauri:devtools": "REACT_DEVTOOLS=1 tauri dev",
     "test": "node --experimental-strip-types --test tests/*.test.mjs"
   },
   "dependencies": {

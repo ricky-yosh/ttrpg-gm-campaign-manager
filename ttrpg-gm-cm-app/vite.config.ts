@@ -7,7 +7,22 @@ const host = process.env.TAURI_DEV_HOST;
 
 // https://vite.dev/config/
 export default defineConfig(() => ({
-  plugins: [react(), tailwindcss()],
+  plugins: [
+    react(),
+    tailwindcss(),
+    {
+      name: "react-devtools",
+      apply: "serve",
+      transformIndexHtml() {
+        if (process.env.REACT_DEVTOOLS !== "1") return;
+        return [{
+          tag: "script",
+          attrs: { src: "http://localhost:8097" },
+          injectTo: "head-prepend",
+        }];
+      },
+    },
+  ],
   resolve: {
     alias: {
       "@": new URL("./src", import.meta.url).pathname,

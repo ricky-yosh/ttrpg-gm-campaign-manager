@@ -17,6 +17,34 @@ cd ttrpg-gm-cm-app
 
 These are the Tauri CLI's standard development and build commands; see the [Tauri project guide](https://tauri.app/start/create-project/).
 
+## Inspect React components in the Tauri desktop app
+
+The shortcuts are defined in `ttrpg-gm-cm-app/package.json`. On macOS, use the standalone React Developer Tools app to inspect React components, props, and state in the Tauri window.
+
+From the app directory, open React DevTools in one terminal:
+
+```sh
+pnpm devtools
+```
+
+This runs `pnpm dlx --allow-build=electron react-devtools`. It downloads the tool into pnpm's temporary package cache, allows Electron's installer to run, and opens the DevTools window. The tool is not added as an app dependency. Leave that terminal and window running.
+
+Stop any existing Tauri development process, then start the app from a second terminal:
+
+```sh
+pnpm tauri:devtools
+```
+
+This runs `REACT_DEVTOOLS=1 tauri dev`, equivalent to `REACT_DEVTOOLS=1 pnpm tauri dev`. The environment variable enables Vite's connection script at `http://localhost:8097` before React loads. These environment-variable commands work in macOS/Linux shells.
+
+DevTools initially shows **Waiting for React to connect**. Once Tauri loads, the **Components** tab shows the React component tree. Open an NPC panel to inspect `CharacterPanel`, `NpcGmReference`, `NpcPlayerDescription`, and `NpcNotesEditor`. Use the component picker to select UI in the Tauri window, or select a component in the tree to inspect its props and state.
+
+Normal `pnpm tauri dev` leaves the connection disabled. Production builds exclude the connection script, even if `REACT_DEVTOOLS=1` is set.
+
+If the first tool installation reports **Electron failed to install correctly**, use Node 22 or 24 for installation and check the active version with `node --version`. Node 26 can exit before Electron's ZIP extraction finishes, leaving a partial cached installation. If switching Node versions still reuses that broken pnpm cache, launch `npx --yes react-devtools` under Node 22 or 24 to install through npm's separate cache. Keep the same Tauri connection command.
+
+See the [React Developer Tools guide](https://react.dev/learn/react-developer-tools) and [pnpm's build approval option](https://pnpm.io/cli/pnx#--allow-build) for the standalone connection and installer setup.
+
 ## Clean generated files
 
 Usually no cleanup is needed. Use these when a build is stale or you need to reclaim space:
