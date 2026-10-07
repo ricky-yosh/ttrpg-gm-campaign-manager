@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useRef } from "react";
 import { useEditorRef, useEditorSelector, Plate, PlateContent, PlateElement, usePath, usePlateEditor, useSelected, withHOC } from "platejs/react";
 import type { PlateElementProps } from "platejs/react";
 import { KEYS, type TMediaElement, type Value } from "platejs";
@@ -10,9 +10,8 @@ import { Resizable, ResizableProvider, ResizeHandle, useResizableValue } from "@
 import { Button } from "@/components/ui/button";
 import { Separator } from "@/components/ui/separator";
 import { cn } from "@/lib/utils";
-import { BoldIcon, Heading1Icon, Heading2Icon, Heading3Icon, ImageIcon, ItalicIcon, ListIcon, ListOrderedIcon, PilcrowIcon, QuoteIcon, UnderlineIcon } from "lucide-react";
+import { BoldIcon, Heading1Icon, Heading2Icon, Heading3Icon, ItalicIcon, ListIcon, ListOrderedIcon, PilcrowIcon, QuoteIcon, UnderlineIcon } from "lucide-react";
 
-const MAX_IMAGE_SIZE = 10 * 1024 * 1024;
 const MAX_IMAGE_DISPLAY_HEIGHT = 448;
 const MAX_INITIAL_IMAGE_WIDTH_RATIO = 0.85;
 
@@ -136,14 +135,12 @@ const characterEditorPlugins = [
   BasicBlocksPlugin,
   BasicMarksPlugin,
   ListPlugin,
-  ImagePlugin.withComponent(ImageElement),
+  ImagePlugin.configure({ options: { disableEmbedInsert: true, disableUploadInsert: true } }).withComponent(ImageElement),
   CaptionPlugin.configure({ options: { query: { allow: [KEYS.img] } } }),
 ];
 
 function FormattingToolbar() {
   const editor = useEditorRef();
-  const imageInputRef = useRef<HTMLInputElement>(null);
-  const [imageError, setImageError] = useState("");
   const boldActive = useEditorSelector((currentEditor) => currentEditor.api.hasMark("bold"), []);
   const italicActive = useEditorSelector((currentEditor) => currentEditor.api.hasMark("italic"), []);
   const underlineActive = useEditorSelector((currentEditor) => currentEditor.api.hasMark("underline"), []);
@@ -177,30 +174,6 @@ function FormattingToolbar() {
   );
 
   const preventSelectionLoss = (event: React.MouseEvent<HTMLButtonElement>) => event.preventDefault();
-
-  const handleImageChange = (event: React.ChangeEvent<HTMLInputElement>) => {
-    const files = event.currentTarget.files;
-    const file = files?.[0];
-    if (!file || !files) return;
-
-    if (!file.type.startsWith("image/")) {
-      setImageError("Choose an image file.");
-      event.currentTarget.value = "";
-      return;
-    }
-
-    if (file.size > MAX_IMAGE_SIZE) {
-      setImageError("Images must be 10 MB or smaller.");
-      event.currentTarget.value = "";
-      return;
-    }
-
-    setImageError("");
-    const selection = editor.selection;
-    if (selection) editor.tf.select(selection);
-    editor.getTransforms(ImagePlugin).insert.imageFromFiles(files, selection ? { at: selection } : undefined);
-    event.currentTarget.value = "";
-  };
 
   return (
     <div role="toolbar" aria-label="Text formatting" className="flex items-center gap-1 border-b p-2">
@@ -325,28 +298,6 @@ function FormattingToolbar() {
       >
         <ListOrderedIcon aria-hidden="true" />
       </Button>
-      <Separator orientation="vertical" className="mx-1 h-5" />
-      <Button
-        type="button"
-        size="icon-sm"
-        variant="ghost"
-        aria-label="Insert image"
-        title="Insert image"
-        onMouseDown={preventSelectionLoss}
-        onClick={() => imageInputRef.current?.click()}
-      >
-        <ImageIcon aria-hidden="true" />
-      </Button>
-      <input
-        ref={imageInputRef}
-        type="file"
-        accept="image/*"
-        aria-hidden="true"
-        tabIndex={-1}
-        className="sr-only"
-        onChange={handleImageChange}
-      />
-      {imageError && <span role="alert" className="ml-2 text-xs text-destructive">{imageError}</span>}
     </div>
   );
 }
