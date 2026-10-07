@@ -94,7 +94,7 @@ export function CharacterPanel({ params, api }: IDockviewPanelProps) {
     <div className={cn(isWide && "w-full max-w-[48%]")}>
       <NpcImageField
         editable={isEditing}
-        label="Portrait"
+        label=""
         value={imageUrl(presentation.portrait)}
         onChange={(url) => updatePresentation({ portrait: toImage(url) })}
         aspectRatio="4 / 5"
@@ -105,7 +105,6 @@ export function CharacterPanel({ params, api }: IDockviewPanelProps) {
 
   const renderStatblock = () => presentation.statblock.fieldSetId === "dnd-5.5e" ? (
     <div className={cn(isWide && "mb-5 ml-6 w-[48%] float-right")}>
-      <p className="mb-2 text-xs font-medium uppercase tracking-wide text-muted-foreground">D&amp;D 5.5e Statblock</p>
       <Dnd55eStatblock
         value={presentation.statblock.data}
         editable={isEditing}
@@ -171,7 +170,7 @@ export function CharacterPanel({ params, api }: IDockviewPanelProps) {
       {(isEditing || presentation.banner) && (
         <NpcImageField
           editable={isEditing}
-          label="Banner"
+          label=""
           value={imageUrl(presentation.banner)}
           onChange={(url) => updatePresentation({ banner: toImage(url) })}
           aspectRatio="7 / 1"
