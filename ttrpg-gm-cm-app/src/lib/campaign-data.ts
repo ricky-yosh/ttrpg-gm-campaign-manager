@@ -6,7 +6,7 @@ import { open, save } from "@tauri-apps/plugin-dialog";
 import { listen } from "@tauri-apps/api/event";
 import type { SerializedDockview } from "dockview-react";
 import type { Value } from "platejs";
-import type { Dnd55eStatblock } from "@/components/campaign/npc-statblock";
+import type { Dnd55eStatblock } from "@/lib/statblock-types";
 
 const demoCharacters = ["Carlos Tree", "Niya Jade", "Renot Force"] as const;
 export const characters = demoCharacters;
