@@ -1,3 +1,4 @@
+import { AutoSizeTextarea } from "@/components/ui/auto-size-textarea";
 import { useId } from "react";
 import { NpcImageField } from "@/components/campaign/npc-image-field";
 import { cn } from "@/lib/utils";
@@ -32,7 +33,7 @@ export function NpcPlayerDescription({
           <div className="w-full shrink-0 sm:w-1/3">
             <NpcImageField
               editable={editable}
-              label="Portrait"
+              label=""
               value={portraitUrl}
               onChange={onPortraitChange}
               aspectRatio="4 / 5"
@@ -42,13 +43,11 @@ export function NpcPlayerDescription({
         )}
         <div className="min-w-0 flex-1">
           {editable ? (
-            <textarea
+            <AutoSizeTextarea
               aria-label="Description for Players"
               value={description}
               onChange={(event) => onDescriptionChange(event.currentTarget.value)}
-              rows={4}
               placeholder="Write a few sentences players can see when this NPC is presented…"
-              className="w-full resize-y rounded-md border border-input bg-background px-3 py-2 text-sm leading-6 outline-none placeholder:text-muted-foreground focus-visible:border-ring focus-visible:ring-3 focus-visible:ring-ring/50"
             />
           ) : (
             <p className="whitespace-pre-wrap text-sm leading-6 text-muted-foreground">

@@ -1,7 +1,8 @@
+import { AutoSizeTextarea } from "@/components/ui/auto-size-textarea";
 import type { NpcReference } from "@/lib/campaign-data";
 
 const referenceGroups: { title: string; fields: { key: keyof NpcReference; label: string }[] }[] = [
-  { title: "Background", fields: [{ key: "background", label: "Background" }] },
+  { title: "Background", fields: [{ key: "background", label: "" }] },
   { title: "Characteristics", fields: [
     { key: "wants", label: "Wants" }, { key: "ideals", label: "Ideals" }, { key: "bond", label: "Bond" },
     { key: "flaw", label: "Flaw" }, { key: "secrets", label: "Secrets" }, { key: "reaction", label: "Reaction" },
@@ -36,13 +37,11 @@ export function NpcGmReference({ value: reference, editable, onChange }: NpcGmRe
                 <div key={key} className="space-y-1">
                   <h3 className="text-sm font-medium text-muted-foreground">{label}</h3>
                   {editable ? (
-                    <textarea
+                    <AutoSizeTextarea
                       aria-label={label}
                       value={reference[key]}
                       onChange={(event) => onChange(key, event.currentTarget.value)}
-                      rows={key === "background" ? 4 : 2}
                       placeholder={`Add ${label.toLowerCase()}…`}
-                      className="w-full resize-y rounded-md border border-input bg-background px-3 py-2 text-sm leading-6 outline-none placeholder:text-muted-foreground focus-visible:border-ring focus-visible:ring-3 focus-visible:ring-ring/50"
                     />
                   ) : <p className="whitespace-pre-wrap text-sm leading-6">{reference[key]}</p>}
                 </div>

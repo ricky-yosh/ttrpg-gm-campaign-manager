@@ -49,6 +49,8 @@ Simple UI motion, including token movement tweening and fades, belongs in the Re
 
 ## Implementation tooling
 
+See [Image import and WebP conversion](image-import.md) for the planned Rust conversion flow and frontend/storage responsibilities.
+
 Keep the existing **React + TypeScript + Vite / Tauri 2 + Rust** foundation. Use shadcn/ui, Tailwind CSS v4, and incremental `@shadcn/lint` rules as described in [UI/UX](ui-ux.md#ui-tooling-decision). Campaign storage remains SQLite plus an assets folder.
 
 ### Rust-to-TypeScript bindings

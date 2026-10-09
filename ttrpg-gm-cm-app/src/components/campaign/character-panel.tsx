@@ -104,7 +104,7 @@ export function CharacterPanel({ params, api }: IDockviewPanelProps) {
   );
 
   const renderStatblock = () => presentation.statblock.fieldSetId === "dnd-5.5e" ? (
-    <div className={cn(isWide && "mb-5 ml-6 w-[48%] float-right")}>
+    <div className={cn("min-w-0", isWide && !isEditing && "mb-5 ml-6 w-[48%] float-right")}>
       <Dnd55eStatblock
         value={presentation.statblock.data}
         editable={isEditing}
@@ -118,7 +118,7 @@ export function CharacterPanel({ params, api }: IDockviewPanelProps) {
       />
     </div>
   ) : (
-    <section className={cn("rounded-xl border bg-card p-4", isWide && "mb-5 ml-6 w-[48%] float-right")}>
+    <section className={cn("min-w-0 rounded-xl border bg-card p-4", isWide && !isEditing && "mb-5 ml-6 w-[48%] float-right")}>
       <h2 className="font-semibold">Statblock</h2>
       <p className="mt-2 text-sm text-muted-foreground">
         This statblock uses the unsupported ruleset <span className="font-medium">{presentation.statblock.fieldSetId}</span> (version {presentation.statblock.fieldSetVersion}). Its data is preserved, but this view cannot edit or display it yet.
@@ -150,7 +150,6 @@ export function CharacterPanel({ params, api }: IDockviewPanelProps) {
           {isEditing ? (
             <Input aria-label="NPC name" value={draftName} onChange={(event) => setDraftName(event.currentTarget.value)} className="max-w-3xl" />
           ) : <h1 className="font-serif text-2xl font-semibold">{npc.name}</h1>}
-          {!isEditing && <p className="mt-1 text-sm text-muted-foreground">NPC reference</p>}
         </div>
         <div className="flex shrink-0 gap-2">
           {isEditing ? (
@@ -179,7 +178,16 @@ export function CharacterPanel({ params, api }: IDockviewPanelProps) {
         />
       )}
 
-      {isWide ? (
+      {isWide && isEditing ? (
+        <div className="grid grid-cols-2 items-start gap-5">
+          <div className="flex min-w-0 flex-col gap-5">
+            {playerDescription}
+            {gmReference}
+          </div>
+          {renderStatblock()}
+          <div className="col-span-2 min-w-0">{notes}</div>
+        </div>
+      ) : isWide ? (
         <div className="flow-root">
           {renderStatblock()}
           <div className="mb-5 max-w-[48%]">{playerDescription}</div>

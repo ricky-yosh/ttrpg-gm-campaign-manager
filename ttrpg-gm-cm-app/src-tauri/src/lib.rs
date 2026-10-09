@@ -1,4 +1,5 @@
 mod campaign;
+mod images;
 use campaign::{open_campaign, save_campaign};
 use std::sync::Mutex;
 use tauri::{Manager, State};
@@ -26,6 +27,7 @@ pub fn run() {
             greet,
             open_campaign,
             save_campaign,
+            images::convert_image_to_webp,
             take_opened_campaigns
         ])
         .build(tauri::generate_context!())

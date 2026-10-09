@@ -8,6 +8,7 @@ import { cn } from "@/lib/utils";
 import { Separator } from "@/components/ui/separator";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { SidebarResizeHandle } from "@/components/ui/sidebar-resize-handle";
+import { convertImageToWebp, IMAGE_ACCEPT } from "@/lib/image-utils";
 
 type MapPin = { id: number; x: number; y: number };
 type Size = { width: number; height: number };
@@ -24,6 +25,9 @@ export function MapPrototypePanel() {
   const [addingPin, setAddingPin] = useState(false);
   const [spacePressed, setSpacePressed] = useState(false);
   const [camera, setCamera] = useState({ scale: 1, x: 0, y: 0 });
+  const uploadVersion = useRef(0);
+  const [imagePending, setImagePending] = useState(false);
+  useEffect(() => () => { uploadVersion.current++; }, []);
   const [error, setError] = useState<string | null>(null);
   const [pinSidebarWidth, setPinSidebarWidth] = useState(224);
   const [isPinSidebarCollapsed, setIsPinSidebarCollapsed] = useState(false);
@@ -79,17 +83,25 @@ export function MapPrototypePanel() {
     return { x: (viewport.width - width) / 2, y: (viewport.height - height) / 2, width, height };
   }, [image, viewport]);
 
-  const selectImage = (file?: File) => {
+  const selectImage = async (file?: File) => {
     if (!file) return;
-    if (!file.type.startsWith("image/")) {
-      setError("Choose an image file to use as your map.");
-      return;
-    }
+    const version = ++uploadVersion.current;
+    setImagePending(true);
     setError(null);
-    setPins([]);
-    setSelectedPin(null);
-    setCamera({ scale: 1, x: 0, y: 0 });
-    setImageUrl(URL.createObjectURL(file));
+    try {
+      const webp = await convertImageToWebp(file);
+      if (version !== uploadVersion.current) return;
+      setError(null);
+      setPins([]);
+      setSelectedPin(null);
+      setCamera({ scale: 1, x: 0, y: 0 });
+      setImageUrl(URL.createObjectURL(webp));
+    } catch (conversionError) {
+      if (version !== uploadVersion.current) return;
+      setError(conversionError instanceof Error ? conversionError.message : "This image could not be converted. Try another file.");
+    } finally {
+      if (version === uploadVersion.current) setImagePending(false);
+    }
   };
 
   const changeZoom = (factor: number, anchor?: { x: number; y: number }) => {
@@ -124,15 +136,16 @@ export function MapPrototypePanel() {
       <input
         ref={fileRef}
         type="file"
-        accept="image/*"
+        accept={IMAGE_ACCEPT}
         aria-label="Choose a map image"
         className="sr-only"
         onChange={(event) => {
-          selectImage(event.currentTarget.files?.[0]);
+          void selectImage(event.currentTarget.files?.[0]);
           event.currentTarget.value = "";
         }}
       />
 
+      {imagePending && <p role="status" className="border-b px-4 py-2 text-sm text-muted-foreground">Converting image…</p>}
       {error && <p role="alert" className="border-b bg-destructive/10 px-4 py-2 text-sm text-destructive">{error}</p>}
 
       {image && imageRect ? (

@@ -1,9 +1,11 @@
-import { useId, useRef, useState } from "react";
+import { AutoSizeTextarea } from "@/components/ui/auto-size-textarea";
+import { useEffect, useId, useRef, useState } from "react";
 import { ImagePlusIcon, PlusIcon, Trash2Icon, UploadIcon } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { cn } from "cn";
 import type { Dnd55eAbilityScores, Dnd55eFeature, Dnd55eFeatureGroup, Dnd55eStatblock } from "@/lib/statblock-types";
+import { blobToDataUrl, convertImageToWebp, IMAGE_ACCEPT } from "@/lib/image-utils";
 
 export type NpcStatblockProps = {
   value: Dnd55eStatblock;
@@ -64,6 +66,9 @@ export function Dnd55eStatblock({
 }: NpcStatblockProps) {
   const headingId = useId();
   const tokenInputRef = useRef<HTMLInputElement>(null);
+  const uploadVersion = useRef(0);
+  const [imagePending, setImagePending] = useState(false);
+  useEffect(() => () => { uploadVersion.current++; }, []);
   const [imageError, setImageError] = useState("");
   const hasAnyValue = Object.values(value).some((item) =>
     typeof item === "string" ? Boolean(item.trim()) : item && Object.values(item).some(Boolean),
@@ -85,24 +90,19 @@ export function Dnd55eStatblock({
     const file = event.currentTarget.files?.[0];
     if (!file) return;
     event.currentTarget.value = "";
-    if (!file.type.startsWith("image/")) {
-      setImageError("Choose an image file.");
-      return;
-    }
-    if (file.size > 10 * 1024 * 1024) {
-      setImageError("Token images must be 10 MB or smaller.");
-      return;
-    }
-
-    const reader = new FileReader();
-    reader.onload = () => {
-      if (typeof reader.result === "string") {
-        setImageError("");
-        onTokenImageChange(reader.result);
-      }
-    };
-    reader.onerror = () => setImageError("The selected image could not be read.");
-    reader.readAsDataURL(file);
+    const version = ++uploadVersion.current;
+    setImagePending(true);
+    setImageError("");
+    void convertImageToWebp(file)
+      .then(blobToDataUrl)
+      .then((dataUrl) => {
+        if (version === uploadVersion.current) onTokenImageChange(dataUrl);
+      })
+      .catch((conversionError: unknown) => {
+        if (version !== uploadVersion.current) return;
+        setImageError(conversionError instanceof Error ? conversionError.message : "The selected image could not be converted.");
+      })
+      .finally(() => { if (version === uploadVersion.current) setImagePending(false); });
   };
 
   return (
@@ -156,7 +156,7 @@ export function Dnd55eStatblock({
                 <input
                   ref={tokenInputRef}
                   type="file"
-                  accept="image/*"
+                  accept={IMAGE_ACCEPT}
                   className="sr-only"
                   aria-label="Choose token image"
                   onChange={handleTokenChange}
@@ -177,11 +177,12 @@ export function Dnd55eStatblock({
                     variant="ghost"
                     size="xs"
                     className="w-full"
-                    onClick={() => onTokenImageChange(null)}
+                    onClick={() => { uploadVersion.current++; setImagePending(false); setImageError(""); onTokenImageChange(null); }}
                   >
                     <Trash2Icon aria-hidden="true" /> Remove
                   </Button>
                 )}
+                {imagePending && <p role="status" className="text-xs text-muted-foreground">Converting image…</p>}
                 {imageError && <p role="alert" className="text-left text-xs text-destructive">{imageError}</p>}
               </>
             )}
@@ -290,7 +291,7 @@ export function Dnd55eStatblock({
                         </p>
                       )}
                       {editable && (
-                        <textarea
+                        <AutoSizeTextarea
                           aria-label={`${label} feature ${index + 1} description`}
                           value={feature.description}
                           onChange={(event) => {
@@ -299,8 +300,6 @@ export function Dnd55eStatblock({
                             updateFeatures(key, next);
                           }}
                           placeholder="Describe this feature…"
-                          rows={3}
-                          className="w-full resize-y rounded-lg border border-input bg-transparent px-2.5 py-2 text-sm outline-none placeholder:text-muted-foreground focus-visible:border-ring focus-visible:ring-3 focus-visible:ring-ring/50"
                         />
                       )}
                     </div>

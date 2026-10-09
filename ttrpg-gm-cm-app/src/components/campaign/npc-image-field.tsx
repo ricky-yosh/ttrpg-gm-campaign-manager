@@ -1,9 +1,8 @@
-import { useId, useRef, useState } from "react";
+import { useEffect, useId, useRef, useState } from "react";
 import type { ChangeEvent } from "react";
 import { Button } from "@/components/ui/button";
 import { cn } from "cn";
-
-const MAX_IMAGE_SIZE = 10 * 1024 * 1024;
+import { blobToDataUrl, convertImageToWebp, IMAGE_ACCEPT } from "@/lib/image-utils";
 
 export type NpcImageFieldProps = {
   editable: boolean;
@@ -28,6 +27,9 @@ export function NpcImageField({
   const labelId = useId();
   const errorId = useId();
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const uploadVersion = useRef(0);
+  const [pending, setPending] = useState(false);
+  useEffect(() => () => { uploadVersion.current++; }, []);
   const [error, setError] = useState<string | null>(null);
 
   const handleFileChange = (event: ChangeEvent<HTMLInputElement>) => {
@@ -36,26 +38,20 @@ export function NpcImageField({
     event.currentTarget.value = "";
     if (!file) return;
 
-    if (!file.type.startsWith("image/")) {
-      setError("Choose an image file.");
-      return;
-    }
-    if (file.size > MAX_IMAGE_SIZE) {
-      setError("Image must be 10 MB or smaller.");
-      return;
-    }
-
-    const reader = new FileReader();
-    reader.onload = () => {
-      if (typeof reader.result === "string") {
-        onChange(reader.result);
-        setError(null);
-      } else {
-        setError("This image could not be read. Try another file.");
-      }
-    };
-    reader.onerror = () => setError("This image could not be read. Try another file.");
-    reader.readAsDataURL(file);
+    const version = ++uploadVersion.current;
+    setPending(true);
+    setError(null);
+    void convertImageToWebp(file)
+      .then(blobToDataUrl)
+      .then((dataUrl) => {
+        if (version !== uploadVersion.current) return;
+        onChange(dataUrl);
+      })
+      .catch((conversionError: unknown) => {
+        if (version !== uploadVersion.current) return;
+        setError(conversionError instanceof Error ? conversionError.message : "This image could not be converted. Try another file.");
+      })
+      .finally(() => { if (version === uploadVersion.current) setPending(false); });
   };
 
   const imageFrame = value ? (
@@ -86,7 +82,7 @@ export function NpcImageField({
             ref={fileInputRef}
             id={inputId}
             type="file"
-            accept="image/*"
+            accept={IMAGE_ACCEPT}
             className="sr-only"
             aria-label={`${value ? "Replace" : "Upload"} ${label.toLowerCase()}`}
             aria-describedby={error ? errorId : undefined}
@@ -97,12 +93,13 @@ export function NpcImageField({
               {value ? "Replace image" : "Upload image"}
             </Button>
             {value && (
-              <Button type="button" variant="ghost" size="sm" onClick={() => { onChange(null); setError(null); }}>
+              <Button type="button" variant="ghost" size="sm" onClick={() => { uploadVersion.current++; setPending(false); onChange(null); setError(null); }}>
                 Remove image
               </Button>
             )}
           </div>
-          <p className="text-xs text-muted-foreground">Image files up to 10 MB.</p>
+          <p className="text-xs text-muted-foreground">PNG, JPEG, or still WebP up to 10 MiB.</p>
+          {pending && <p role="status" className="text-xs text-muted-foreground">Converting image…</p>}
           {error && <p id={errorId} role="alert" className="text-sm text-destructive">{error}</p>}
         </>
       )}
