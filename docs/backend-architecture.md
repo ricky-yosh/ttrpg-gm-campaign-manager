@@ -12,6 +12,12 @@ Rust validates and saves campaign metadata, NPC records, Plate note JSON, and wo
 
 The frontend offers New campaign, Open campaign, Save, and New NPC. Once a destination has been chosen, edits autosave after 750 ms of inactivity. A serialized save loop includes edits made while a write is in progress. Switching campaigns and normal desktop window closure offer Save, Don’t save, and Cancel for unsaved work. Autosave pauses while this choice and any subsequent file dialog are open. Don’t save discards unsaved work without deleting a previously saved package; canceling the choice or the save dialog, or encountering a failure, retains the current campaign. New campaigns stay in memory until their first Save. The initial sample characters remain available in an unsaved campaign; new campaigns start empty. Restarting the app requires using Open campaign to select the saved package.
 
+### Implemented Rust module boundaries
+
+The current Rust backend separates campaign validation, asset transformation, SQLite schema setup, persistence, and Tauri commands into `campaign/validation.rs`, `assets.rs`, `migrations.rs`, `repository.rs`, and `commands.rs`. Campaign and workspace data types remain together in `campaign/mod.rs`, alongside their persistence tests. `CampaignRepository` owns the existing whole-campaign SQLite load/save flow; its transactions and campaign file format are unchanged. The Tauri commands remain thin wrappers around that repository. WebP conversion remains in `images.rs`.
+
+Campaign mutations still happen in the frontend store and are persisted as whole-campaign snapshots. A Rust application service, generated command bindings, structured errors, and shared campaign undo are not implemented yet; they remain future work described below.
+
 For a backup, click Save, wait for **Saved**, then ZIP or copy the **entire `.campaign` folder**, including `campaign.sqlite` and `assets/`. The app does not yet create ZIP files, prune unused images, provide Save Copy, recover unsaved drafts after a crash, support concurrent editing from multiple app instances, or persist campaign-wide edit undo history. Text-editor undo remains local to the active editor. Browser-only Vite development can create/edit NPCs, but filesystem saving requires the Tauri desktop app.
 
 ## Known requirements
