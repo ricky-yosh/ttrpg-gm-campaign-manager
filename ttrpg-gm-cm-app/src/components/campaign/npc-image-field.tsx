@@ -29,7 +29,10 @@ export function NpcImageField({
   const fileInputRef = useRef<HTMLInputElement>(null);
   const uploadVersion = useRef(0);
   const [pending, setPending] = useState(false);
-  useEffect(() => () => { uploadVersion.current++; }, []);
+  useEffect(() => {
+    if (!editable) setPending(false);
+    return () => { uploadVersion.current++; };
+  }, [editable]);
   const [error, setError] = useState<string | null>(null);
 
   const handleFileChange = (event: ChangeEvent<HTMLInputElement>) => {

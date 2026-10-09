@@ -2,6 +2,8 @@
 
 Working outline for the technical design. See [Brainstorm](brainstorm-doc.md) for feature ideas, [UI/UX](ui-ux.md) for interface decisions, [Campaign Data Model](data-model.md) for candidate objects and attributes, and [Maps and Exploration](maps.md) for the linked-map workflow.
 
+See [Locations](locations.md) and [Factions](factions.md) for record editors, NPC links, and database migrations. The current database version is 3.
+
 ## Current persistence prototype
 
 The first implementation uses a **`.campaign` package folder containing `campaign.sqlite` and an `assets/` folder**, following the SQLite storage decision below. The package extension makes one campaign easy to identify while keeping its files browsable. It saves the features that exist now: NPC identities and Plate note documents, imported note images, workspace tabs/splits, active tabs, sidebar state, note scroll positions, and bounded navigation history.

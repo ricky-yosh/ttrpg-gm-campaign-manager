@@ -79,7 +79,13 @@ export type NpcReference = {
   enemies: string;
   other: string;
 };
+export type NpcRelationship = { targetId: string; label: string };
+export type Location = { id: string; name: string; image: NpcImage | null; publicDescription: string; gmNotes: string };
+export type Faction = { id: string; name: string; image: NpcImage | null; description: string; gmNotes: string };
 export type NpcPresentation = {
+  factions: NpcRelationship[];
+  locations: NpcRelationship[];
+  relationships: NpcRelationship[];
   banner: NpcImage | null;
   portrait: NpcImage | null;
   playerDescription: string;
@@ -108,6 +114,8 @@ export type Campaign = {
   createdAt: string;
   updatedAt: string;
   npcs: Npc[];
+  locations: Location[];
+  factions: Faction[];
   statblockFieldSet: { id: string; version: number };
   workspace: WorkspaceState | null;
   section: string | null;
@@ -122,7 +130,7 @@ export function statblockFieldSetLabel(fieldSet: { id: string; version: number }
 export function emptyCampaign(name: string): Campaign {
   const now = new Date().toISOString();
   return { format: "ttrpg-campaign", schemaVersion: 1, id: crypto.randomUUID(), name,
-    createdAt: now, updatedAt: now, npcs: [], statblockFieldSet: { id: "dnd-5.5e", version: 1 },
+    createdAt: now, updatedAt: now, npcs: [], locations: [], factions: [], statblockFieldSet: { id: "dnd-5.5e", version: 1 },
     workspace: null, section: null, sidebar: { width: 256, open: true } };
 }
 
@@ -131,6 +139,9 @@ export function createEmptyNpcPresentation(fieldSet = { id: "dnd-5.5e", version:
     banner: null,
     portrait: null,
     playerDescription: "",
+    relationships: [],
+    locations: [],
+    factions: [],
     gmReference: {
       background: "", wants: "", ideals: "", bond: "", flaw: "", secrets: "", reaction: "",
       personality: "", mannerisms: "", notableActions: "", voice: "", allies: "", enemies: "", other: "",
@@ -190,6 +201,9 @@ function demoPresentation({
     banner: art.banner,
     portrait: art.portrait,
     playerDescription,
+    relationships: [],
+    locations: [],
+    factions: [],
     gmReference,
     statblock: {
       fieldSetId: "dnd-5.5e",
@@ -369,6 +383,32 @@ export function getCampaign() { return campaignStore.getState(); }
 export function updateCampaign(change: Partial<Campaign>) {
   campaignStore.setState((state) => ({ campaign: { ...state.campaign, ...change, updatedAt: new Date().toISOString() },
     revision: state.revision + 1, status: "Unsaved changes", error: "" }));
+}
+export function createLocation(name: string) {
+  const trimmed = name.trim();
+  if (!trimmed) return null;
+  const { campaign } = getCampaign();
+  const location: Location = { id: crypto.randomUUID(), name: trimmed, image: null, publicDescription: "", gmNotes: "" };
+  updateCampaign({ locations: [...(campaign.locations ?? []), location] });
+  return location.id;
+}
+export function saveLocation(id: string, changes: Omit<Location, "id">) {
+  const { campaign } = getCampaign();
+  if (!changes.name.trim() || !campaign.locations.some((location) => location.id === id)) return;
+  updateCampaign({ locations: campaign.locations.map((location) => location.id === id ? { id, ...structuredClone(changes), name: changes.name.trim() } : location) });
+}
+export function createFaction(name: string) {
+  const trimmed = name.trim();
+  if (!trimmed) return null;
+  const { campaign } = getCampaign();
+  const faction: Faction = { id: crypto.randomUUID(), name: trimmed, image: null, description: "", gmNotes: "" };
+  updateCampaign({ factions: [...(campaign.factions ?? []), faction] });
+  return faction.id;
+}
+export function saveFaction(id: string, changes: Omit<Faction, "id">) {
+  const { campaign } = getCampaign();
+  if (!changes.name.trim() || !campaign.factions.some((faction) => faction.id === id)) return;
+  updateCampaign({ factions: campaign.factions.map((faction) => faction.id === id ? { id, ...structuredClone(changes), name: changes.name.trim() } : faction) });
 }
 export function createNpc(name: string) {
   const state = getCampaign();

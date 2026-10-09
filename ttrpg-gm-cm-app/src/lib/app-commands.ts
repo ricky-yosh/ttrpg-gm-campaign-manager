@@ -37,6 +37,8 @@ export const appCommands = {
   },
   selectSection: (section: string | null) => { if (!getCampaign().isLeaving) useSessionStore.getState().setSection(section); },
   openCharacter: (id: string) => workspace()?.openCharacter(id),
+  openFaction: (id: string) => workspace()?.openFaction(id),
+  openLocation: (id: string) => workspace()?.openLocation(id),
   openMap: () => workspace()?.openMap(),
   createWorkspace: () => workspace()?.createWorkspace(),
   closeActiveTab: () => {

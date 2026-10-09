@@ -68,7 +68,10 @@ export function Dnd55eStatblock({
   const tokenInputRef = useRef<HTMLInputElement>(null);
   const uploadVersion = useRef(0);
   const [imagePending, setImagePending] = useState(false);
-  useEffect(() => () => { uploadVersion.current++; }, []);
+  useEffect(() => {
+    if (!editable) setImagePending(false);
+    return () => { uploadVersion.current++; };
+  }, [editable]);
   const [imageError, setImageError] = useState("");
   const hasAnyValue = Object.values(value).some((item) =>
     typeof item === "string" ? Boolean(item.trim()) : item && Object.values(item).some(Boolean),

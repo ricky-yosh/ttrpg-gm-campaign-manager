@@ -4,16 +4,19 @@ import type { Value } from "platejs";
 import { PencilIcon } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { cn } from "@/lib/utils";
 import { useCampaign, saveNpcChanges, type NpcPresentation, type NpcReference } from "@/lib/campaign-data";
 import { NpcImageField } from "@/components/campaign/npc-image-field";
 import { Dnd55eStatblock } from "@/components/campaign/npc-statblock";
+import { NpcRecordLinks } from "@/components/campaign/npc-record-links";
 import { NpcGmReference } from "@/components/campaign/npc-gm-reference";
 import { NpcPlayerDescription } from "@/components/campaign/npc-player-description";
 import { NpcNotesEditor, useNpcNotesEditor } from "@/components/campaign/npc-notes-editor";
 
 export function CharacterPanel({ params, api }: IDockviewPanelProps) {
   const id = typeof params.name === "string" ? params.name : "";
+  const factions = useCampaign((state) => state.campaign.factions);
+  const locations = useCampaign((state) => state.campaign.locations);
+  const npcs = useCampaign((state) => state.campaign.npcs);
   const npc = useCampaign((state) => state.campaign.npcs.find((item) => item.id === id));
   const scrollRef = useRef<HTMLElement>(null);
   const initialScrollTop = useRef(typeof params.scrollTop === "number" ? params.scrollTop : 0);
@@ -91,7 +94,7 @@ export function CharacterPanel({ params, api }: IDockviewPanelProps) {
   const toImage = (url: string | null): NpcPresentation["banner"] => url ? { type: "img", url } : null;
 
   const renderPortrait = () => (
-    <div className={cn(isWide && "w-full max-w-[48%]")}>
+    <div className="min-w-0">
       <NpcImageField
         editable={isEditing}
         label=""
@@ -104,7 +107,7 @@ export function CharacterPanel({ params, api }: IDockviewPanelProps) {
   );
 
   const renderStatblock = () => presentation.statblock.fieldSetId === "dnd-5.5e" ? (
-    <div className={cn("min-w-0", isWide && !isEditing && "mb-5 ml-6 w-[48%] float-right")}>
+    <div className="min-w-0">
       <Dnd55eStatblock
         value={presentation.statblock.data}
         editable={isEditing}
@@ -118,7 +121,7 @@ export function CharacterPanel({ params, api }: IDockviewPanelProps) {
       />
     </div>
   ) : (
-    <section className={cn("min-w-0 rounded-xl border bg-card p-4", isWide && !isEditing && "mb-5 ml-6 w-[48%] float-right")}>
+    <section className="min-w-0 rounded-xl border bg-card p-4">
       <h2 className="font-semibold">Statblock</h2>
       <p className="mt-2 text-sm text-muted-foreground">
         This statblock uses the unsupported ruleset <span className="font-medium">{presentation.statblock.fieldSetId}</span> (version {presentation.statblock.fieldSetVersion}). Its data is preserved, but this view cannot edit or display it yet.
@@ -135,6 +138,26 @@ export function CharacterPanel({ params, api }: IDockviewPanelProps) {
       onDescriptionChange={(playerDescription) => updatePresentation({ playerDescription })}
       onPortraitChange={(url) => updatePresentation({ portrait: toImage(url) })}
     />
+  );
+  const relationships = (
+    <NpcRecordLinks
+      key={`${id}-${isEditing}`}
+      sourceNpcId={id}
+      records={npcs}
+      value={presentation.relationships ?? []}
+      editable={isEditing}
+      onChange={(relationships) => updatePresentation({ relationships })}
+    />
+  );
+  const locationLinks = (
+    <NpcRecordLinks key={`locations-${id}-${isEditing}`} kind="location" sourceNpcId={id} records={locations ?? []}
+      value={presentation.locations ?? []} editable={isEditing}
+      onChange={(locations) => updatePresentation({ locations })} />
+  );
+  const factionLinks = (
+    <NpcRecordLinks key={`factions-${id}-${isEditing}`} kind="faction" sourceNpcId={id} records={factions ?? []}
+      value={presentation.factions ?? []} editable={isEditing}
+      onChange={(factions) => updatePresentation({ factions })} />
   );
   const gmReference = <NpcGmReference value={reference} editable={isEditing} onChange={setReference} />;
   const notes = <NpcNotesEditor editor={editor} npcName={npc.name} editable={isEditing} onChange={setDraftNotes} />;
@@ -178,26 +201,27 @@ export function CharacterPanel({ params, api }: IDockviewPanelProps) {
         />
       )}
 
-      {isWide && isEditing ? (
+      {isWide ? (
         <div className="grid grid-cols-2 items-start gap-5">
           <div className="flex min-w-0 flex-col gap-5">
             {playerDescription}
             {gmReference}
+            {notes}
           </div>
-          {renderStatblock()}
-          <div className="col-span-2 min-w-0">{notes}</div>
-        </div>
-      ) : isWide ? (
-        <div className="flow-root">
-          {renderStatblock()}
-          <div className="mb-5 max-w-[48%]">{playerDescription}</div>
-          <div className="mt-5 space-y-5">{gmReference}</div>
-          <div className="clear-both pt-5">{notes}</div>
+          <div className="flex min-w-0 flex-col gap-5">
+            {renderStatblock()}
+            {relationships}
+            {locationLinks}
+            {factionLinks}
+          </div>
         </div>
       ) : (
-        <div className="space-y-5">
+        <div className="flex flex-col gap-5">
           {renderPortrait()}
           {renderStatblock()}
+          {relationships}
+          {locationLinks}
+          {factionLinks}
           {playerDescription}
           {gmReference}
           {notes}

@@ -1,6 +1,8 @@
 import { create } from "zustand";
 
 export type NavigationDestination =
+  | { kind: "faction"; workspaceId: string; factionId: string; section: string | null }
+  | { kind: "location"; workspaceId: string; locationId: string; section: string | null }
   | { kind: "character"; workspaceId: string; characterId: string; section: string | null }
   | { kind: "map" | "workspace"; workspaceId: string; section: string | null }
   | { kind: "settings" }
@@ -15,6 +17,8 @@ type CampaignSession = {
   section: string | null;
   sidebar: SidebarState;
   npcs: { id: string }[];
+  locations?: { id: string }[];
+  factions?: { id: string }[];
   workspace: { history: StoredNavigationHistory; sidebarWidth: number; collapsed: boolean } | null;
 };
 
@@ -38,6 +42,8 @@ export type SessionState = {
   workspaceDestination: Extract<NavigationDestination, { workspaceId: string }> | null;
   validWorkspaceIds: string[];
   characterIds: string[];
+  locationIds: string[];
+  factionIds: string[];
   setSection: (section: string | null) => void;
   openSettings: () => void;
   leaveSettings: () => void;
@@ -54,6 +60,8 @@ export type SessionState = {
   setWorkspaceSnapshot: (tabs: WorkspaceTab[], activeId: string | null) => void;
   setWorkspaceSidebar: (change: { width?: number; collapsed?: boolean }) => void;
   setCharacterIds: (ids: string[]) => void;
+  setLocationIds: (ids: string[]) => void;
+  setFactionIds: (ids: string[]) => void;
   setWorkspaceDestination: (destination: Extract<NavigationDestination, { workspaceId: string }> | null) => void;
   reconcileWorkspaceDestination: (destination: Extract<NavigationDestination, { workspaceId: string }>) => void;
   visitDestination: (destination: NavigationDestination) => void;
@@ -67,7 +75,9 @@ function destinationSection(destination: NavigationDestination) {
 function isValidDestination(state: SessionState, destination: NavigationDestination) {
   if (destination.kind === "settings" || destination.kind === "section") return true;
   return state.validWorkspaceIds.includes(destination.workspaceId)
-    && (destination.kind !== "character" || state.characterIds.includes(destination.characterId));
+    && (destination.kind !== "character" || state.characterIds.includes(destination.characterId))
+    && (destination.kind !== "location" || state.locationIds.includes(destination.locationId))
+    && (destination.kind !== "faction" || state.factionIds.includes(destination.factionId));
 }
 
 function findDestinationIndex(state: SessionState, direction: -1 | 1) {
@@ -113,6 +123,8 @@ export const useSessionStore = create<SessionState>()((set, get) => ({
   workspaceDestination: null,
   validWorkspaceIds: [],
   characterIds: [],
+  locationIds: [],
+  factionIds: [],
   setSection: (section) => {
     const workspace = get().workspaceDestination;
     get().visitDestination(section === "Settings" ? { kind: "settings" }
@@ -152,6 +164,8 @@ export const useSessionStore = create<SessionState>()((set, get) => ({
     workspaceSidebarWidth: change.width ?? state.workspaceSidebarWidth,
     workspaceCollapsed: change.collapsed ?? state.workspaceCollapsed,
   })),
+  setFactionIds: (factionIds) => { if (JSON.stringify(get().factionIds) !== JSON.stringify(factionIds)) set({ factionIds }); },
+  setLocationIds: (locationIds) => { if (JSON.stringify(get().locationIds) !== JSON.stringify(locationIds)) set({ locationIds }); },
   setCharacterIds: (characterIds) => { if (JSON.stringify(get().characterIds) !== JSON.stringify(characterIds)) set({ characterIds }); },
   setWorkspaceDestination: (workspaceDestination) => set({ workspaceDestination }),
   reconcileWorkspaceDestination: (workspaceDestination) => set((state) => {
@@ -159,7 +173,9 @@ export const useSessionStore = create<SessionState>()((set, get) => ({
     const { entries, index } = state.navigation;
     const matches = (destination: NavigationDestination) => "workspaceId" in destination
       && destination.workspaceId === workspaceDestination.workspaceId && destination.kind === workspaceDestination.kind
-      && (destination.kind !== "character" || (workspaceDestination.kind === "character" && destination.characterId === workspaceDestination.characterId));
+      && (destination.kind !== "character" || (workspaceDestination.kind === "character" && destination.characterId === workspaceDestination.characterId))
+      && (destination.kind !== "location" || (workspaceDestination.kind === "location" && destination.locationId === workspaceDestination.locationId))
+      && (destination.kind !== "faction" || (workspaceDestination.kind === "faction" && destination.factionId === workspaceDestination.factionId));
     // Dockview selected a fallback after a close/move. Align the cursor with
     // that existing visit rather than recording a new user navigation.
     let match = -1;
@@ -213,5 +229,7 @@ export function hydrateSession(campaign: CampaignSession, generation: number) {
     workspaceDestination: null,
     validWorkspaceIds: [],
     characterIds: campaign.npcs.map((npc) => npc.id),
+    locationIds: (campaign.locations ?? []).map((location) => location.id),
+    factionIds: (campaign.factions ?? []).map((faction) => faction.id),
   });
 }

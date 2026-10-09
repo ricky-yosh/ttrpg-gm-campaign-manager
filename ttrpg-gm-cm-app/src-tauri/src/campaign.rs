@@ -22,6 +22,10 @@ pub struct Campaign {
     #[serde(default)]
     statblock_field_set: StatblockFieldSet,
     npcs: Vec<Npc>,
+    #[serde(default)]
+    locations: Vec<Location>,
+    #[serde(default)]
+    factions: Vec<Faction>,
     workspace: Option<Workspace>,
     section: Option<String>,
     sidebar: Sidebar,
@@ -56,6 +60,12 @@ impl Default for StatblockFieldSet {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase", deny_unknown_fields)]
 struct NpcPresentation {
+    #[serde(default)]
+    relationships: Vec<NpcRelationship>,
+    #[serde(default)]
+    locations: Vec<NpcRelationship>,
+    #[serde(default)]
+    factions: Vec<NpcRelationship>,
     banner: Option<NpcImage>,
     portrait: Option<NpcImage>,
     player_description: String,
@@ -67,6 +77,9 @@ struct NpcPresentation {
 impl Default for NpcPresentation {
     fn default() -> Self {
         Self {
+            relationships: Vec::new(),
+            locations: Vec::new(),
+            factions: Vec::new(),
             banner: None,
             portrait: None,
             player_description: String::new(),
@@ -74,6 +87,13 @@ impl Default for NpcPresentation {
             statblock: NpcStatblock::default(),
         }
     }
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+struct NpcRelationship {
+    target_id: String,
+    label: String,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -124,6 +144,48 @@ impl Default for NpcStatblock {
 }
 
 #[derive(Debug, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+struct Location {
+    id: String,
+    name: String,
+    image: Option<NpcImage>,
+    public_description: String,
+    gm_notes: String,
+}
+
+fn transform_location_image(
+    location: &mut Location,
+    folder: &Path,
+    saving: bool,
+) -> Result<(), String> {
+    let mut value = serde_json::to_value(&*location).map_err(|e| e.to_string())?;
+    transform_images(&mut value, folder, saving)?;
+    *location = serde_json::from_value(value).map_err(|e| e.to_string())?;
+    Ok(())
+}
+
+#[derive(Debug, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+struct Faction {
+    id: String,
+    name: String,
+    image: Option<NpcImage>,
+    description: String,
+    gm_notes: String,
+}
+
+fn transform_faction_image(
+    faction: &mut Faction,
+    folder: &Path,
+    saving: bool,
+) -> Result<(), String> {
+    let mut value = serde_json::to_value(&*faction).map_err(|e| e.to_string())?;
+    transform_images(&mut value, folder, saving)?;
+    *faction = serde_json::from_value(value).map_err(|e| e.to_string())?;
+    Ok(())
+}
+
+#[derive(Debug, Serialize, Deserialize)]
 struct Sidebar {
     width: f64,
     open: bool,
@@ -154,6 +216,16 @@ enum Destination {
     Character {
         workspace_id: String,
         character_id: String,
+        section: Option<String>,
+    },
+    Faction {
+        workspace_id: String,
+        faction_id: String,
+        section: Option<String>,
+    },
+    Location {
+        workspace_id: String,
+        location_id: String,
         section: Option<String>,
     },
     Map {
@@ -278,13 +350,67 @@ impl Campaign {
                     .panels
                     .get(id)
                     .ok_or("Missing workspace contents.")?;
-                validate_layout(layout, &["character", "map"])?;
+                validate_layout(layout, &["character", "map", "location", "faction"])?;
             }
         }
         let mut ids = HashSet::new();
+        let mut location_ids = HashSet::new();
+        for location in &self.locations {
+            if location.id.trim().is_empty()
+                || location.name.trim().is_empty()
+                || !location_ids.insert(&location.id)
+            {
+                return Err("Locations must have unique IDs and nonempty names.".into());
+            }
+            if location
+                .image
+                .as_ref()
+                .is_some_and(|image| image.kind != "img")
+            {
+                return Err("Location images must use type 'img'.".into());
+            }
+        }
+        let mut faction_ids = HashSet::new();
+        for faction in &self.factions {
+            if faction.id.trim().is_empty()
+                || faction.name.trim().is_empty()
+                || !faction_ids.insert(&faction.id)
+            {
+                return Err("Factions must have unique IDs and nonempty names.".into());
+            }
+            if faction
+                .image
+                .as_ref()
+                .is_some_and(|image| image.kind != "img")
+            {
+                return Err("Faction images must use type 'img'.".into());
+            }
+        }
         for npc in &self.npcs {
+            let mut location_targets = HashSet::new();
+            for link in &npc.presentation.locations {
+                if link.target_id.trim().is_empty() || !location_targets.insert(&link.target_id) {
+                    return Err("NPC location links must have unique, nonempty target IDs.".into());
+                }
+            }
+            let mut faction_targets = HashSet::new();
+            for link in &npc.presentation.factions {
+                if link.target_id.trim().is_empty() || !faction_targets.insert(&link.target_id) {
+                    return Err("NPC faction links must have unique, nonempty target IDs.".into());
+                }
+            }
             if npc.id.is_empty() || npc.name.trim().is_empty() || !ids.insert(&npc.id) {
                 return Err("NPCs must have unique IDs and nonempty names.".into());
+            }
+            let mut targets = HashSet::new();
+            for relationship in &npc.presentation.relationships {
+                if relationship.target_id.trim().is_empty()
+                    || relationship.target_id == npc.id
+                    || !targets.insert(&relationship.target_id)
+                {
+                    return Err("NPC relationships must have unique, nonempty target IDs and cannot link to themselves.".into());
+                }
+                // Missing targets are retained so deleting a record does not invalidate a campaign.
             }
             if npc.notes.is_empty() {
                 return Err("NPC notes need at least one block.".into());
@@ -455,7 +581,7 @@ fn ensure_schema(connection: &mut Connection) -> Result<(), String> {
     let version: i32 = connection
         .pragma_query_value(None, "user_version", |row| row.get(0))
         .map_err(|e| e.to_string())?;
-    if version > 1 {
+    if version > 3 {
         return Err(format!(
             "Campaign database version {version} is newer than this app supports."
         ));
@@ -496,7 +622,19 @@ fn ensure_schema(connection: &mut Connection) -> Result<(), String> {
             state_key TEXT PRIMARY KEY NOT NULL,
             value_json TEXT NOT NULL
         );
-        PRAGMA user_version = 1;
+        CREATE TABLE IF NOT EXISTS location (
+            id TEXT PRIMARY KEY NOT NULL,
+            campaign_id TEXT NOT NULL REFERENCES campaign(id) ON DELETE CASCADE,
+            sort_order INTEGER NOT NULL,
+            record_json TEXT NOT NULL
+        );
+        CREATE TABLE IF NOT EXISTS faction (
+            id TEXT PRIMARY KEY NOT NULL,
+            campaign_id TEXT NOT NULL REFERENCES campaign(id) ON DELETE CASCADE,
+            sort_order INTEGER NOT NULL,
+            record_json TEXT NOT NULL
+        );
+        PRAGMA user_version = 3;
     ",
         )
         .map_err(|e| e.to_string())?;
@@ -527,6 +665,13 @@ fn write_campaign(folder: &Path, mut campaign: Campaign) -> Result<(), String> {
             transform_images(node, folder, true)?;
         }
         transform_presentation_images(&mut npc.presentation, folder, true)?;
+    }
+
+    for location in &mut campaign.locations {
+        transform_location_image(location, folder, true)?;
+    }
+    for faction in &mut campaign.factions {
+        transform_faction_image(faction, folder, true)?;
     }
 
     let db_path = folder.join("campaign.sqlite");
@@ -605,6 +750,38 @@ fn write_transaction(transaction: &Transaction<'_>, campaign: &Campaign) -> Resu
             .map_err(|e| e.to_string())?;
     }
     transaction
+        .execute("DELETE FROM location WHERE campaign_id=?1", [&campaign.id])
+        .map_err(|e| e.to_string())?;
+    for (index, location) in campaign.locations.iter().enumerate() {
+        transaction
+            .execute(
+                "INSERT INTO location (id,campaign_id,sort_order,record_json) VALUES (?1,?2,?3,?4)",
+                params![
+                    location.id,
+                    campaign.id,
+                    index as i64,
+                    serde_json::to_string(location).map_err(|e| e.to_string())?
+                ],
+            )
+            .map_err(|e| e.to_string())?;
+    }
+    transaction
+        .execute("DELETE FROM faction WHERE campaign_id=?1", [&campaign.id])
+        .map_err(|e| e.to_string())?;
+    for (index, faction) in campaign.factions.iter().enumerate() {
+        transaction
+            .execute(
+                "INSERT INTO faction (id,campaign_id,sort_order,record_json) VALUES (?1,?2,?3,?4)",
+                params![
+                    faction.id,
+                    campaign.id,
+                    index as i64,
+                    serde_json::to_string(faction).map_err(|e| e.to_string())?
+                ],
+            )
+            .map_err(|e| e.to_string())?;
+    }
+    transaction
         .execute("DELETE FROM workspace_state", [])
         .map_err(|e| e.to_string())?;
     if let Some(workspace) = &campaign.workspace {
@@ -637,7 +814,7 @@ fn read_campaign(folder: &Path) -> Result<Campaign, String> {
     let version: i32 = connection
         .pragma_query_value(None, "user_version", |row| row.get(0))
         .map_err(|e| e.to_string())?;
-    if version != 1 {
+    if !(1..=3).contains(&version) {
         return Err(format!("Unsupported campaign database version {version}."));
     }
     let mut statement = connection.prepare("SELECT id,name,schema_version,created_at,updated_at,section,sidebar_width,sidebar_open FROM campaign").map_err(|e| e.to_string())?;
@@ -733,6 +910,44 @@ fn read_campaign(folder: &Path) -> Result<Campaign, String> {
     let workspace = workspace_json
         .map(|json| serde_json::from_str(&json).map_err(|e| e.to_string()))
         .transpose()?;
+    let mut locations = Vec::new();
+    if table_exists(&connection, "location")? {
+        let mut statement = connection
+            .prepare("SELECT id,record_json FROM location WHERE campaign_id=?1 ORDER BY sort_order")
+            .map_err(|e| e.to_string())?;
+        let rows = statement
+            .query_map([&id], |row| {
+                Ok((row.get::<_, String>(0)?, row.get::<_, String>(1)?))
+            })
+            .map_err(|e| e.to_string())?;
+        for row in rows {
+            let (record_id, json) = row.map_err(|e| e.to_string())?;
+            let location: Location = serde_json::from_str(&json).map_err(|e| e.to_string())?;
+            if location.id != record_id {
+                return Err("Location record ID does not match its stored ID.".into());
+            }
+            locations.push(location);
+        }
+    }
+    let mut factions = Vec::new();
+    if table_exists(&connection, "faction")? {
+        let mut statement = connection
+            .prepare("SELECT id,record_json FROM faction WHERE campaign_id=?1 ORDER BY sort_order")
+            .map_err(|e| e.to_string())?;
+        let rows = statement
+            .query_map([&id], |row| {
+                Ok((row.get::<_, String>(0)?, row.get::<_, String>(1)?))
+            })
+            .map_err(|e| e.to_string())?;
+        for row in rows {
+            let (record_id, json) = row.map_err(|e| e.to_string())?;
+            let faction: Faction = serde_json::from_str(&json).map_err(|e| e.to_string())?;
+            if faction.id != record_id {
+                return Err("Faction record ID does not match its stored ID.".into());
+            }
+            factions.push(faction);
+        }
+    }
     let mut campaign = Campaign {
         format: "ttrpg-campaign".into(),
         schema_version,
@@ -742,6 +957,8 @@ fn read_campaign(folder: &Path) -> Result<Campaign, String> {
         updated_at,
         statblock_field_set,
         npcs,
+        locations,
+        factions,
         workspace,
         section,
         sidebar: Sidebar { width, open },
@@ -752,6 +969,12 @@ fn read_campaign(folder: &Path) -> Result<Campaign, String> {
             transform_images(node, folder, false)?;
         }
         transform_presentation_images(&mut npc.presentation, folder, false)?;
+    }
+    for location in &mut campaign.locations {
+        transform_location_image(location, folder, false)?;
+    }
+    for faction in &mut campaign.factions {
+        transform_faction_image(faction, folder, false)?;
     }
     Ok(campaign)
 }
@@ -900,6 +1123,9 @@ mod tests {
             "banner":{"type":"img","url":"data:image/png;base64,YmFubmVy"},
             "portrait":{"type":"img","url":"data:image/jpeg;base64,cG9ydHJhaXQ="},
             "playerDescription":"A cautious scout.",
+            "relationships":[],
+            "locations":[],
+            "factions":[],
             "gmReference":{
                 "background":"A traveler.","wants":"Safety","ideals":"Truth","bond":"The village",
                 "flaw":"Distrustful","secrets":"Knows the pass","reaction":"Withdraws",
@@ -928,6 +1154,263 @@ mod tests {
             serde_json::to_value(read_campaign(&path).unwrap()).unwrap(),
             expected
         );
+    }
+
+    #[test]
+    fn relationships_round_trip_including_missing_targets() {
+        let folder = tempfile::tempdir().unwrap();
+        let path = folder.path().join("relationships.campaign");
+        let mut campaign = example();
+        campaign.npcs[0].presentation.relationships = vec![NpcRelationship {
+            target_id: "deleted-npc".into(),
+            label: "Close friend".into(),
+        }];
+        write_campaign(&path, campaign).unwrap();
+        let loaded = read_campaign(&path).unwrap();
+        assert_eq!(
+            loaded.npcs[0].presentation.relationships[0].target_id,
+            "deleted-npc"
+        );
+        assert_eq!(
+            loaded.npcs[0].presentation.relationships[0].label,
+            "Close friend"
+        );
+    }
+
+    #[test]
+    fn legacy_presentation_defaults_to_no_relationships() {
+        let mut value = serde_json::to_value(NpcPresentation::default()).unwrap();
+        value.as_object_mut().unwrap().remove("relationships");
+        let loaded: NpcPresentation = serde_json::from_value(value).unwrap();
+        assert!(loaded.relationships.is_empty());
+    }
+
+    #[test]
+    fn invalid_relationship_targets_are_rejected() {
+        let mut campaign = example();
+        for target in ["", "npc-1"] {
+            campaign.npcs[0].presentation.relationships = vec![NpcRelationship {
+                target_id: target.into(),
+                label: String::new(),
+            }];
+            assert!(campaign.validate().is_err());
+        }
+        campaign.npcs[0].presentation.relationships = vec![
+            NpcRelationship {
+                target_id: "npc-2".into(),
+                label: "Friend".into(),
+            },
+            NpcRelationship {
+                target_id: "npc-2".into(),
+                label: "Ally".into(),
+            },
+        ];
+        assert!(campaign.validate().is_err());
+    }
+
+    #[test]
+    fn locations_images_links_and_navigation_round_trip() {
+        let folder = tempfile::tempdir().unwrap();
+        let path = folder.path().join("locations.campaign");
+        let mut campaign = example();
+        campaign.locations.push(Location {
+            id: "loc-1".into(),
+            name: "Harrow Glen".into(),
+            image: Some(NpcImage {
+                kind: "img".into(),
+                url: "data:image/webp;base64,dG9rZW4=".into(),
+            }),
+            public_description: "A woodland village.".into(),
+            gm_notes: "A hidden passage.".into(),
+        });
+        campaign.npcs[0]
+            .presentation
+            .locations
+            .push(NpcRelationship {
+                target_id: "loc-1".into(),
+                label: "Childhood home".into(),
+            });
+        campaign
+            .workspace
+            .as_mut()
+            .unwrap()
+            .history
+            .entries
+            .push(Destination::Location {
+                workspace_id: "workspace:1".into(),
+                location_id: "loc-1".into(),
+                section: Some("Locations & Maps".into()),
+            });
+        let expected = serde_json::to_value(&campaign).unwrap();
+        write_campaign(&path, campaign).unwrap();
+        let stored: String = Connection::open(path.join("campaign.sqlite"))
+            .unwrap()
+            .query_row(
+                "SELECT record_json FROM location WHERE id='loc-1'",
+                [],
+                |row| row.get(0),
+            )
+            .unwrap();
+        assert!(stored.contains("assets/"));
+        let moved = folder.path().join("moved.campaign");
+        fs::rename(&path, &moved).unwrap();
+        assert_eq!(
+            serde_json::to_value(read_campaign(&moved).unwrap()).unwrap(),
+            expected
+        );
+    }
+
+    #[test]
+    fn version_one_campaigns_load_and_upgrade_locations_on_save() {
+        let folder = tempfile::tempdir().unwrap();
+        let path = folder.path().join("legacy.campaign");
+        write_campaign(&path, example()).unwrap();
+        let db = Connection::open(path.join("campaign.sqlite")).unwrap();
+        db.execute_batch("DROP TABLE location; PRAGMA user_version=1;")
+            .unwrap();
+        drop(db);
+        let campaign = read_campaign(&path).unwrap();
+        assert!(campaign.locations.is_empty());
+        write_campaign(&path, campaign).unwrap();
+        let db = Connection::open(path.join("campaign.sqlite")).unwrap();
+        assert_eq!(
+            db.pragma_query_value(None, "user_version", |row| row.get::<_, i32>(0))
+                .unwrap(),
+            3
+        );
+        assert!(table_exists(&db, "location").unwrap());
+    }
+
+    #[test]
+    fn invalid_locations_and_duplicate_location_links_are_rejected() {
+        let mut campaign = example();
+        campaign.locations.push(Location {
+            id: "loc-1".into(),
+            name: " ".into(),
+            image: None,
+            public_description: String::new(),
+            gm_notes: String::new(),
+        });
+        assert!(campaign.validate().is_err());
+        campaign.locations[0].name = "Village".into();
+        campaign.npcs[0].presentation.locations = vec![
+            NpcRelationship {
+                target_id: "loc-1".into(),
+                label: String::new(),
+            },
+            NpcRelationship {
+                target_id: "loc-1".into(),
+                label: String::new(),
+            },
+        ];
+        assert!(campaign.validate().is_err());
+    }
+
+    #[test]
+    fn factions_images_links_and_navigation_round_trip() {
+        let folder = tempfile::tempdir().unwrap();
+        let path = folder.path().join("factions.campaign");
+        let mut campaign = example();
+        campaign.factions.push(Faction {
+            id: "faction-1".into(),
+            name: "Harrow Glen Wardens".into(),
+            image: Some(NpcImage {
+                kind: "img".into(),
+                url: "data:image/webp;base64,dG9rZW4=".into(),
+            }),
+            description: "Protectors of the village.".into(),
+            gm_notes: "A hidden passage.".into(),
+        });
+        campaign.npcs[0]
+            .presentation
+            .factions
+            .push(NpcRelationship {
+                target_id: "faction-1".into(),
+                label: "Member".into(),
+            });
+        campaign
+            .workspace
+            .as_mut()
+            .unwrap()
+            .history
+            .entries
+            .push(Destination::Faction {
+                workspace_id: "workspace:1".into(),
+                faction_id: "faction-1".into(),
+                section: Some("Factions".into()),
+            });
+        let expected = serde_json::to_value(&campaign).unwrap();
+        write_campaign(&path, campaign).unwrap();
+        let stored: String = Connection::open(path.join("campaign.sqlite"))
+            .unwrap()
+            .query_row(
+                "SELECT record_json FROM faction WHERE id='faction-1'",
+                [],
+                |row| row.get(0),
+            )
+            .unwrap();
+        assert!(stored.contains("assets/"));
+        let moved = folder.path().join("moved.campaign");
+        fs::rename(&path, &moved).unwrap();
+        assert_eq!(
+            serde_json::to_value(read_campaign(&moved).unwrap()).unwrap(),
+            expected
+        );
+    }
+
+    #[test]
+    fn invalid_factions_and_duplicate_faction_links_are_rejected() {
+        let mut campaign = example();
+        campaign.factions.push(Faction {
+            id: "loc-1".into(),
+            name: " ".into(),
+            image: None,
+            description: String::new(),
+            gm_notes: String::new(),
+        });
+        assert!(campaign.validate().is_err());
+        campaign.factions[0].name = "Village".into();
+        campaign.npcs[0].presentation.factions = vec![
+            NpcRelationship {
+                target_id: "loc-1".into(),
+                label: String::new(),
+            },
+            NpcRelationship {
+                target_id: "loc-1".into(),
+                label: String::new(),
+            },
+        ];
+        assert!(campaign.validate().is_err());
+    }
+
+    #[test]
+    fn version_two_campaigns_default_factions_and_upgrade_on_save() {
+        let folder = tempfile::tempdir().unwrap();
+        let path = folder.path().join("legacy-factions.campaign");
+        let mut campaign = example();
+        campaign.locations.push(Location {
+            id: "loc-1".into(),
+            name: "Village".into(),
+            image: None,
+            public_description: "An old village.".into(),
+            gm_notes: "Private.".into(),
+        });
+        write_campaign(&path, campaign).unwrap();
+        let db = Connection::open(path.join("campaign.sqlite")).unwrap();
+        db.execute_batch("DROP TABLE faction; UPDATE npc_presentation SET presentation_json=json_remove(presentation_json,'$.factions'); PRAGMA user_version=2;").unwrap();
+        drop(db);
+        let campaign = read_campaign(&path).unwrap();
+        assert!(campaign.factions.is_empty());
+        assert!(campaign.npcs[0].presentation.factions.is_empty());
+        assert_eq!(campaign.locations[0].name, "Village");
+        write_campaign(&path, campaign).unwrap();
+        let db = Connection::open(path.join("campaign.sqlite")).unwrap();
+        assert_eq!(
+            db.pragma_query_value(None, "user_version", |row| row.get::<_, i32>(0))
+                .unwrap(),
+            3
+        );
+        assert!(table_exists(&db, "faction").unwrap());
     }
 
     #[test]

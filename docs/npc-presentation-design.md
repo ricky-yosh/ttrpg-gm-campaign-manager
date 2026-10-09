@@ -16,6 +16,14 @@ These notes interpret the two supplied images as visual references, not as instr
 
 Keep the existing NPC record as the single source of truth. Treat the NPC page as GM material by default. Add a dedicated **Description for Players** field and an explicit player-safe portrait reference; never repurpose the existing private notes as public content.
 
+## NPC relationships
+
+The Relationships card sits beneath the statblock and links to existing NPC records. Each directional link stores `targetId` and an optional `label` in `presentation.relationships`; one link per target is allowed, and self-links are rejected. NPC names are resolved from current records, so renaming an NPC updates its links. The whole row opens or focuses the target's tab through the existing workspace commands and navigation history.
+
+Add, label-edit, and remove controls are available in edit mode and share the NPC's Save changes / Cancel draft flow. Cancel on the small Add form dismisses only that form. Opening a linked tab is navigation and does not save the draft or create a campaign edit. Relationship mutations will follow the shared campaign undo policy when that stack is implemented.
+
+Rust defaults missing relationship lists to empty for older campaigns. Relationships use the existing presentation JSON storage, with no SQLite table migration. Missing targets remain saved and display as **Unavailable NPC**, with navigation disabled and removal available in edit mode. Free-text allies/enemies fields remain separate, and relationships are excluded from player presentation. The Locations card uses the same component and links to saved location records; see [Locations](locations.md). The Factions card follows Locations and links to saved faction records; see [Factions](factions.md). Item and story-thread cards will follow when those record types are implemented.
+
 ## NPC dossier content
 
 Treat the GM's NPC page as several named sections rather than one enormous text field. The GM can keep the full character concept, history, personality, and secrets together, while one short **Description for Players** block is intentionally written for projection. Suggested sections based on the first reference:
@@ -49,7 +57,7 @@ In the player display, show the artistic portrait with **Description for Players
 
 ### Responsive GM page layout
 
-Below the full-width banner and NPC identity, let the ruleset-specific statblock occupy a bounded upper-right area while the portrait, **Description for Players**, and narrative GM reference begin on the left and flow beside it. Once the text passes the bottom of a short statblock, let it use the full page width so there is no empty right-side gap. Keep everything in one continuous page with one natural page scroll; the statblock is not a tab or separately scrolling pane. When the available panel width becomes too narrow, stack the content in this order: portrait, statblock (including its token image), **Description for Players**, then the remaining GM reference. Base this switch on available container width (including Dockview splits), not only the overall window width.
+Below the full-width banner and NPC identity, use two independent column stacks in both view and edit mode. Portrait, **Description for Players**, GM reference, and notes stay on the left. The statblock and linked-record cards stay on the right; narrative text does not expand beneath the statblock. Keep one natural page scroll. At panel widths below 900 px, stack portrait, statblock, relationships, **Description for Players**, GM reference, and notes. Measure the Dockview panel width rather than the window.
 
 ### Token image
 
@@ -57,7 +65,7 @@ Keep the tabletop token image separate from the artistic portrait. Place its pic
 
 ## Statblock direction
 
-The statblock is a substantial block within the same GM NPC page, not a separate tab or view. It may be much longer than the narrative sections, so the page should use natural vertical scrolling and a clear heading hierarchy. Keep the NPC identity easy to recognize as the GM scrolls. Include the distinct token image in its identity/core-stat area. On wide panels, narrative content flows to its left and continues across the full width beneath it once the statblock ends. On narrow panels, place the statblock above **Description for Players**. The initial player projection does not include the statblock or token image.
+The statblock is a substantial block within the same GM NPC page, not a separate tab or view. It may be much longer than the narrative sections, so the page should use natural vertical scrolling and a clear heading hierarchy. Keep the NPC identity easy to recognize as the GM scrolls. Include the distinct token image in its identity/core-stat area. On wide panels, narrative content stays in the left column while the statblock and relationship cards occupy the right. On narrow panels, place the statblock above **Description for Players**. The initial player projection does not include the statblock or token image.
 
 The statblock field set comes from the campaign's selected TTRPG type and rules version. The NPC dossier is system-neutral; the statblock editor and renderer are selected by a field-set ID/version. Do not put D&D-only fields directly on the common NPC object or assume that all TTRPGs share ability scores, defenses, or action categories.
 
@@ -84,7 +92,7 @@ The same explicit draft/commit/cancel behavior applies to GM reference sections,
 
 The authoring UI should make the player-facing description unmistakable and provide a preview of exactly what the player window will receive: portrait plus **Description for Players**. The other narrative sections and statblock are GM reference material by default. Keep **editing/publication** separate from **saved player knowledge**: saving the player description makes it available to Presenter, but does not by itself permanently mark the NPC as known to the party.
 
-For a long statblock, prioritize readable hierarchy, consistent field labels, inline editing, and scrolling over a fixed-height editor. It can have collapsible groups within the same page to make the reference sheet easier to scan, but do not move it to a separate tab. On wide panels, avoid a rigid two-column grid that leaves a blank area beside a short statblock; let narrative content wrap and reclaim that space.
+For a long statblock, prioritize readable hierarchy, consistent field labels, inline editing, and scrolling over a fixed-height editor. It can have collapsible groups within the same page to make the reference sheet easier to scan, but do not move it to a separate tab. On wide panels, keep independent column stacks so linked-record cards can follow the statblock regardless of the narrative length.
 
 ## Presenter and player-window behavior
 
@@ -111,4 +119,4 @@ The first implementation can keep Live/Next in memory; durable restoration of th
 - If additional TTRPG field sets are added, should changing a campaign's ruleset require an explicit migration/copy action before an old statblock can be edited with the new form? Existing values should remain intact either way.
 - Should the player view include the banner, or stay limited to portrait and **Description for Players**?
 - What aspect ratio and minimum source quality should the token image picker recommend?
-- What minimum panel width allows the statblock and wrapped narrative content to remain comfortable before switching to the narrow stacked order?
+- What minimum panel width allows the statblock and narrative column to remain comfortable before switching to the narrow stacked order?

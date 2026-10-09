@@ -158,3 +158,39 @@ test("same-section plain routes are skipped after a document opens, while sideba
   session.navigate(-1, () => true);
   assert.equal(useSessionStore.getState().section, "Characters");
 });
+
+test("location navigation restores the correct record and skips removed locations", () => {
+  const session = ready();
+  const location = (id) => ({ kind: "location", workspaceId: "workspace:1", locationId: id, section: "Locations & Maps" });
+  session.setLocationIds(["loc-a", "loc-b"]);
+  session.visitDestination(location("loc-a"));
+  session.visitDestination(location("loc-b"));
+  session.visitDestination(character("npc-a"));
+  assert.deepEqual(session.navigate(-1, () => true), location("loc-b"));
+  session.reconcileWorkspaceDestination(location("loc-a"));
+  assert.equal(useSessionStore.getState().navigation.index, 0);
+  session.navigate(1, () => true);
+  session.navigate(1, () => true);
+  session.setLocationIds(["loc-a"]);
+  assert.deepEqual(session.navigate(-1, () => true), location("loc-a"));
+  hydrateSession(campaign(), 2);
+  assert.deepEqual(useSessionStore.getState().locationIds, []);
+});
+
+test("faction navigation restores the correct record and skips removed factions", () => {
+  const session = ready();
+  const faction = (id) => ({ kind: "faction", workspaceId: "workspace:1", factionId: id, section: "Factions & Maps" });
+  session.setFactionIds(["faction-a", "faction-b"]);
+  session.visitDestination(faction("faction-a"));
+  session.visitDestination(faction("faction-b"));
+  session.visitDestination(character("npc-a"));
+  assert.deepEqual(session.navigate(-1, () => true), faction("faction-b"));
+  session.reconcileWorkspaceDestination(faction("faction-a"));
+  assert.equal(useSessionStore.getState().navigation.index, 0);
+  session.navigate(1, () => true);
+  session.navigate(1, () => true);
+  session.setFactionIds(["faction-a"]);
+  assert.deepEqual(session.navigate(-1, () => true), faction("faction-a"));
+  hydrateSession(campaign(), 2);
+  assert.deepEqual(useSessionStore.getState().factionIds, []);
+});
