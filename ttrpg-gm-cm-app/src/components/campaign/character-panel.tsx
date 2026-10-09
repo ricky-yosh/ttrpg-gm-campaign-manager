@@ -22,6 +22,20 @@ export function CharacterPanel({ params, api }: IDockviewPanelProps) {
   const initialScrollTop = useRef(typeof params.scrollTop === "number" ? params.scrollTop : 0);
   const editor = useNpcNotesEditor(id, npc?.notes);
   const [isEditing, setIsEditing] = useState(false);
+  const [isSaving, setIsSaving] = useState(false);
+  const [saveError, setSaveError] = useState("");
+  const pendingSave = useRef(false);
+  const saveVersion = useRef(0);
+  const generation = useCampaign((state) => state.generation);
+  const draftScope = useRef("");
+
+  useEffect(() => {
+    saveVersion.current += 1;
+    pendingSave.current = false;
+    setIsSaving(false);
+    setSaveError("");
+    return () => { saveVersion.current += 1; };
+  }, [id, generation]);
   const [isWide, setIsWide] = useState(false);
   const [draftName, setDraftName] = useState(npc?.name ?? "");
   const [draftPresentation, setDraftPresentation] = useState<NpcPresentation | null>(
@@ -46,13 +60,16 @@ export function CharacterPanel({ params, api }: IDockviewPanelProps) {
 
   useEffect(() => {
     if (!npc) return;
+    const scope = `${generation}:${id}`;
+    if (isEditing && draftScope.current === scope) return;
+    draftScope.current = scope;
     const notes = structuredClone(npc.notes);
     setDraftName(npc.name);
     setDraftPresentation(structuredClone(npc.presentation));
     setDraftNotes(notes);
     setIsEditing(false);
     editor.tf.setValue(notes);
-  }, [editor, id, npc]);
+  }, [editor, id, npc, generation, isEditing]);
 
   const hasChanges = useMemo(() => {
     if (!npc || !draftPresentation) return false;
@@ -66,7 +83,8 @@ export function CharacterPanel({ params, api }: IDockviewPanelProps) {
   };
 
   const handleCancel = () => {
-    if (!npc) return;
+    if (!npc || pendingSave.current) return;
+    setSaveError("");
     const notes = structuredClone(npc.notes);
     setDraftName(npc.name);
     setDraftPresentation(structuredClone(npc.presentation));
@@ -75,10 +93,23 @@ export function CharacterPanel({ params, api }: IDockviewPanelProps) {
     setIsEditing(false);
   };
 
-  const handleSave = () => {
-    if (!npc || !draftPresentation) return;
-    saveNpcChanges(id, { name: draftName.trim() || npc.name, notes: draftNotes, presentation: draftPresentation });
-    setIsEditing(false);
+  const handleSave = async () => {
+    if (!npc || !draftPresentation || pendingSave.current) return;
+    const version = saveVersion.current;
+    pendingSave.current = true;
+    setIsSaving(true);
+    setSaveError("");
+    try {
+      const applied = await saveNpcChanges(id, { name: draftName, notes: draftNotes, presentation: draftPresentation });
+      if (version === saveVersion.current && applied) setIsEditing(false);
+    } catch (error) {
+      if (version === saveVersion.current) setSaveError(error instanceof Error ? error.message : String(error));
+    } finally {
+      if (version === saveVersion.current) {
+        pendingSave.current = false;
+        setIsSaving(false);
+      }
+    }
   };
 
   if (!npc || !draftPresentation) {
@@ -96,7 +127,7 @@ export function CharacterPanel({ params, api }: IDockviewPanelProps) {
   const renderPortrait = () => (
     <div className="min-w-0">
       <NpcImageField
-        editable={isEditing}
+        editable={isEditing && !isSaving}
         label=""
         value={imageUrl(presentation.portrait)}
         onChange={(url) => updatePresentation({ portrait: toImage(url) })}
@@ -110,7 +141,7 @@ export function CharacterPanel({ params, api }: IDockviewPanelProps) {
     <div className="min-w-0">
       <Dnd55eStatblock
         value={presentation.statblock.data}
-        editable={isEditing}
+        editable={isEditing && !isSaving}
         onChange={(data) => updatePresentation({ statblock: { ...presentation.statblock, data } })}
         fallbackName={npc.name}
         tokenImage={presentation.statblock.tokenImage?.url ?? null}
@@ -133,7 +164,7 @@ export function CharacterPanel({ params, api }: IDockviewPanelProps) {
     <NpcPlayerDescription
       description={presentation.playerDescription}
       portraitUrl={imageUrl(presentation.portrait)}
-      editable={isEditing}
+      editable={isEditing && !isSaving}
       withPortrait={isWide}
       onDescriptionChange={(playerDescription) => updatePresentation({ playerDescription })}
       onPortraitChange={(url) => updatePresentation({ portrait: toImage(url) })}
@@ -145,22 +176,22 @@ export function CharacterPanel({ params, api }: IDockviewPanelProps) {
       sourceNpcId={id}
       records={npcs}
       value={presentation.relationships ?? []}
-      editable={isEditing}
+      editable={isEditing && !isSaving}
       onChange={(relationships) => updatePresentation({ relationships })}
     />
   );
   const locationLinks = (
     <NpcRecordLinks key={`locations-${id}-${isEditing}`} kind="location" sourceNpcId={id} records={locations ?? []}
-      value={presentation.locations ?? []} editable={isEditing}
+      value={presentation.locations ?? []} editable={isEditing && !isSaving}
       onChange={(locations) => updatePresentation({ locations })} />
   );
   const factionLinks = (
     <NpcRecordLinks key={`factions-${id}-${isEditing}`} kind="faction" sourceNpcId={id} records={factions ?? []}
-      value={presentation.factions ?? []} editable={isEditing}
+      value={presentation.factions ?? []} editable={isEditing && !isSaving}
       onChange={(factions) => updatePresentation({ factions })} />
   );
-  const gmReference = <NpcGmReference value={reference} editable={isEditing} onChange={setReference} />;
-  const notes = <NpcNotesEditor editor={editor} npcName={npc.name} editable={isEditing} onChange={setDraftNotes} />;
+  const gmReference = <NpcGmReference value={reference} editable={isEditing && !isSaving} onChange={setReference} />;
+  const notes = <NpcNotesEditor editor={editor} npcName={npc.name} editable={isEditing && !isSaving} onChange={setDraftNotes} />;
 
   return (
     <article ref={scrollRef} className="h-full overflow-auto p-8" onScroll={(event) => {
@@ -171,15 +202,15 @@ export function CharacterPanel({ params, api }: IDockviewPanelProps) {
         <div className="min-w-0 flex-1">
           <p className="mb-1 text-xs font-medium uppercase tracking-wide text-muted-foreground">NPC</p>
           {isEditing ? (
-            <Input aria-label="NPC name" value={draftName} onChange={(event) => setDraftName(event.currentTarget.value)} className="max-w-3xl" />
+            <Input disabled={isSaving} aria-label="NPC name" value={draftName} onChange={(event) => setDraftName(event.currentTarget.value)} className="max-w-3xl" />
           ) : <h1 className="font-serif text-2xl font-semibold">{npc.name}</h1>}
         </div>
         <div className="flex shrink-0 gap-2">
           {isEditing ? (
             <>
               {hasChanges && <span className="self-center text-sm text-muted-foreground">Unsaved changes</span>}
-              <Button type="button" variant="outline" onClick={handleCancel}>Cancel</Button>
-              <Button type="button" onClick={handleSave} disabled={!hasChanges}>Save changes</Button>
+              <Button type="button" variant="outline" onClick={handleCancel} disabled={isSaving}>Cancel</Button>
+              <Button type="button" onClick={handleSave} disabled={!hasChanges || isSaving}>{isSaving ? "Saving…" : "Save changes"}</Button>
             </>
           ) : (
             <Button type="button" variant="outline" onClick={() => setIsEditing(true)}>
@@ -188,10 +219,11 @@ export function CharacterPanel({ params, api }: IDockviewPanelProps) {
           )}
         </div>
       </header>
+      {saveError && <p role="alert" className="mb-5 text-sm text-destructive">{saveError}</p>}
 
       {(isEditing || presentation.banner) && (
         <NpcImageField
-          editable={isEditing}
+          editable={isEditing && !isSaving}
           label=""
           value={imageUrl(presentation.banner)}
           onChange={(url) => updatePresentation({ banner: toImage(url) })}

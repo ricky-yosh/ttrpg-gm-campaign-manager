@@ -424,10 +424,34 @@ export function saveNpcPresentation(id: string, presentation: NpcPresentation) {
   if (!campaign.npcs.some((item) => item.id === id)) return;
   updateCampaign({ npcs: campaign.npcs.map((item) => item.id === id ? { ...item, presentation: structuredClone(presentation) } : item) });
 }
-export function saveNpcChanges(id: string, changes: Partial<Pick<Npc, "name" | "notes" | "presentation">>) {
-  const { campaign } = getCampaign();
-  if (!campaign.npcs.some((item) => item.id === id)) return;
-  updateCampaign({ npcs: campaign.npcs.map((item) => item.id === id ? { ...item, ...structuredClone(changes) } : item) });
+// Desktop updates use Rust rules; browser-only development retains local editing.
+export async function saveNpcChanges(id: string, changes: Pick<Npc, "name" | "notes" | "presentation">): Promise<boolean> {
+  const { campaign, generation } = getCampaign();
+  const original = campaign.npcs.find((item) => item.id === id);
+  if (!original) throw new Error("This NPC is no longer available.");
+  const baseline = JSON.stringify(original);
+  const change = structuredClone({ npcId: id, ...changes });
+  let accepted: Npc;
+  if (isTauri()) {
+    try {
+      accepted = await invoke<Npc>("update_npc", { campaign, change });
+    } catch (error) {
+      const message = typeof error === "object" && error !== null && "message" in error
+        ? String(error.message) : String(error);
+      throw new Error(message);
+    }
+  } else {
+    if (!change.name.trim()) throw new Error("NPC name is required.");
+    accepted = { id, name: change.name.trim(), notes: change.notes, presentation: change.presentation };
+  }
+  const current = getCampaign();
+  if (current.generation !== generation) return false;
+  const latest = current.campaign.npcs.find((item) => item.id === id);
+  if (!latest || JSON.stringify(latest) !== baseline) {
+    throw new Error("This NPC changed while saving. Review the latest record and try again.");
+  }
+  updateCampaign({ npcs: current.campaign.npcs.map((item) => item.id === id ? accepted : item) });
+  return true;
 }
 export function getCharacterNotes(id: string): Value {
   return getCampaign().campaign.npcs.find((npc) => npc.id === id)?.notes ?? [{ type: "p", children: [{ text: "" }] }];

@@ -6,13 +6,14 @@ mod assets;
 mod commands;
 mod migrations;
 mod repository;
+mod service;
 mod validation;
 
 use assets::{
     transform_faction_image, transform_images, transform_location_image,
     transform_presentation_images,
 };
-pub(crate) use commands::{open_campaign, save_campaign};
+pub(crate) use commands::{open_campaign, save_campaign, update_npc};
 use migrations::ensure_schema;
 #[cfg(test)]
 use repository::table_exists;
@@ -43,7 +44,7 @@ pub struct Campaign {
 
 #[derive(Debug, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
-struct Npc {
+pub struct Npc {
     id: String,
     name: String,
     notes: Vec<Value>,

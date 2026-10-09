@@ -16,3 +16,13 @@ pub async fn open_campaign(path: String) -> Result<Campaign, String> {
         .await
         .map_err(|e| e.to_string())?
 }
+
+#[tauri::command]
+pub async fn update_npc(
+    campaign: Campaign,
+    change: super::service::UpdateNpc,
+) -> Result<super::Npc, super::service::CampaignOperationError> {
+    tauri::async_runtime::spawn_blocking(move || super::service::update_npc(campaign, change))
+        .await
+        .map_err(|error| super::service::CampaignOperationError::Internal(error.to_string()))?
+}
