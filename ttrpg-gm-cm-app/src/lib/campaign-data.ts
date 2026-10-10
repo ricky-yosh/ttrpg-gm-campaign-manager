@@ -373,10 +373,30 @@ const demoNpcPresentations: Record<CharacterName, NpcPresentation> = {
 };
 
 const demo = emptyCampaign("My campaign");
+const demoLocations = {
+  greyhaven: crypto.randomUUID(), harbor: crypto.randomUUID(), inn: crypto.randomUUID(), seawall: crypto.randomUUID(),
+};
+demo.name = "The Lanterns of Greyhaven";
 demo.npcs = demoCharacters.map((name) => ({
   id: crypto.randomUUID(), name, notes: initialCharacterNotes[name],
   presentation: demoNpcPresentations[name],
 }));
+demo.locations = [
+  { id: demoLocations.greyhaven, name: "Greyhaven", image: null, publicDescription: "A weathered harbor city built around a deep natural inlet. Ships bring wealth, rumors, and trouble with every tide.", gmNotes: "The old city was built over a drowned shrine.", locationType: "City", partyKnowledge: "known", tags: ["Harbor", "Northern Reach"] },
+  { id: demoLocations.harbor, name: "The Harbor", image: null, publicDescription: "A crowded waterfront of net sheds, chandlers, and creaking piers.", gmNotes: "Smugglers use the third piling from the old bell tower as a drop.", parentId: demoLocations.greyhaven, locationType: "District", partyKnowledge: "visited", tags: ["Waterfront"] },
+  { id: demoLocations.inn, name: "The Lantern Inn", image: null, publicDescription: "A warm, lively tavern where sailors trade stories over strong ale.", gmNotes: "A sealed stair lies under the hearth.", parentId: demoLocations.harbor, locationType: "Tavern", partyKnowledge: "visited", tags: ["Tavern", "Social"] },
+  { id: demoLocations.seawall, name: "Eastern Seawall", image: null, publicDescription: "A black stone wall that keeps the highest tides from the old quarter.", gmNotes: "At low tide a narrow stair appears under the eastern arch.", parentId: demoLocations.harbor, locationType: "Landmark", partyKnowledge: "known", tags: ["Mystery", "Tide"] },
+];
+demo.factions = [
+  { id: crypto.randomUUID(), name: "Dockworkers’ Guild", image: null, description: "The union of stevedores, chandlers, and harbor crews that keeps Greyhaven’s trade moving.", gmNotes: "Guildmaster Orla suspects someone is replacing cargo tallies." },
+  { id: crypto.randomUUID(), name: "The Saltglass Circle", image: null, description: "A discreet society of navigators and scholars who collect stories of impossible lights at sea.", gmNotes: "They know the drowned shrine is real and want its door kept shut." },
+];
+demo.inventory = { gold: 248, entries: [
+  { id: crypto.randomUUID(), name: "Healing Potion", kind: "item", quantity: 3, note: "One is marked with the apothecary’s blue wax." },
+  { id: crypto.randomUUID(), name: "Tideglass Compass", kind: "item", quantity: 1, note: "Needle shivers near the eastern seawall." },
+  { id: crypto.randomUUID(), name: "Rope", kind: "material", quantity: 50, note: "50 feet, hempen." },
+  { id: crypto.randomUUID(), name: "Silvered Bolts", kind: "material", quantity: 8, note: "Recovered from the Morrow’s cargo." },
+] };
 export const campaignStore = createCampaignStore({ campaign: demo, path: null, revision: 0, savedRevision: 0,
   status: "Choose Save to keep this campaign", error: "", generation: 0, isLeaving: false,
   npcEditHistory: {}, pendingNpcOperations: {} });

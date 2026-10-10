@@ -69,6 +69,14 @@ const destinationGroups = [
   ] },
 ];
 
+const sampleSidebarEntries: Record<string, string[]> = {
+  Overview: ["The story so far", "Recent activity", "Upcoming session"],
+  Sessions: ["The Low Tide · Upcoming", "Ashes at the Quay", "A Debt in Salt"],
+  "Story Threads": ["The Lantern Below", "The Missing Morrow", "A Favor for the Guild", "Mossgate Watch"],
+  Items: ["Tideglass Compass", "Morrow’s Wax Seal", "Lantern of the Deep"],
+  Puzzles: ["The Three Harbor Bells", "The Salt-Written Chart", "The Lighthouse Ledger"],
+};
+
 function PresenterSidebarContent({ navigationSection, activeSection, selectedNpcId, onSelectMap, onSelectInventory, onShowNpcs, onShowAllSections, onSelectNpc }: {
   navigationSection: PresenterSidebarSection;
   activeSection: PresenterSection;
@@ -282,6 +290,8 @@ export function AppSidebar({ isPresenterView = false, presenterSection = "map", 
                   <SidebarMenuItem><SidebarMenuButton tooltip="Map prototype" onClick={appCommands.openMap}><MapIcon /><span>Map prototype</span></SidebarMenuButton></SidebarMenuItem>
                 ) : section === "Inventory" ? (
                   <SidebarMenuItem><SidebarMenuButton tooltip="Party Inventory" onClick={appCommands.openInventory}><BackpackIcon /><span>Party Inventory</span></SidebarMenuButton></SidebarMenuItem>
+                ) : sampleSidebarEntries[section] ? (
+                  sampleSidebarEntries[section].map((entry) => <li key={entry} className="px-2 py-2 text-sm text-muted-foreground">{entry}</li>)
                 ) : (
                   <li className="px-2 py-2 text-sm text-muted-foreground">Nothing here yet</li>
                 )}

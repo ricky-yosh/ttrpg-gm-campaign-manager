@@ -14,6 +14,7 @@ test("save queue retains edits during a write and failed opens retain the active
   let failOpen = false;
   let cancelOpen = false;
   const second = emptyCampaign("Second campaign");
+  const initialCampaignName = getCampaign().campaign.name;
   mockIPC(async (command, payload) => {
     if (command === "plugin:dialog|save") {
       saveLocationOptions = payload.options;
@@ -42,7 +43,7 @@ test("save queue retains edits during a write and failed opens retain the active
   assert.equal(await pending, true);
   assert.equal(writes.length, 2);
   assert.equal(writePaths[0], "/tmp/campaigns/My campaign.campaign");
-  assert.equal(saveLocationOptions.defaultPath, "My campaign");
+  assert.equal(saveLocationOptions.defaultPath, initialCampaignName);
   assert.deepEqual(saveLocationOptions.filters, [{ name: "Campaign package", extensions: ["campaign"] }]);
   assert.equal(writes[1].npcs.find((npc) => npc.id === first).notes[0].children[0].text, "Edit made during save");
   assert.equal(getCampaign().revision, getCampaign().savedRevision);
