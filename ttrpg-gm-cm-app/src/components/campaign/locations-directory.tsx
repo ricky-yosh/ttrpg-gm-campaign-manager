@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { ChevronDownIcon, ChevronRightIcon, PlusIcon } from "lucide-react";
+import { ChevronRightIcon, PlusIcon } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { SidebarMenu, SidebarMenuButton, SidebarMenuItem } from "@/components/ui/sidebar";
 import { Empty, EmptyDescription, EmptyHeader, EmptyTitle } from "@/components/ui/empty";
@@ -31,17 +31,19 @@ export function LocationsDirectory() {
     const children = locations.filter((item) => item.parentId === location.id);
     const expanded = !collapsedIds.includes(location.id);
     const Icon = locationIcon(location.locationType);
+    const indentation = Math.min(depth, 5) * 10;
     return <SidebarMenuItem key={location.id}>
-      <div className="flex min-w-0 items-center gap-0.5" style={{ paddingLeft: Math.min(depth, 5) * 14 }}>
-        {children.length ? <Button type="button" variant="ghost" size="icon-sm"
-          aria-label={`${expanded ? "Collapse" : "Expand"} ${location.name}`} aria-expanded={expanded}
-          onClick={() => setDirectory({ collapsedIds: expanded ? [...collapsedIds, location.id] : collapsedIds.filter((id) => id !== location.id) })}>
-          {expanded ? <ChevronDownIcon /> : <ChevronRightIcon />}
-        </Button> : <span className="w-7 shrink-0" />}
+      <div className="relative min-w-0">
         <SidebarMenuButton tooltip={location.name} title={location.name} aria-current={activeId === location.id ? "page" : undefined} isActive={activeId === location.id}
-          className="min-w-0" onClick={() => appCommands.openLocation(location.id)}>
+          className="min-w-0" style={{ paddingLeft: indentation + 20 }} onClick={() => appCommands.openLocation(location.id)}>
           <Icon aria-hidden="true" /><span className="truncate">{location.name}</span>
         </SidebarMenuButton>
+        {children.length > 0 && <Button type="button" variant="disclosure" size="icon-xs"
+          className="absolute top-1 w-4" style={{ left: indentation }}
+          aria-label={`${expanded ? "Collapse" : "Expand"} ${location.name}`} aria-expanded={expanded}
+          onClick={() => setDirectory({ collapsedIds: expanded ? [...collapsedIds, location.id] : collapsedIds.filter((id) => id !== location.id) })}>
+          <ChevronRightIcon aria-hidden="true" className="transition-transform duration-150 group-aria-expanded/button:rotate-90 motion-reduce:transition-none" />
+        </Button>}
       </div>
       {expanded && children.length > 0 && <SidebarMenu>{children.map((child) => renderLocation(child, depth + 1))}</SidebarMenu>}
     </SidebarMenuItem>;
