@@ -1,6 +1,6 @@
 mod campaign;
 mod images;
-use campaign::{open_campaign, save_campaign, update_npc};
+use campaign::{open_campaign, redo_npc, save_campaign, undo_npc, update_npc, CampaignHistory};
 use std::sync::Mutex;
 use tauri::{Manager, State};
 
@@ -21,12 +21,15 @@ fn greet(name: &str) -> String {
 pub fn run() {
     tauri::Builder::default()
         .manage(OpenedCampaigns(Mutex::new(Vec::new())))
+        .manage(CampaignHistory::default())
         .plugin(tauri_plugin_opener::init())
         .plugin(tauri_plugin_dialog::init())
         .invoke_handler(tauri::generate_handler![
             greet,
             open_campaign,
             save_campaign,
+            undo_npc,
+            redo_npc,
             update_npc,
             images::convert_image_to_webp,
             take_opened_campaigns

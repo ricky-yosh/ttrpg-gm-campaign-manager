@@ -1,10 +1,10 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import type { IDockviewPanelProps } from "dockview-react";
 import type { Value } from "platejs";
-import { PencilIcon } from "lucide-react";
+import { PencilIcon, Redo2Icon, Undo2Icon } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { useCampaign, saveNpcChanges, type NpcPresentation, type NpcReference } from "@/lib/campaign-data";
+import { useCampaign, applyNpcHistory, saveNpcChanges, type NpcPresentation, type NpcReference } from "@/lib/campaign-data";
 import { NpcImageField } from "@/components/campaign/npc-image-field";
 import { Dnd55eStatblock } from "@/components/campaign/npc-statblock";
 import { NpcRecordLinks } from "@/components/campaign/npc-record-links";
@@ -27,6 +27,11 @@ export function CharacterPanel({ params, api }: IDockviewPanelProps) {
   const pendingSave = useRef(false);
   const saveVersion = useRef(0);
   const generation = useCampaign((state) => state.generation);
+  const editHistory = useCampaign((state) => state.npcEditHistory[id]);
+  const isNpcBusy = useCampaign((state) => Boolean(state.pendingNpcOperations[id]));
+  const canUndo = editHistory?.canUndo ?? false;
+  const canRedo = editHistory?.canRedo ?? false;
+  const [isApplyingHistory, setIsApplyingHistory] = useState(false);
   const draftScope = useRef("");
 
   useEffect(() => {
@@ -94,7 +99,7 @@ export function CharacterPanel({ params, api }: IDockviewPanelProps) {
   };
 
   const handleSave = async () => {
-    if (!npc || !draftPresentation || pendingSave.current) return;
+    if (!npc || !draftPresentation || pendingSave.current || isNpcBusy) return;
     const version = saveVersion.current;
     pendingSave.current = true;
     setIsSaving(true);
@@ -109,6 +114,19 @@ export function CharacterPanel({ params, api }: IDockviewPanelProps) {
         pendingSave.current = false;
         setIsSaving(false);
       }
+    }
+  };
+
+  const handleHistory = async (direction: "undo" | "redo") => {
+    if (isApplyingHistory || isNpcBusy || isEditing) return;
+    setIsApplyingHistory(true);
+    setSaveError("");
+    try {
+      await applyNpcHistory(id, direction);
+    } catch (error) {
+      setSaveError(error instanceof Error ? error.message : String(error));
+    } finally {
+      setIsApplyingHistory(false);
     }
   };
 
@@ -127,7 +145,7 @@ export function CharacterPanel({ params, api }: IDockviewPanelProps) {
   const renderPortrait = () => (
     <div className="min-w-0">
       <NpcImageField
-        editable={isEditing && !isSaving}
+        editable={isEditing && !isSaving && !isNpcBusy}
         label=""
         value={imageUrl(presentation.portrait)}
         onChange={(url) => updatePresentation({ portrait: toImage(url) })}
@@ -141,7 +159,7 @@ export function CharacterPanel({ params, api }: IDockviewPanelProps) {
     <div className="min-w-0">
       <Dnd55eStatblock
         value={presentation.statblock.data}
-        editable={isEditing && !isSaving}
+        editable={isEditing && !isSaving && !isNpcBusy}
         onChange={(data) => updatePresentation({ statblock: { ...presentation.statblock, data } })}
         fallbackName={npc.name}
         tokenImage={presentation.statblock.tokenImage?.url ?? null}
@@ -164,7 +182,7 @@ export function CharacterPanel({ params, api }: IDockviewPanelProps) {
     <NpcPlayerDescription
       description={presentation.playerDescription}
       portraitUrl={imageUrl(presentation.portrait)}
-      editable={isEditing && !isSaving}
+      editable={isEditing && !isSaving && !isNpcBusy}
       withPortrait={isWide}
       onDescriptionChange={(playerDescription) => updatePresentation({ playerDescription })}
       onPortraitChange={(url) => updatePresentation({ portrait: toImage(url) })}
@@ -176,22 +194,22 @@ export function CharacterPanel({ params, api }: IDockviewPanelProps) {
       sourceNpcId={id}
       records={npcs}
       value={presentation.relationships ?? []}
-      editable={isEditing && !isSaving}
+      editable={isEditing && !isSaving && !isNpcBusy}
       onChange={(relationships) => updatePresentation({ relationships })}
     />
   );
   const locationLinks = (
     <NpcRecordLinks key={`locations-${id}-${isEditing}`} kind="location" sourceNpcId={id} records={locations ?? []}
-      value={presentation.locations ?? []} editable={isEditing && !isSaving}
+      value={presentation.locations ?? []} editable={isEditing && !isSaving && !isNpcBusy}
       onChange={(locations) => updatePresentation({ locations })} />
   );
   const factionLinks = (
     <NpcRecordLinks key={`factions-${id}-${isEditing}`} kind="faction" sourceNpcId={id} records={factions ?? []}
-      value={presentation.factions ?? []} editable={isEditing && !isSaving}
+      value={presentation.factions ?? []} editable={isEditing && !isSaving && !isNpcBusy}
       onChange={(factions) => updatePresentation({ factions })} />
   );
-  const gmReference = <NpcGmReference value={reference} editable={isEditing && !isSaving} onChange={setReference} />;
-  const notes = <NpcNotesEditor editor={editor} npcName={npc.name} editable={isEditing && !isSaving} onChange={setDraftNotes} />;
+  const gmReference = <NpcGmReference value={reference} editable={isEditing && !isSaving && !isNpcBusy} onChange={setReference} />;
+  const notes = <NpcNotesEditor editor={editor} npcName={npc.name} editable={isEditing && !isSaving && !isNpcBusy} onChange={setDraftNotes} />;
 
   return (
     <article ref={scrollRef} className="h-full overflow-auto p-8" onScroll={(event) => {
@@ -202,20 +220,28 @@ export function CharacterPanel({ params, api }: IDockviewPanelProps) {
         <div className="min-w-0 flex-1">
           <p className="mb-1 text-xs font-medium uppercase tracking-wide text-muted-foreground">NPC</p>
           {isEditing ? (
-            <Input disabled={isSaving} aria-label="NPC name" value={draftName} onChange={(event) => setDraftName(event.currentTarget.value)} className="max-w-3xl" />
+            <Input disabled={isSaving || isNpcBusy} aria-label="NPC name" value={draftName} onChange={(event) => setDraftName(event.currentTarget.value)} className="max-w-3xl" />
           ) : <h1 className="font-serif text-2xl font-semibold">{npc.name}</h1>}
         </div>
         <div className="flex shrink-0 gap-2">
           {isEditing ? (
             <>
               {hasChanges && <span className="self-center text-sm text-muted-foreground">Unsaved changes</span>}
-              <Button type="button" variant="outline" onClick={handleCancel} disabled={isSaving}>Cancel</Button>
-              <Button type="button" onClick={handleSave} disabled={!hasChanges || isSaving}>{isSaving ? "Saving…" : "Save changes"}</Button>
+              <Button type="button" variant="outline" onClick={handleCancel} disabled={isSaving || isNpcBusy}>Cancel</Button>
+              <Button type="button" onClick={handleSave} disabled={!hasChanges || isSaving || isNpcBusy}>{isSaving ? "Saving…" : "Save changes"}</Button>
             </>
           ) : (
-            <Button type="button" variant="outline" onClick={() => setIsEditing(true)}>
-              <PencilIcon aria-hidden="true" /> Edit
-            </Button>
+            <>
+              <Button type="button" variant="outline" onClick={() => void handleHistory("undo")} disabled={!canUndo || isApplyingHistory || isNpcBusy} aria-label="Undo NPC edit">
+                <Undo2Icon aria-hidden="true" /> Undo
+              </Button>
+              <Button type="button" variant="outline" onClick={() => void handleHistory("redo")} disabled={!canRedo || isApplyingHistory || isNpcBusy} aria-label="Redo NPC edit">
+                <Redo2Icon aria-hidden="true" /> Redo
+              </Button>
+              <Button type="button" variant="outline" disabled={isNpcBusy} onClick={() => setIsEditing(true)}>
+                <PencilIcon aria-hidden="true" /> Edit
+              </Button>
+            </>
           )}
         </div>
       </header>
@@ -223,7 +249,7 @@ export function CharacterPanel({ params, api }: IDockviewPanelProps) {
 
       {(isEditing || presentation.banner) && (
         <NpcImageField
-          editable={isEditing && !isSaving}
+          editable={isEditing && !isSaving && !isNpcBusy}
           label=""
           value={imageUrl(presentation.banner)}
           onChange={(url) => updatePresentation({ banner: toImage(url) })}

@@ -4,6 +4,7 @@ use std::collections::HashMap;
 
 mod assets;
 mod commands;
+mod history;
 mod migrations;
 mod repository;
 mod service;
@@ -13,7 +14,8 @@ use assets::{
     transform_faction_image, transform_images, transform_location_image,
     transform_presentation_images,
 };
-pub(crate) use commands::{open_campaign, save_campaign, update_npc};
+pub(crate) use commands::{open_campaign, redo_npc, save_campaign, undo_npc, update_npc};
+pub(crate) use history::CampaignHistory;
 use migrations::ensure_schema;
 #[cfg(test)]
 use repository::table_exists;
@@ -42,7 +44,7 @@ pub struct Campaign {
     sidebar: Sidebar,
 }
 
-#[derive(Debug, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
 pub struct Npc {
     id: String,

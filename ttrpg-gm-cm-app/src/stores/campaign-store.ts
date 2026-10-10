@@ -10,6 +10,8 @@ export type CampaignSnapshot = {
   error: string;
   generation: number;
   isLeaving: boolean;
+  npcEditHistory: Record<string, { canUndo: boolean; canRedo: boolean }>;
+  pendingNpcOperations: Record<string, boolean>;
 };
 
 // The save service owns promises and native resources; only observable data lives here.

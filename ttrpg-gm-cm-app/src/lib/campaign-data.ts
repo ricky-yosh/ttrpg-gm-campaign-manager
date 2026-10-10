@@ -98,6 +98,7 @@ export type NpcPresentation = {
   };
 };
 export type Npc = { id: string; name: string; notes: Value; presentation: NpcPresentation };
+type NpcHistoryResult = { npc: Npc; canUndo: boolean; canRedo: boolean };
 export type WorkspaceState = {
   layout: SerializedDockview;
   panels: Record<string, SerializedDockview>;
@@ -373,7 +374,8 @@ demo.npcs = demoCharacters.map((name) => ({
   presentation: demoNpcPresentations[name],
 }));
 export const campaignStore = createCampaignStore({ campaign: demo, path: null, revision: 0, savedRevision: 0,
-  status: "Choose Save to keep this campaign", error: "", generation: 0, isLeaving: false });
+  status: "Choose Save to keep this campaign", error: "", generation: 0, isLeaving: false,
+  npcEditHistory: {}, pendingNpcOperations: {} });
 export function useCampaign(): CampaignSnapshot;
 export function useCampaign<T>(selector: (state: CampaignSnapshot) => T): T;
 export function useCampaign(selector?: (state: CampaignSnapshot) => unknown) {
@@ -424,34 +426,75 @@ export function saveNpcPresentation(id: string, presentation: NpcPresentation) {
   if (!campaign.npcs.some((item) => item.id === id)) return;
   updateCampaign({ npcs: campaign.npcs.map((item) => item.id === id ? { ...item, presentation: structuredClone(presentation) } : item) });
 }
+async function runNpcOperation<T>(id: string, operation: () => Promise<T>): Promise<T> {
+  const { generation, pendingNpcOperations } = getCampaign();
+  if (pendingNpcOperations[id]) throw new Error("An operation for this NPC is already in progress.");
+  campaignStore.setState((state) => ({ pendingNpcOperations: { ...state.pendingNpcOperations, [id]: true } }));
+  try {
+    return await operation();
+  } finally {
+    if (getCampaign().generation === generation) {
+      campaignStore.setState((state) => {
+        const remaining = { ...state.pendingNpcOperations };
+        delete remaining[id];
+        return { pendingNpcOperations: remaining };
+      });
+    }
+  }
+}
+
 // Desktop updates use Rust rules; browser-only development retains local editing.
 export async function saveNpcChanges(id: string, changes: Pick<Npc, "name" | "notes" | "presentation">): Promise<boolean> {
-  const { campaign, generation } = getCampaign();
-  const original = campaign.npcs.find((item) => item.id === id);
-  if (!original) throw new Error("This NPC is no longer available.");
-  const baseline = JSON.stringify(original);
-  const change = structuredClone({ npcId: id, ...changes });
-  let accepted: Npc;
-  if (isTauri()) {
-    try {
-      accepted = await invoke<Npc>("update_npc", { campaign, change });
-    } catch (error) {
-      const message = typeof error === "object" && error !== null && "message" in error
-        ? String(error.message) : String(error);
-      throw new Error(message);
+  return runNpcOperation(id, async () => {
+    const { campaign, generation } = getCampaign();
+    const original = campaign.npcs.find((item) => item.id === id);
+    if (!original) throw new Error("This NPC is no longer available.");
+    const baseline = JSON.stringify(original);
+    const change = structuredClone({ npcId: id, ...changes });
+    let accepted: Npc;
+    let history: NpcHistoryResult | null = null;
+    if (isTauri()) {
+      try {
+        history = await invoke<NpcHistoryResult>("update_npc", { campaign, change });
+        accepted = history.npc;
+      } catch (error) {
+        const message = typeof error === "object" && error !== null && "message" in error
+          ? String(error.message) : String(error);
+        throw new Error(message);
+      }
+    } else {
+      if (!change.name.trim()) throw new Error("NPC name is required.");
+      accepted = { id, name: change.name.trim(), notes: change.notes, presentation: change.presentation };
     }
-  } else {
-    if (!change.name.trim()) throw new Error("NPC name is required.");
-    accepted = { id, name: change.name.trim(), notes: change.notes, presentation: change.presentation };
-  }
-  const current = getCampaign();
-  if (current.generation !== generation) return false;
-  const latest = current.campaign.npcs.find((item) => item.id === id);
-  if (!latest || JSON.stringify(latest) !== baseline) {
-    throw new Error("This NPC changed while saving. Review the latest record and try again.");
-  }
-  updateCampaign({ npcs: current.campaign.npcs.map((item) => item.id === id ? accepted : item) });
-  return true;
+    const current = getCampaign();
+    if (current.generation !== generation) return false;
+    const latest = current.campaign.npcs.find((item) => item.id === id);
+    if (!latest || JSON.stringify(latest) !== baseline) {
+      throw new Error("This NPC changed while saving. Review the latest record and try again.");
+    }
+    updateCampaign({ npcs: current.campaign.npcs.map((item) => item.id === id ? accepted : item) });
+    if (history) campaignStore.setState((state) => ({ npcEditHistory: { ...state.npcEditHistory, [id]: { canUndo: history.canUndo, canRedo: history.canRedo } } }));
+    return true;
+  });
+}
+
+export async function applyNpcHistory(id: string, direction: "undo" | "redo"): Promise<void> {
+  return runNpcOperation(id, async () => {
+    if (!isTauri()) throw new Error("NPC edit undo is available in the desktop app.");
+    const { campaign, generation } = getCampaign();
+    const currentNpc = campaign.npcs.find((item) => item.id === id);
+    if (!currentNpc) throw new Error("This NPC is no longer available.");
+    const command = direction === "undo" ? "undo_npc" : "redo_npc";
+    const history = await invoke<NpcHistoryResult>(command, { campaign, npcId: id });
+    const latest = getCampaign();
+    if (latest.generation !== generation) return;
+    const latestNpc = latest.campaign.npcs.find((item) => item.id === id);
+    if (!latestNpc || JSON.stringify(latestNpc) !== JSON.stringify(currentNpc)) {
+      throw new Error("This NPC changed while applying history. Review the latest record and try again.");
+    }
+    updateCampaign({ npcs: latest.campaign.npcs.map((item) => item.id === id ? history.npc : item) });
+    campaignStore.setState((state) => ({ npcEditHistory: { ...state.npcEditHistory, [id]: { canUndo: history.canUndo, canRedo: history.canRedo } } }));
+  });
 }
 export function getCharacterNotes(id: string): Value {
   return getCampaign().campaign.npcs.find((npc) => npc.id === id)?.notes ?? [{ type: "p", children: [{ text: "" }] }];
@@ -485,7 +528,8 @@ async function chooseCampaignPackagePath(): Promise<string | null> {
 async function loadCampaignPath(path: string) {
   const campaign = await invoke<Campaign>("open_campaign", { path });
   campaignStore.setState((state) => ({ campaign, path, revision: 0, savedRevision: 0,
-    status: "Saved", error: "", generation: state.generation + 1 }));
+    status: "Saved", error: "", generation: state.generation + 1,
+    npcEditHistory: {}, pendingNpcOperations: {} }));
 }
 
 export async function openCampaignAt(path: string): Promise<boolean> {
@@ -600,7 +644,8 @@ export async function replaceCampaign(name?: string) {
       if (!name.trim()) return false;
       campaignStore.setState((state) => ({ campaign: emptyCampaign(name.trim()), path: null,
         revision: 1, savedRevision: 0, status: "Unsaved campaign — choose Save to keep it",
-        error: "", generation: state.generation + 1 }));
+        error: "", generation: state.generation + 1,
+        npcEditHistory: {}, pendingNpcOperations: {} }));
       return true;
     }
     if (!isTauri()) throw new Error("Use the desktop app (pnpm tauri dev) to open campaign files.");
