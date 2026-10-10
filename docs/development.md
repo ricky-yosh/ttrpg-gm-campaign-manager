@@ -13,9 +13,14 @@ cd ttrpg-gm-cm-app
 - `pnpm tauri dev` starts the desktop app and its frontend dev server.
 - `pnpm build` type-checks and builds the frontend into `dist/`.
 - `pnpm lint` runs Oxlint on the frontend code.
+- `pnpm test` runs TypeScript business-logic tests with Node's built-in test runner.
 - `pnpm tauri build` builds the desktop app and its distributable package.
 
 These are the Tauri CLI's standard development and build commands; see the [Tauri project guide](https://tauri.app/start/create-project/).
+
+## TypeScript tests
+
+Use Node's built-in `node:test` runner for focused TypeScript business-logic tests. Tests live in `tests/*.test.mjs` and can import app `.ts` modules directly through Node's native TypeScript stripping; run them with `pnpm test` from the app directory. Keep logic tests independent of the Tauri UI when possible. Use a browser or end-to-end test tool only when behavior depends on rendering, layout, or real platform integration.
 
 ## Inspect React components in the Tauri desktop app
 
