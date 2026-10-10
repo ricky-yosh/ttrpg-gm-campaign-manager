@@ -1,5 +1,4 @@
-import { invoke, isTauri } from "@tauri-apps/api/core";
-import { listen } from "@tauri-apps/api/event";
+import { MenuItem, type Submenu } from "@tauri-apps/api/menu";
 import type { NpcHistoryDirection } from "@/components/campaign/npc-history-context";
 
 type HistoryMenuState = {
@@ -7,25 +6,57 @@ type HistoryMenuState = {
   redoLabel: string | null;
 };
 
-let current: HistoryMenuState;
+let current: HistoryMenuState = { undoLabel: null, redoLabel: null };
+let menuItems: { undo: MenuItem; redo: MenuItem } | undefined;
+let applyHistory: ((direction: NpcHistoryDirection) => void) | undefined;
 let updateQueue = Promise.resolve();
-let appliedState = "";
 
-export async function listenForHistoryMenu(apply: (direction: NpcHistoryDirection) => void) {
-  if (!isTauri()) return () => {};
-  return listen<NpcHistoryDirection>("history-menu", ({ payload }) => apply(payload), { target: "main" });
+export async function installHistoryMenuItems(editMenu: Submenu) {
+  const undo = await MenuItem.new({
+    id: "history-undo",
+    text: "Undo",
+    enabled: false,
+    accelerator: "CmdOrCtrl+Z",
+    action: () => applyMenuAction("undo"),
+  });
+  const redo = await MenuItem.new({
+    id: "history-redo",
+    text: "Redo",
+    enabled: false,
+    accelerator: "CmdOrCtrl+Shift+Z",
+    action: () => applyMenuAction("redo"),
+  });
+
+  await editMenu.removeAt(0);
+  await editMenu.removeAt(0);
+  await editMenu.insert([undo, redo], 0);
+  menuItems = { undo, redo };
+  updateHistoryMenu(current);
+}
+
+function applyMenuAction(direction: NpcHistoryDirection) {
+  applyHistory?.(direction);
+}
+
+export function registerHistoryMenuActionHandler(handler: (direction: NpcHistoryDirection) => void) {
+  applyHistory = handler;
+  return () => {
+    if (applyHistory === handler) applyHistory = undefined;
+  };
 }
 
 export function updateHistoryMenu(state: HistoryMenuState) {
-  if (!isTauri()) return;
   current = state;
-  // Serialize updates and use the latest state after rapid focus or tab changes.
+  if (!menuItems) return;
+
   updateQueue = updateQueue.then(async () => {
-    const { undoLabel, redoLabel } = current;
-    const next = { undoLabel, redoLabel };
-    const serialized = JSON.stringify(next);
-    if (serialized === appliedState) return;
-    await invoke("set_history_menu", next);
-    appliedState = serialized;
+    const next = current;
+    const { undo, redo } = menuItems!;
+    await Promise.all([
+      undo.setText(next.undoLabel ? `Undo ${next.undoLabel}` : "Undo"),
+      undo.setEnabled(next.undoLabel !== null),
+      redo.setText(next.redoLabel ? `Redo ${next.redoLabel}` : "Redo"),
+      redo.setEnabled(next.redoLabel !== null),
+    ]);
   }).catch((error: unknown) => console.error("Unable to update Undo/Redo menu", error));
 }

@@ -1,10 +1,11 @@
-import { listenForHistoryMenu, updateHistoryMenu } from "@/lib/history-menu";
+import { registerHistoryMenuActionHandler, updateHistoryMenu } from "@/lib/history-menu";
 import type { NpcHistoryDirection } from "@/components/campaign/npc-history-context";
+import { isTauri } from "@tauri-apps/api/core";
 
 export type HistoryTarget = {
   undoLabel: string | null;
   redoLabel: string | null;
-  apply: (direction: NpcHistoryDirection) => void;
+  apply: (direction: NpcHistoryDirection) => boolean | void;
 };
 
 const editors = new Map<HTMLElement, () => HistoryTarget>();
@@ -32,7 +33,9 @@ function activeTarget(): HistoryTarget | null {
   }
   if (focused instanceof HTMLInputElement || focused instanceof HTMLTextAreaElement) {
     if (focused.readOnly || focused.disabled) return null;
-    if (focused instanceof HTMLInputElement && !["text", "search", "email", "url", "tel", "password", "number"].includes(focused.type)) return null;
+    if (focused instanceof HTMLInputElement && !["text", "search", "email", "url", "tel", "password", "number"].includes(focused.type)) {
+      return null;
+    }
     // Browser commands preserve the input's native text history and selection.
     return {
       undoLabel: document.queryCommandEnabled("undo") ? "Typing" : null,
@@ -48,7 +51,7 @@ function activeTarget(): HistoryTarget | null {
 export function dispatchHistory(direction: NpcHistoryDirection) {
   const target = activeTarget();
   const label = direction === "undo" ? target?.undoLabel : target?.redoLabel;
-  if (label) target?.apply(direction);
+  if (label && target) target.apply(direction);
   refreshHistory();
 }
 
@@ -59,7 +62,8 @@ export function refreshHistory() {
 
 export function startHistoryDispatcher() {
   let disposed = false;
-  let unlisten: (() => void) | undefined;
+  const unregisterMenuAction = registerHistoryMenuActionHandler(dispatchHistory);
+  const useNativeMenu = isTauri();
   const isMacOS = /Mac|iPhone|iPad/.test(navigator.platform);
   const sync = () => queueMicrotask(() => { if (!disposed) refreshHistory(); });
   const keydown = (event: KeyboardEvent) => {
@@ -70,18 +74,15 @@ export function startHistoryDispatcher() {
     // If a shortcut reaches the DOM, the native menu did not consume it.
     if (!event.repeat) dispatchHistory(event.shiftKey ? "redo" : "undo");
   };
-  void listenForHistoryMenu(dispatchHistory).then((stop) => {
-    if (disposed) stop(); else unlisten = stop;
-  }).catch((error: unknown) => console.error("Unable to listen for Undo/Redo menu", error));
-  window.addEventListener("keydown", keydown, true);
+  if (!useNativeMenu) window.addEventListener("keydown", keydown, true);
   window.addEventListener("focusin", sync);
   window.addEventListener("focusout", sync);
   window.addEventListener("input", sync);
   refreshHistory();
   return () => {
     disposed = true;
-    unlisten?.();
-    window.removeEventListener("keydown", keydown, true);
+    unregisterMenuAction();
+    if (!useNativeMenu) window.removeEventListener("keydown", keydown, true);
     window.removeEventListener("focusin", sync);
     window.removeEventListener("focusout", sync);
     window.removeEventListener("input", sync);

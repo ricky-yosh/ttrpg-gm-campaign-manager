@@ -1,10 +1,8 @@
 import { useShallow } from "zustand/react/shallow";
+import { isTauri } from "@tauri-apps/api/core";
 import { appCommands } from "@/lib/app-commands";
 import { useSessionStore } from "@/stores/session-store";
 import { useEffect, useState } from "react";
-import { isTauri } from "@tauri-apps/api/core";
-import { getCurrentWindow } from "@tauri-apps/api/window";
-import { Menu, MenuItem, PredefinedMenuItem, Submenu } from "@tauri-apps/api/menu";
 import { ChevronDownIcon, FileIcon, FilePlus2Icon, FolderOpenIcon, SaveIcon } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -12,54 +10,6 @@ import { Field, FieldGroup, FieldLabel } from "@/components/ui/field";
 import { Dialog, DialogDescription, DialogPopup, DialogTitle } from "@/components/ui/dialog";
 import { DropdownMenu, DropdownMenuContent, DropdownMenuGroup, DropdownMenuItem, DropdownMenuSeparator, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
 import { createNpc, replaceCampaign, useCampaign } from "@/lib/campaign-data";
-
-let nativeMenuPromise: Promise<void> | null = null;
-
-function installNativeFileMenu(isMacOS: boolean) {
-  if (!nativeMenuPromise) {
-    nativeMenuPromise = (async () => {
-      const menu = await Menu.default();
-      const items = [
-        await MenuItem.new({ id: "campaign-new", text: "New Campaign", accelerator: "CmdOrCtrl+N", action: () => appCommands.newCampaign() }),
-        await MenuItem.new({ id: "campaign-open", text: "Open Campaign…", accelerator: "CmdOrCtrl+O", action: () => void appCommands.openCampaign() }),
-        await PredefinedMenuItem.new({ item: "Separator" }),
-        await MenuItem.new({ id: "campaign-save", text: "Save Campaign", accelerator: "CmdOrCtrl+S", action: () => void appCommands.saveCampaign() }),
-        await MenuItem.new({ id: "campaign-save-as", text: "Save As…", accelerator: "CmdOrCtrl+Shift+S", action: () => void appCommands.saveCampaignAs() }),
-      ];
-
-      const existingItems = await menu.items();
-      let fileMenu: Submenu | undefined;
-      let appMenu: Submenu | undefined;
-      for (const item of existingItems) {
-        if (item instanceof Submenu) {
-          const text = await item.text();
-          if (text === "File") fileMenu = item;
-          else if (!appMenu) appMenu = item;
-        }
-      }
-
-      if (isMacOS && appMenu) {
-        await appMenu.insert(await MenuItem.new({
-          id: "app-settings",
-          text: "Settings…",
-          accelerator: "CmdOrCtrl+,",
-          action: () => appCommands.openSettings(),
-        }), 1);
-      }
-
-      if (fileMenu) await fileMenu.prepend(items);
-      else if (isMacOS) await menu.insert(await Submenu.new({ text: "File", items }), 1);
-      else await menu.prepend(await Submenu.new({ text: "File", items }));
-
-      if (isMacOS) await menu.setAsAppMenu();
-      else await menu.setAsWindowMenu(getCurrentWindow());
-    })().catch((error: unknown) => {
-      nativeMenuPromise = null;
-      throw error;
-    });
-  }
-  return nativeMenuPromise;
-}
 
 export function CampaignControls() {
   const { campaignName, status, error, path, isLeaving } = useCampaign(useShallow((state) => ({
@@ -78,12 +28,6 @@ export function CampaignControls() {
   };
   useEffect(() => { if (campaignOpen) setName(""); }, [campaignOpen]);
   useEffect(() => { if (npcOpen) setNpcName(""); }, [npcOpen]);
-  useEffect(() => {
-    if (isTauri()) {
-      void installNativeFileMenu(typeof navigator !== "undefined" && /Mac|iPhone|iPad/.test(navigator.platform))
-        .catch((error: unknown) => console.error("Could not install native File menu", error));
-    }
-  }, []);
   return (
     <>
       {!isTauri() && <DropdownMenu>
