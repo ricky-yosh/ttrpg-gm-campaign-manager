@@ -5,6 +5,8 @@ import { Input } from "@/components/ui/input";
 import { Field, FieldGroup, FieldLabel } from "@/components/ui/field";
 import { SidebarMenuButton, SidebarMenuItem } from "@/components/ui/sidebar";
 import { appCommands } from "@/lib/app-commands";
+import { SidebarSectionHeading } from "@/components/campaign/sidebar-section-heading";
+import { useSessionStore } from "@/stores/session-store";
 import { createFaction, useCampaign } from "@/lib/campaign-data";
 
 export function FactionsDirectory() {
@@ -14,7 +16,8 @@ export function FactionsDirectory() {
   const id = useId();
   return <>
     <SidebarMenuItem>
-      <SidebarMenuButton tooltip="New faction" onClick={() => setCreating(true)}><PlusIcon aria-hidden="true" /><span>New faction</span></SidebarMenuButton>
+      <SidebarSectionHeading title="Factions" actionLabel="New faction" className="px-2 pb-3 pt-4 group-data-[collapsible=icon]:hidden" onCreate={() => setCreating(true)} />
+      <SidebarMenuButton className="hidden group-data-[collapsible=icon]:flex" tooltip="New faction" onClick={() => { useSessionStore.getState().setSidebar({ open: true }); setCreating(true); }}><PlusIcon aria-hidden="true" /><span>New faction</span></SidebarMenuButton>
     </SidebarMenuItem>
     {creating && <li className="p-2">
       <form onSubmit={(event) => {

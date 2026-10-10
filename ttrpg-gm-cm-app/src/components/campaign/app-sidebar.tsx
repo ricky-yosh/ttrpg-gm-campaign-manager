@@ -1,5 +1,6 @@
 import { FactionsDirectory } from "@/components/campaign/factions-directory";
 import { LocationsDirectory } from "@/components/campaign/locations-directory";
+import { SidebarSectionHeading } from "@/components/campaign/sidebar-section-heading";
 import { useEffect, useState } from "react";
 import { useShallow } from "zustand/react/shallow";
 import { appCommands } from "@/lib/app-commands";
@@ -265,7 +266,7 @@ export function AppSidebar({ isPresenterView = false, presenterSection = "map", 
                   </SidebarMenuButton>
                 </SidebarMenuItem>
                 {section === "Characters" && (
-                  <SidebarMenuItem>
+                  <SidebarMenuItem className="hidden group-data-[collapsible=icon]:block">
                     <SidebarMenuButton tooltip="New NPC" onClick={appCommands.createNpc}>
                       <UserPlusIcon aria-hidden="true" />
                       <span>New NPC</span>
@@ -273,7 +274,9 @@ export function AppSidebar({ isPresenterView = false, presenterSection = "map", 
                   </SidebarMenuItem>
                 )}
               </SidebarMenu>
-              {section !== "Locations" && <div className="px-2 pb-2 pt-4 text-xs font-semibold text-muted-foreground group-data-[collapsible=icon]:hidden">{section}</div>}
+              {section === "Characters" ? (
+                <SidebarSectionHeading title={section} actionLabel="New NPC" onCreate={appCommands.createNpc} className="px-2 pb-3 pt-4 group-data-[collapsible=icon]:hidden" />
+              ) : section !== "Locations" && section !== "Factions" && <div className="px-2 pb-2 pt-4 text-xs font-semibold text-muted-foreground group-data-[collapsible=icon]:hidden">{section}</div>}
               <SidebarMenu>
                 {section === "Characters" ? ids.map((id, index) => (
                   <SidebarMenuItem key={id}>

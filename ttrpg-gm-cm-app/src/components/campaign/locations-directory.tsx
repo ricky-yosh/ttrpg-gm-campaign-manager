@@ -5,6 +5,7 @@ import { SidebarMenu, SidebarMenuButton, SidebarMenuItem } from "@/components/ui
 import { Empty, EmptyDescription, EmptyHeader, EmptyTitle } from "@/components/ui/empty";
 import { locationIcon } from "@/components/campaign/location-icon";
 import { LocationCreateForm } from "@/components/campaign/location-fields";
+import { SidebarSectionHeading } from "@/components/campaign/sidebar-section-heading";
 import { appCommands } from "@/lib/app-commands";
 import { useCampaign } from "@/lib/campaign-data";
 import { locationAncestors, type Location } from "@/lib/location-data";
@@ -51,10 +52,7 @@ export function LocationsDirectory() {
 
   return <SidebarMenuItem>
     <div className="flex flex-col gap-3 px-2 pb-3 group-data-[collapsible=icon]:hidden">
-      <div className="flex items-center justify-between gap-2 pt-4">
-        <span className="text-xs font-semibold text-muted-foreground">Locations</span>
-        <Button type="button" size="icon-sm" variant="outline" aria-label="New location" onClick={() => { setCreating(true); }}><PlusIcon /></Button>
-      </div>
+      <SidebarSectionHeading title="Locations" actionLabel="New location" className="pt-4" onCreate={() => setCreating(true)} />
       {creating && <LocationCreateForm onClose={() => setCreating(false)} />}
       <SidebarMenu>
         {locations.filter((location) => !location.parentId || !locations.some((parent) => parent.id === location.parentId)).map((location) => renderLocation(location, 0))}
