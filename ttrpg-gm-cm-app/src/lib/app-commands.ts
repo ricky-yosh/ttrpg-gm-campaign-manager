@@ -41,6 +41,7 @@ export const appCommands = {
   openLocation: (id: string) => workspace()?.openLocation(id),
   openMap: () => workspace()?.openMap(),
   openInventory: () => workspace()?.openInventory(),
+  openSampleSection: (section: string) => workspace()?.openSampleSection(section),
   createWorkspace: () => workspace()?.createWorkspace(),
   closeActiveTab: () => {
     if (getCampaign().isLeaving) return;

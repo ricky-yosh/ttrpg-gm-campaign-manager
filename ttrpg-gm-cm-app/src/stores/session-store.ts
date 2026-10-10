@@ -5,6 +5,7 @@ export type NavigationDestination =
   | { kind: "faction"; workspaceId: string; factionId: string; section: string | null }
   | { kind: "location"; workspaceId: string; locationId: string; section: string | null }
   | { kind: "character"; workspaceId: string; characterId: string; section: string | null }
+  | { kind: "sample"; workspaceId: string; sampleSection: string; section: string | null }
   | { kind: "map" | "inventory" | "workspace"; workspaceId: string; section: string | null }
   | { kind: "settings" }
   | { kind: "section"; section: string | null };
@@ -180,6 +181,7 @@ export const useSessionStore = create<SessionState>()((set, get) => ({
     const { entries, index } = state.navigation;
     const matches = (destination: NavigationDestination) => "workspaceId" in destination
       && destination.workspaceId === workspaceDestination.workspaceId && destination.kind === workspaceDestination.kind
+      && (destination.kind !== "sample" || (workspaceDestination.kind === "sample" && destination.sampleSection === workspaceDestination.sampleSection))
       && (destination.kind !== "character" || (workspaceDestination.kind === "character" && destination.characterId === workspaceDestination.characterId))
       && (destination.kind !== "location" || (workspaceDestination.kind === "location" && destination.locationId === workspaceDestination.locationId))
       && (destination.kind !== "faction" || (workspaceDestination.kind === "faction" && destination.factionId === workspaceDestination.factionId));

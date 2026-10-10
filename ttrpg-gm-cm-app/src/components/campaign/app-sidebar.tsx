@@ -294,7 +294,13 @@ export function AppSidebar({ isPresenterView = false, presenterSection = "map", 
                 ) : section === "Inventory" ? (
                   <SidebarMenuItem><SidebarMenuButton tooltip="Party Inventory" onClick={appCommands.openInventory}><BackpackIcon /><span>Party Inventory</span></SidebarMenuButton></SidebarMenuItem>
                 ) : sampleSidebarEntries[section] ? (
-                  sampleSidebarEntries[section].map((entry) => <li key={entry} className="px-2 py-2 text-sm text-muted-foreground">{entry}</li>)
+                  sampleSidebarEntries[section].map((entry) => ["Overview", "Sessions", "Story Threads", "Items", "Puzzles"].includes(section) ? (
+                    <SidebarMenuItem key={entry}>
+                      <SidebarMenuButton tooltip={entry} onClick={() => appCommands.openSampleSection(section)}>
+                        <BookOpenIcon aria-hidden="true" /><span>{entry}</span>
+                      </SidebarMenuButton>
+                    </SidebarMenuItem>
+                  ) : <li key={entry} className="px-2 py-2 text-sm text-muted-foreground">{entry}</li>)
                 ) : (
                   <li className="px-2 py-2 text-sm text-muted-foreground">Nothing here yet</li>
                 )}

@@ -12,7 +12,6 @@ import { AppSidebar } from "@/components/campaign/app-sidebar";
 import { SettingsPanel } from "@/components/campaign/settings-panel";
 import { Workspaces, type WorkspaceHandle } from "@/components/campaign/workspaces";
 import { Topbar } from "@/components/campaign/topbar";
-import { SampleSectionPage } from "@/components/campaign/sample-section-page";
 import { PresenterView, type PresenterSection, type PresenterWorkspaceHandle } from "@/components/campaign/presenter-view";
 import { getCampaign, leaveCampaign, listenForCampaignOpens, saveCampaign, setUnsavedChoiceHandler, useCampaign, type LeaveIntent, type UnsavedChoice } from "@/lib/campaign-data";
 import { startHistoryDispatcher } from "@/lib/history-dispatcher";
@@ -49,7 +48,6 @@ function App() {
   const presenterSidebarOpen = useSessionStore((state) => state.presenterSidebar.open);
   const isPresenting = useSessionStore((state) => state.presentationStartedAt !== null || state.presentationPaused);
   const presentationPaused = useSessionStore((state) => state.presentationPaused);
-  const isSampleSection = section !== null && ["Sessions", "Story Threads", "Items", "Puzzles"].includes(section);
   const { appearance, isDark, setAppearance } = useAppearance();
   const [leaveIntent, setLeaveIntent] = useState<LeaveIntent | null>(null);
   const [isPresenterView, setIsPresenterView] = useState(false);
@@ -228,10 +226,9 @@ function App() {
                       <SettingsPanel appearance={appearance} onAppearanceChange={setAppearance} />
                     </div>
                   )}
-                  <div className={cn("absolute inset-0 flex", isSampleSection && "hidden")} aria-hidden={section === "Settings" || isSampleSection} inert={section === "Settings" || isSampleSection}>
+                  <div className="absolute inset-0 flex" aria-hidden={section === "Settings"} inert={section === "Settings"}>
                     <Workspaces key={generation} ref={workspaces} isDark={isDark} onSearch={appCommands.openCommandPalette} historyEnabled={!isPresenterView} />
                   </div>
-                  {isSampleSection && <div className="absolute inset-0"><SampleSectionPage section={section} /></div>}
                 </main>
               </div>
               <div

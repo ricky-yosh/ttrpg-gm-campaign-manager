@@ -16,6 +16,7 @@ import { campaignStore, getCampaign, updateCampaign } from "@/lib/campaign-data"
 import { cn } from "@/lib/utils";
 import { registerSavedHistory, refreshHistory } from "@/lib/history-dispatcher";
 import { MapPrototypePanel } from "@/components/campaign/map-prototype-panel";
+import { SampleSectionPage } from "@/components/campaign/sample-section-page";
 import { useSessionStore, type NavigationDestination } from "@/stores/session-store";
 
 export type WorkspaceHandle = {
@@ -25,6 +26,7 @@ export type WorkspaceHandle = {
   openFaction: (id: string) => void;
   openMap: () => void;
   openInventory: () => void;
+  openSampleSection: (section: string) => void;
   closeActiveTab: () => void;
   goBack: () => void;
   goForward: () => void;
@@ -44,7 +46,7 @@ function useWorkspaceContext() {
   return context;
 }
 
-const characterComponents = { character: CharacterPanel, map: MapPrototypePanel, location: LocationPanel, faction: FactionPanel, inventory: InventoryPanel };
+const characterComponents = { character: CharacterPanel, map: MapPrototypePanel, location: LocationPanel, faction: FactionPanel, inventory: InventoryPanel, sample: SampleSectionPage };
 
 function WorkspacePanel({ api }: IDockviewPanelProps) {
   const { isDark, panels, onPanelReady } = useWorkspaceContext();
@@ -213,6 +215,7 @@ export function Workspaces({ ref, isDark, onSearch, historyEnabled }: {
     let destination: NavigationDestination;
     if (panel.id === "inventory:party") destination = { kind: "inventory", workspaceId, section: visibleSection };
     else if (panel.id === "map:prototype") destination = { kind: "map", workspaceId, section: visibleSection };
+    else if (typeof panel.params?.sampleSection === "string") destination = { kind: "sample", workspaceId, sampleSection: panel.params.sampleSection, section: visibleSection };
     else if (typeof panel.params?.factionId === "string") destination = { kind: "faction", workspaceId, factionId: panel.params.factionId, section: visibleSection };
     else if (typeof panel.params?.locationId === "string") destination = { kind: "location", workspaceId, locationId: panel.params.locationId, section: visibleSection };
     else if (typeof panel.params?.name === "string") destination = { kind: "character", workspaceId, characterId: panel.params.name, section: visibleSection };
@@ -265,6 +268,13 @@ export function Workspaces({ ref, isDark, onSearch, historyEnabled }: {
     else workspace.addPanel({ id: "inventory:party", title: "Party Inventory", component: "inventory" });
   };
 
+  const openSampleSectionInWorkspace = (workspace: DockviewApi, section: string) => {
+    const id = `sample:${section.toLowerCase().replaceAll(" ", "-")}`;
+    const existing = workspace.getPanel(id);
+    if (existing) existing.api.setActive();
+    else workspace.addPanel({ id, title: `${section} · Sample`, component: "sample", params: { section, sampleSection: section } });
+  };
+
   const navigate = (direction: -1 | 1) => {
     isNavigating.current = true;
     try {
@@ -282,6 +292,7 @@ export function Workspaces({ ref, isDark, onSearch, historyEnabled }: {
         if (destination.kind === "character") return openCharacterInWorkspace(workspace, destination.characterId);
         if (destination.kind === "map") openMapInWorkspace(workspace);
         if (destination.kind === "inventory") openInventoryInWorkspace(workspace);
+        if (destination.kind === "sample") openSampleSectionInWorkspace(workspace, destination.sampleSection);
         return true;
       });
     } finally {
@@ -401,6 +412,14 @@ export function Workspaces({ ref, isDark, onSearch, historyEnabled }: {
       if (!workspace) return;
       useSessionStore.getState().leaveSettings();
       openInventoryInWorkspace(workspace);
+      recordVisit();
+    },
+    openSampleSection: (section) => {
+      const active = api.current?.activePanel;
+      const workspace = active && panels.current.get(active.id);
+      if (!workspace) return;
+      useSessionStore.getState().leaveSettings();
+      openSampleSectionInWorkspace(workspace, section);
       recordVisit();
     },
     openMap: () => {
