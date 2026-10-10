@@ -154,14 +154,14 @@ export function Topbar({ isPresenterView, onTogglePresenterView, onCloseActiveTa
         data-tauri-drag-region="false"
         variant="outline"
         size="sm"
-        className="mx-auto min-w-9 w-full max-w-80 flex-1 justify-start max-sm:mx-0 max-sm:w-9 max-sm:flex-none max-sm:justify-center"
+        className="mx-auto min-w-9 w-full max-w-80 flex-1 justify-start max-sm:mx-0 max-sm:w-[5.25rem] max-sm:min-w-[5.25rem] max-sm:flex-none"
         aria-label="Search campaign"
         title={`Search campaign (${isMacOS ? "⌘K" : "Ctrl+K"})`}
         onClick={() => appCommands.openCommandPalette()}
       >
         <SearchIcon data-icon="inline-start" />
         <span className="hidden min-w-0 truncate sm:inline">Search campaign…</span>
-        <Kbd className="ml-auto hidden shrink-0 lg:inline-flex">{isMacOS ? "⌘ K" : "Ctrl K"}</Kbd>
+        <Kbd className="ml-auto shrink-0">{isMacOS ? "⌘ K" : "Ctrl K"}</Kbd>
       </Button>
       <div className="flex h-full shrink-0 items-center justify-end gap-1 sm:gap-2">
         {isPresenting && (
