@@ -336,10 +336,7 @@ export function AppSidebar({ isPresenterView = false, presenterSection = "map", 
                 <SidebarMenu>
                   {group.destinations.map(({ label, icon: Icon }) => (
                     <SidebarMenuItem key={label}>
-                      <SidebarMenuButton tooltip={label} onClick={() => {
-                        selectSection(label);
-                        if (label === "Inventory") appCommands.openInventory();
-                      }}>
+                      <SidebarMenuButton tooltip={label} onClick={() => selectSection(label)}>
                         <Icon aria-hidden="true" /><span>{label}</span>
                       </SidebarMenuButton>
                     </SidebarMenuItem>
