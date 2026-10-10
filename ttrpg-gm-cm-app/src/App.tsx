@@ -13,6 +13,7 @@ import { Workspaces, type WorkspaceHandle } from "@/components/campaign/workspac
 import { Topbar } from "@/components/campaign/topbar";
 import { PresenterView, type PresenterSection, type PresenterWorkspaceHandle } from "@/components/campaign/presenter-view";
 import { getCampaign, leaveCampaign, listenForCampaignOpens, saveCampaign, setUnsavedChoiceHandler, useCampaign, type LeaveIntent, type UnsavedChoice } from "@/lib/campaign-data";
+import { startHistoryDispatcher } from "@/lib/history-dispatcher";
 import { appCommands, registerWorkspaceCommands } from "@/lib/app-commands";
 import { useSessionStore } from "@/stores/session-store";
 import { useAppearance } from "@/hooks/use-appearance";
@@ -46,6 +47,7 @@ function getPlayerPresentationContent(npcId: string | null): PlayerPresentationC
 }
 
 function App() {
+  useEffect(startHistoryDispatcher, []);
   const { campaignName, generation, isLeaving, hasPath, campaignRevision } = useCampaign(useShallow((state) => ({
     campaignName: state.campaign.name, generation: state.generation, isLeaving: state.isLeaving,
     hasPath: state.path !== null, campaignRevision: state.revision,
@@ -226,7 +228,7 @@ function App() {
                     </div>
                   )}
                   <div className="absolute inset-0 flex" aria-hidden={section === "Settings"} inert={section === "Settings"}>
-                    <Workspaces key={generation} ref={workspaces} isDark={isDark} onSearch={appCommands.openCommandPalette} />
+                    <Workspaces key={generation} ref={workspaces} isDark={isDark} onSearch={appCommands.openCommandPalette} historyEnabled={!isPresenterView} />
                   </div>
                 </main>
               </div>

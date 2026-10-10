@@ -1,5 +1,5 @@
 import { createStore } from "zustand/vanilla";
-import type { Campaign } from "../lib/campaign-data.ts";
+import type { Campaign, NpcEditHistory } from "../lib/campaign-data.ts";
 
 export type CampaignSnapshot = {
   campaign: Campaign;
@@ -10,7 +10,7 @@ export type CampaignSnapshot = {
   error: string;
   generation: number;
   isLeaving: boolean;
-  npcEditHistory: Record<string, { canUndo: boolean; canRedo: boolean }>;
+  npcEditHistory: Record<string, NpcEditHistory>;
   pendingNpcOperations: Record<string, boolean>;
 };
 

@@ -1,4 +1,5 @@
 mod campaign;
+mod history_menu;
 mod images;
 use campaign::{open_campaign, redo_npc, save_campaign, undo_npc, update_npc, CampaignHistory};
 use std::sync::Mutex;
@@ -24,8 +25,29 @@ pub fn run() {
         .manage(CampaignHistory::default())
         .plugin(tauri_plugin_opener::init())
         .plugin(tauri_plugin_dialog::init())
+        .setup(|app| {
+            history_menu::setup(app)?;
+            Ok(())
+        })
+        .on_menu_event(|app, event| {
+            use tauri::Emitter;
+            if app
+                .webview_windows()
+                .values()
+                .any(|window| window.label() != "main" && window.is_focused().unwrap_or(false))
+            {
+                return;
+            }
+            let direction = match event.id().as_ref() {
+                "history-undo" => "undo",
+                "history-redo" => "redo",
+                _ => return,
+            };
+            let _ = app.emit_to("main", "history-menu", direction);
+        })
         .invoke_handler(tauri::generate_handler![
             greet,
+            history_menu::set_history_menu,
             open_campaign,
             save_campaign,
             undo_npc,

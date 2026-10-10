@@ -136,13 +136,14 @@ export function CharacterPanel({ params, api }: IDockviewPanelProps) {
 
   useEffect(() => {
     const available = Boolean(npc) && !isEditing && !isApplyingHistory && !isNpcBusy;
-    historyHandlers?.set(api, { apply: handleHistory, canUndo: available && canUndo, canRedo: available && canRedo });
+    historyHandlers?.set(api, { apply: handleHistory, canUndo: available && canUndo, canRedo: available && canRedo,
+      undoLabel: editHistory?.undoLabel ?? null, redoLabel: editHistory?.redoLabel ?? null });
     window.dispatchEvent(new Event("npc-history-change"));
     return () => {
       historyHandlers?.delete(api);
       window.dispatchEvent(new Event("npc-history-change"));
     };
-  }, [api, handleHistory, historyHandlers, npc, isEditing, isApplyingHistory, isNpcBusy, canUndo, canRedo]);
+  }, [api, handleHistory, historyHandlers, npc, isEditing, isApplyingHistory, isNpcBusy, canUndo, canRedo, editHistory]);
 
   if (!npc || !draftPresentation) {
     return <article className="h-full overflow-auto p-8"><p className="text-sm text-muted-foreground">This NPC is no longer available.</p></article>;

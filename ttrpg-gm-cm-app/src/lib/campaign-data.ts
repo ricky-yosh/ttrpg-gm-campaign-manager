@@ -98,7 +98,8 @@ export type NpcPresentation = {
   };
 };
 export type Npc = { id: string; name: string; notes: Value; presentation: NpcPresentation };
-type NpcHistoryResult = { npc: Npc; canUndo: boolean; canRedo: boolean };
+export type NpcEditHistory = { canUndo: boolean; canRedo: boolean; undoLabel: string | null; redoLabel: string | null };
+type NpcHistoryResult = NpcEditHistory & { npc: Npc };
 export type WorkspaceState = {
   layout: SerializedDockview;
   panels: Record<string, SerializedDockview>;
@@ -473,7 +474,7 @@ export async function saveNpcChanges(id: string, changes: Pick<Npc, "name" | "no
       throw new Error("This NPC changed while saving. Review the latest record and try again.");
     }
     updateCampaign({ npcs: current.campaign.npcs.map((item) => item.id === id ? accepted : item) });
-    if (history) campaignStore.setState((state) => ({ npcEditHistory: { ...state.npcEditHistory, [id]: { canUndo: history.canUndo, canRedo: history.canRedo } } }));
+    if (history) campaignStore.setState((state) => ({ npcEditHistory: { ...state.npcEditHistory, [id]: { canUndo: history.canUndo, canRedo: history.canRedo, undoLabel: history.undoLabel, redoLabel: history.redoLabel } } }));
     return true;
   });
 }
@@ -493,7 +494,7 @@ export async function applyNpcHistory(id: string, direction: "undo" | "redo"): P
       throw new Error("This NPC changed while applying history. Review the latest record and try again.");
     }
     updateCampaign({ npcs: latest.campaign.npcs.map((item) => item.id === id ? history.npc : item) });
-    campaignStore.setState((state) => ({ npcEditHistory: { ...state.npcEditHistory, [id]: { canUndo: history.canUndo, canRedo: history.canRedo } } }));
+    campaignStore.setState((state) => ({ npcEditHistory: { ...state.npcEditHistory, [id]: { canUndo: history.canUndo, canRedo: history.canRedo, undoLabel: history.undoLabel, redoLabel: history.redoLabel } } }));
   });
 }
 export function getCharacterNotes(id: string): Value {

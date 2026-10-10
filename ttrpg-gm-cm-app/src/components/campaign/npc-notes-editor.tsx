@@ -1,4 +1,5 @@
 import { useEffect, useRef } from "react";
+import { registerEditorHistory, refreshHistory } from "@/lib/history-dispatcher";
 import { useEditorRef, useEditorSelector, Plate, PlateContent, PlateElement, usePath, usePlateEditor, useSelected, withHOC } from "platejs/react";
 import type { PlateElementProps } from "platejs/react";
 import { KEYS, type TMediaElement, type Value } from "platejs";
@@ -318,6 +319,19 @@ type NpcNotesEditorProps = {
 };
 
 export function NpcNotesEditor({ editor, npcName, editable, onChange }: NpcNotesEditorProps) {
+  const root = useRef<HTMLElement>(null);
+  useEffect(() => {
+    if (!editable || !root.current) return;
+    return registerEditorHistory(root.current, () => ({
+      undoLabel: editor.history.undos.length ? "Typing" : null,
+      redoLabel: editor.history.redos.length ? "Typing" : null,
+      apply: (direction) => {
+        editor.tf.focus();
+        if (direction === "undo") editor.tf.undo();
+        else editor.tf.redo();
+      },
+    }));
+  }, [editable, editor]);
   const handleEditorKeyDown = (event: React.KeyboardEvent<HTMLDivElement>) => {
     if (event.key !== "Enter" || event.shiftKey || event.altKey || event.ctrlKey || event.metaKey) return;
 
@@ -355,12 +369,12 @@ export function NpcNotesEditor({ editor, npcName, editable, onChange }: NpcNotes
   };
 
   return (
-    <section aria-label={`${npcName} GM notes`} className="overflow-hidden rounded-xl border bg-card">
+    <section ref={root} aria-label={`${npcName} GM notes`} className="overflow-hidden rounded-xl border bg-card">
       <div className="border-b px-4 py-3">
         <h2 className="font-semibold">GM Notes</h2>
         <p className="text-xs text-muted-foreground">Private reference notes</p>
       </div>
-      <Plate editor={editor} onValueChange={({ value }) => onChange(value)}>
+      <Plate editor={editor} onValueChange={({ value }) => { onChange(value); queueMicrotask(refreshHistory); }}>
         {editable && <FormattingToolbar />}
         <PlateContent
           aria-label={`${npcName} private notes`}

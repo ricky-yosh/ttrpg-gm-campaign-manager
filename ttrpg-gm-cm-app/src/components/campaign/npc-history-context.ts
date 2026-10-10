@@ -6,6 +6,8 @@ export type NpcHistoryHandler = {
   apply: (direction: NpcHistoryDirection) => boolean;
   canUndo: boolean;
   canRedo: boolean;
+  undoLabel: string | null;
+  redoLabel: string | null;
 };
 
 // Key by panel API so the same NPC can be open in several workspaces.

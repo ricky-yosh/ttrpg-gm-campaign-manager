@@ -17,6 +17,7 @@ struct NpcHistory {
 }
 
 struct NpcChange {
+    label: String,
     fields: Vec<FieldChange>,
 }
 
@@ -32,6 +33,8 @@ pub struct NpcHistoryResult {
     pub npc: Npc,
     pub can_undo: bool,
     pub can_redo: bool,
+    pub undo_label: Option<String>,
+    pub redo_label: Option<String>,
 }
 
 impl CampaignHistory {
@@ -64,7 +67,8 @@ impl CampaignHistory {
         let fields = diff_npc(&before, &after)?;
         if !fields.is_empty() {
             history.entries.truncate(history.cursor);
-            history.entries.push(NpcChange { fields });
+            let label = change_label(&before, &fields);
+            history.entries.push(NpcChange { label, fields });
             history.cursor = history.entries.len();
             if history.entries.len() > MAX_HISTORY_ENTRIES {
                 history.entries.remove(0);
@@ -262,6 +266,47 @@ fn history_result(history: &NpcHistory, npc: Npc) -> NpcHistoryResult {
         npc,
         can_undo: history.cursor > 0,
         can_redo: history.cursor < history.entries.len(),
+        undo_label: history
+            .cursor
+            .checked_sub(1)
+            .and_then(|index| history.entries.get(index))
+            .map(|entry| entry.label.clone()),
+        redo_label: history
+            .entries
+            .get(history.cursor)
+            .map(|entry| entry.label.clone()),
+    }
+}
+
+fn change_label(before: &Npc, fields: &[FieldChange]) -> String {
+    let section = |field: &FieldChange| {
+        match field.path.first().map(String::as_str) {
+            Some("presentation") => field
+                .path
+                .get(1)
+                .map(String::as_str)
+                .unwrap_or("presentation"),
+            Some(key) => key,
+            None => "npc",
+        }
+        .to_owned()
+    };
+    let first = section(&fields[0]);
+    if fields.iter().any(|field| section(field) != first) {
+        return format!("Edit {}", before.name);
+    }
+    match first.as_str() {
+        "name" => "Rename NPC".into(),
+        "statblock" => "Update Statblock".into(),
+        "notes" => "Update GM Notes".into(),
+        "gmReference" => "Update GM Reference".into(),
+        "playerDescription" => "Update Player Description".into(),
+        "relationships" => "Update Relationships".into(),
+        "locations" => "Update Linked Locations".into(),
+        "factions" => "Update Linked Factions".into(),
+        "banner" => "Update Banner".into(),
+        "portrait" => "Update Portrait".into(),
+        _ => format!("Edit {}", before.name),
     }
 }
 
@@ -273,4 +318,95 @@ fn conflict_error() -> service::CampaignOperationError {
 
 fn internal_error(error: impl std::fmt::Display) -> service::CampaignOperationError {
     service::CampaignOperationError::Internal(error.to_string())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use serde_json::json;
+
+    fn campaign() -> Campaign {
+        serde_json::from_value(json!({
+            "format": "ttrpg-campaign", "schemaVersion": 1, "id": "history-test",
+            "name": "History", "createdAt": "2026-10-01", "updatedAt": "2026-10-01",
+            "section": null, "sidebar": {"width": 256, "open": true},
+            "workspace": null, "npcs": [{"id": "npc-1", "name": "Scout", "notes": [{"type": "p", "children": [{"text": ""}]}]}]
+        }))
+        .unwrap()
+    }
+
+    fn snapshot(campaign: &Campaign) -> Campaign {
+        serde_json::from_value(serde_json::to_value(campaign).unwrap()).unwrap()
+    }
+
+    fn save(history: &CampaignHistory, campaign: &mut Campaign, name: &str) -> NpcHistoryResult {
+        let npc = &campaign.npcs[0];
+        let change = serde_json::from_value(json!({
+            "npcId": npc.id, "name": name, "notes": npc.notes, "presentation": npc.presentation
+        }))
+        .unwrap();
+        let result = history.update(snapshot(&campaign), change).unwrap();
+        campaign.npcs[0] = result.npc.clone();
+        result
+    }
+
+    #[test]
+    fn save_undo_redo_restores_values_and_cursor_labels() {
+        let history = CampaignHistory::default();
+        let mut campaign = campaign();
+        let saved = save(&history, &mut campaign, "Ranger");
+        assert!(saved.can_undo);
+        assert!(!saved.can_redo);
+        assert_eq!(saved.undo_label.as_deref(), Some("Rename NPC"));
+        let undone = history.undo(snapshot(&campaign), "npc-1").unwrap();
+        assert_eq!(undone.npc.name, "Scout");
+        assert!(!undone.can_undo);
+        assert_eq!(undone.undo_label, None);
+        assert_eq!(undone.redo_label.as_deref(), Some("Rename NPC"));
+        campaign.npcs[0] = undone.npc;
+        let redone = history.redo(campaign, "npc-1").unwrap();
+        assert_eq!(redone.npc.name, "Ranger");
+        assert!(redone.can_undo);
+        assert!(!redone.can_redo);
+        assert_eq!(redone.redo_label, None);
+    }
+
+    #[test]
+    fn no_op_save_does_not_add_history() {
+        let result = save(&CampaignHistory::default(), &mut campaign(), "Scout");
+        assert!(!result.can_undo && !result.can_redo);
+        assert_eq!(result.undo_label, None);
+    }
+
+    #[test]
+    fn new_save_after_undo_discards_redo() {
+        let history = CampaignHistory::default();
+        let mut campaign = campaign();
+        save(&history, &mut campaign, "Ranger");
+        campaign.npcs[0] = history.undo(snapshot(&campaign), "npc-1").unwrap().npc;
+        let result = save(&history, &mut campaign, "Guide");
+        assert!(!result.can_redo);
+        assert_eq!(result.redo_label, None);
+        assert!(history.redo(campaign, "npc-1").is_err());
+    }
+
+    #[test]
+    fn empty_stack_and_external_changes_are_rejected() {
+        let history = CampaignHistory::default();
+        let mut campaign = campaign();
+        assert!(history.undo(snapshot(&campaign), "npc-1").is_err());
+        assert!(history.redo(snapshot(&campaign), "npc-1").is_err());
+        save(&history, &mut campaign, "Ranger");
+        campaign.npcs[0].name = "External edit".into();
+        assert!(history.undo(campaign, "npc-1").is_err());
+    }
+
+    #[test]
+    fn clear_removes_history() {
+        let history = CampaignHistory::default();
+        let mut campaign = campaign();
+        save(&history, &mut campaign, "Ranger");
+        history.clear();
+        assert!(history.undo(campaign, "npc-1").is_err());
+    }
 }
