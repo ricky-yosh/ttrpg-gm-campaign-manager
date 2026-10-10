@@ -49,7 +49,7 @@ function App() {
   const presenterSidebarOpen = useSessionStore((state) => state.presenterSidebar.open);
   const isPresenting = useSessionStore((state) => state.presentationStartedAt !== null || state.presentationPaused);
   const presentationPaused = useSessionStore((state) => state.presentationPaused);
-  const isSampleSection = section !== null && ["Overview", "Sessions", "Story Threads", "Items", "Puzzles"].includes(section);
+  const isSampleSection = section !== null && ["Sessions", "Story Threads", "Items", "Puzzles"].includes(section);
   const { appearance, isDark, setAppearance } = useAppearance();
   const [leaveIntent, setLeaveIntent] = useState<LeaveIntent | null>(null);
   const [isPresenterView, setIsPresenterView] = useState(false);
