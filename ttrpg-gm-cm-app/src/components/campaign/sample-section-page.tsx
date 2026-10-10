@@ -1,6 +1,19 @@
 import { BookOpenIcon, CalendarDaysIcon, CheckCircle2Icon, Clock3Icon, MapPinIcon, PackageIcon, PuzzleIcon, ScrollTextIcon, SwordsIcon, UsersIcon } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
+import sampleArtwork from "@/assets/sample-campaign/artwork.json";
+
+const sectionArtwork: Record<string, { banner: string; entries: string[] }> = {
+  Overview: { banner: "greyhaven", entries: [] },
+  Sessions: { banner: "harbor", entries: ["eastern-seawall", "harbor", "lantern-inn"] },
+  "Story Threads": { banner: "eastern-seawall", entries: ["eastern-seawall", "harbor", "dockworkers-guild", "greyhaven"] },
+  Items: { banner: "harbor-relics", entries: ["harbor-relics", "harbor-relics", "harbor-relics", "harbor-relics"] },
+  Puzzles: { banner: "salt-written-chart", entries: ["eastern-seawall", "salt-written-chart", "salt-written-chart"] },
+};
+
+function artworkUrl(name: string) {
+  return sampleArtwork[name as keyof typeof sampleArtwork];
+}
 
 const sections = {
   Overview: {
@@ -49,9 +62,11 @@ export function SampleSectionPage({ section }: { section: string }) {
   const data = sections[section as keyof typeof sections];
   if (!data) return null;
   const Icon = icons[section] ?? SwordsIcon;
+  const artwork = sectionArtwork[section];
   return (
     <main className="h-full overflow-auto bg-background px-6 py-8 md:px-10">
       <div className="mx-auto flex w-full max-w-6xl flex-col gap-7">
+        <img src={artworkUrl(artwork.banner)} alt={`Artwork for ${data.title}`} className="aspect-[4/1] w-full rounded-xl object-cover" />
         <header className="flex flex-col gap-3 border-b pb-6">
           <div className="flex items-center gap-2 text-xs font-semibold uppercase tracking-wider text-muted-foreground"><Icon className="size-4" />{data.eyebrow}<Badge variant="outline">Sample campaign</Badge></div>
           <h1 className="font-serif text-3xl font-semibold tracking-tight">{data.title}</h1>
@@ -69,7 +84,7 @@ export function SampleSectionPage({ section }: { section: string }) {
           </>
         ) : (
           <section className="grid gap-4 lg:grid-cols-2">
-            {data.entries.map(([title, meta, description, status]) => <Card key={title}><CardHeader><div className="flex items-start justify-between gap-3"><CardTitle variant="dossier">{title}</CardTitle><Badge variant="secondary">{status}</Badge></div><CardDescription>{meta}</CardDescription></CardHeader><CardContent><p className="text-sm leading-6 text-muted-foreground">{description}</p></CardContent></Card>)}
+            {data.entries.map(([title, meta, description, status], index) => <Card key={title}><img src={artworkUrl(artwork.entries[index])} alt={`Illustration for ${title}`} loading="lazy" className="aspect-video w-full object-cover" /><CardHeader><div className="flex items-start justify-between gap-3"><CardTitle variant="dossier">{title}</CardTitle><Badge variant="secondary">{status}</Badge></div><CardDescription>{meta}</CardDescription></CardHeader><CardContent><p className="text-sm leading-6 text-muted-foreground">{description}</p></CardContent></Card>)}
           </section>
         )}
       </div>

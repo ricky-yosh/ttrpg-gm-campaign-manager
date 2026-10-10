@@ -1,0 +1,34 @@
+[
+  {
+    "name": "greyhaven",
+    "prompt": "Use case: stylized-concept. Asset type: sample fantasy campaign location artwork. Paint a wide landscape view of Greyhaven, a weathered medieval harbor city around a deep natural inlet, slate rooftops, lighthouse, old black stone seawall, wooden ships, warm lantern windows at blue twilight. Atmospheric painterly tabletop RPG book illustration, grounded details, muted teal and amber, readable at thumbnail size. Main scenery centered so a shallow banner crop still reads well. No text, logos, borders, or watermark."
+  },
+  {
+    "name": "harbor",
+    "prompt": "Use case: stylized-concept. Asset type: sample fantasy tabletop RPG campaign artwork. The Harbor district of Greyhaven: crowded medieval waterfront at dock level, timber net sheds, chandlers, creaking piers, coiled ropes, fishing boats and lanterns reflected in the tidal water. Atmospheric painterly book illustration with grounded details, muted teal and amber palette. Wide landscape composition, focal subject centered, readable at thumbnail size and a shallow banner crop. No text, logos, borders, or watermark."
+  },
+  {
+    "name": "lantern-inn",
+    "prompt": "Use case: stylized-concept. Asset type: sample fantasy tabletop RPG campaign artwork. The Lantern Inn: warm lively medieval harbor tavern interior, glowing hearth, brass lanterns, timber beams, wooden tables, a few sailors trading stories over ale. Welcoming amber light against cool blue windows. Atmospheric painterly book illustration with grounded details, muted teal and amber palette. Wide landscape composition, focal subject centered, readable at thumbnail size and a shallow banner crop. No text, logos, borders, or watermark."
+  },
+  {
+    "name": "eastern-seawall",
+    "prompt": "Use case: stylized-concept. Asset type: sample fantasy tabletop RPG campaign artwork. Eastern Seawall of Greyhaven: imposing weathered black stone seawall at low tide, eastern arch revealing a narrow wet stair down into dark water, a distant pale lantern glow and sea mist. Mysterious but calm. Atmospheric painterly book illustration with grounded details, muted teal and amber palette. Wide landscape composition, focal subject centered, readable at thumbnail size and a shallow banner crop. No text, logos, borders, or watermark."
+  },
+  {
+    "name": "dockworkers-guild",
+    "prompt": "Use case: stylized-concept. Asset type: sample fantasy tabletop RPG campaign artwork. Dockworkers' Guild of Greyhaven: a weathered timber guildhall on a medieval quay, stevedores handling crates and cargo tallies, ropes and iron hooks, maritime guild insignia without lettering. Dignified working harbor life. Atmospheric painterly book illustration with grounded details, muted teal and amber palette. Wide landscape composition, focal subject centered, readable at thumbnail size and a shallow banner crop. No text, logos, borders, or watermark."
+  },
+  {
+    "name": "saltglass-circle",
+    "prompt": "Use case: stylized-concept. Asset type: sample fantasy tabletop RPG campaign artwork. The Saltglass Circle: discreet medieval society of navigators and scholars gathered in a candlelit coastal observatory, nautical charts, brass instruments, sea glass, impossible blue lights on the ocean through an arched window. Quiet and mysterious. Atmospheric painterly book illustration with grounded details, muted teal and amber palette. Wide landscape composition, focal subject centered, readable at thumbnail size and a shallow banner crop. No text, logos, borders, or watermark."
+  },
+  {
+    "name": "harbor-relics",
+    "prompt": "Use case: stylized-concept. Asset type: sample fantasy tabletop RPG campaign artwork. A still life of fantasy quest items on a weathered wooden table: a brass tideglass compass, black wax seal stamped with a split crescent, hooded brass lantern glowing cold blue, and a heavy iron key. Maritime details and sea glass. Atmospheric painterly book illustration, grounded details, muted teal and amber palette. Wide landscape composition, centered subjects, readable at thumbnail size. No text, logos, borders, or watermark."
+  },
+  {
+    "name": "salt-written-chart",
+    "prompt": "Use case: stylized-concept. Asset type: sample fantasy tabletop RPG campaign artwork. A medieval nautical chart on a tavern table with a hidden coastline emerging under spilled warm seawater, beside an old lighthouse ledger, quill and candle. Three distant harbor bells visible through a window. No legible writing. Atmospheric painterly book illustration, grounded details, muted teal and amber palette. Wide landscape composition, centered subjects, readable at thumbnail size. No text, logos, borders, or watermark."
+  }
+]
