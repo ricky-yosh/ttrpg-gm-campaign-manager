@@ -51,8 +51,8 @@ export function LocationsDirectory() {
 
   return <SidebarMenuItem>
     <div className="flex flex-col gap-3 px-2 pb-3 group-data-[collapsible=icon]:hidden">
-      <div className="flex items-center justify-between gap-2">
-        <span className="text-sm font-semibold">Browse locations</span>
+      <div className="flex items-center justify-between gap-2 pt-4">
+        <span className="text-xs font-semibold text-muted-foreground">Locations</span>
         <Button type="button" size="icon-sm" variant="outline" aria-label="New location" onClick={() => { setCreating(true); }}><PlusIcon /></Button>
       </div>
       {creating && <LocationCreateForm onClose={() => setCreating(false)} />}

@@ -273,7 +273,7 @@ export function AppSidebar({ isPresenterView = false, presenterSection = "map", 
                   </SidebarMenuItem>
                 )}
               </SidebarMenu>
-              <div className="px-2 pb-2 pt-4 text-xs font-semibold text-muted-foreground group-data-[collapsible=icon]:hidden">{section}</div>
+              {section !== "Locations" && <div className="px-2 pb-2 pt-4 text-xs font-semibold text-muted-foreground group-data-[collapsible=icon]:hidden">{section}</div>}
               <SidebarMenu>
                 {section === "Characters" ? ids.map((id, index) => (
                   <SidebarMenuItem key={id}>
