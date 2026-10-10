@@ -1,10 +1,11 @@
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useContext, useEffect, useMemo, useRef, useState } from "react";
 import type { IDockviewPanelProps } from "dockview-react";
 import type { Value } from "platejs";
-import { PencilIcon, Redo2Icon, Undo2Icon } from "lucide-react";
+import { PencilIcon } from "lucide-react";
+import { NpcHistoryContext, type NpcHistoryDirection } from "@/components/campaign/npc-history-context";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { useCampaign, applyNpcHistory, saveNpcChanges, type NpcPresentation, type NpcReference } from "@/lib/campaign-data";
+import { useCampaign, getCampaign, applyNpcHistory, saveNpcChanges, type NpcPresentation, type NpcReference } from "@/lib/campaign-data";
 import { NpcImageField } from "@/components/campaign/npc-image-field";
 import { Dnd55eStatblock } from "@/components/campaign/npc-statblock";
 import { NpcRecordLinks } from "@/components/campaign/npc-record-links";
@@ -13,6 +14,7 @@ import { NpcPlayerDescription } from "@/components/campaign/npc-player-descripti
 import { NpcNotesEditor, useNpcNotesEditor } from "@/components/campaign/npc-notes-editor";
 
 export function CharacterPanel({ params, api }: IDockviewPanelProps) {
+  const historyHandlers = useContext(NpcHistoryContext);
   const id = typeof params.name === "string" ? params.name : "";
   const factions = useCampaign((state) => state.campaign.factions);
   const locations = useCampaign((state) => state.campaign.locations);
@@ -38,6 +40,7 @@ export function CharacterPanel({ params, api }: IDockviewPanelProps) {
     saveVersion.current += 1;
     pendingSave.current = false;
     setIsSaving(false);
+    setIsApplyingHistory(false);
     setSaveError("");
     return () => { saveVersion.current += 1; };
   }, [id, generation]);
@@ -117,18 +120,29 @@ export function CharacterPanel({ params, api }: IDockviewPanelProps) {
     }
   };
 
-  const handleHistory = async (direction: "undo" | "redo") => {
-    if (isApplyingHistory || isNpcBusy || isEditing) return;
+  const handleHistory = useCallback((direction: NpcHistoryDirection) => {
+    if (!npc || isApplyingHistory || getCampaign().pendingNpcOperations[id] || isEditing || pendingSave.current
+      || !(direction === "undo" ? canUndo : canRedo)) return false;
+    const version = saveVersion.current;
     setIsApplyingHistory(true);
     setSaveError("");
-    try {
-      await applyNpcHistory(id, direction);
-    } catch (error) {
-      setSaveError(error instanceof Error ? error.message : String(error));
-    } finally {
-      setIsApplyingHistory(false);
-    }
-  };
+    void applyNpcHistory(id, direction).catch((error: unknown) => {
+      if (version === saveVersion.current) setSaveError(error instanceof Error ? error.message : String(error));
+    }).finally(() => {
+      if (version === saveVersion.current) setIsApplyingHistory(false);
+    });
+    return true;
+  }, [npc, isApplyingHistory, isEditing, canUndo, canRedo, id]);
+
+  useEffect(() => {
+    const available = Boolean(npc) && !isEditing && !isApplyingHistory && !isNpcBusy;
+    historyHandlers?.set(api, { apply: handleHistory, canUndo: available && canUndo, canRedo: available && canRedo });
+    window.dispatchEvent(new Event("npc-history-change"));
+    return () => {
+      historyHandlers?.delete(api);
+      window.dispatchEvent(new Event("npc-history-change"));
+    };
+  }, [api, handleHistory, historyHandlers, npc, isEditing, isApplyingHistory, isNpcBusy, canUndo, canRedo]);
 
   if (!npc || !draftPresentation) {
     return <article className="h-full overflow-auto p-8"><p className="text-sm text-muted-foreground">This NPC is no longer available.</p></article>;
@@ -232,13 +246,7 @@ export function CharacterPanel({ params, api }: IDockviewPanelProps) {
             </>
           ) : (
             <>
-              <Button type="button" variant="outline" onClick={() => void handleHistory("undo")} disabled={!canUndo || isApplyingHistory || isNpcBusy} aria-label="Undo NPC edit">
-                <Undo2Icon aria-hidden="true" /> Undo
-              </Button>
-              <Button type="button" variant="outline" onClick={() => void handleHistory("redo")} disabled={!canRedo || isApplyingHistory || isNpcBusy} aria-label="Redo NPC edit">
-                <Redo2Icon aria-hidden="true" /> Redo
-              </Button>
-              <Button type="button" variant="outline" disabled={isNpcBusy} onClick={() => setIsEditing(true)}>
+              <Button type="button" variant="outline" disabled={isNpcBusy || isApplyingHistory} onClick={() => setIsEditing(true)}>
                 <PencilIcon aria-hidden="true" /> Edit
               </Button>
             </>

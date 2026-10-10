@@ -372,6 +372,20 @@ export function AppSidebar({ isPresenterView = false, presenterSection = "map", 
             <DialogDescription className="mt-1">Navigate the workspace and search from the keyboard. Use the top-bar search button while editing rich text.</DialogDescription>
           </div>
           <div className="space-y-5 p-5">
+            <section className="flex flex-col gap-2">
+              <h3 className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">NPC edits</h3>
+              <dl className="flex flex-col gap-3">
+                <div className="flex items-center justify-between gap-4 text-sm">
+                  <dt>Undo saved NPC edit</dt>
+                  <Kbd>{isMacOS ? "⌘ Z" : "Ctrl Z"}</Kbd>
+                </div>
+                <div className="flex items-center justify-between gap-4 text-sm">
+                  <dt>Redo saved NPC edit</dt>
+                  <Kbd>{isMacOS ? "⌘ ⇧ Z" : "Ctrl Shift Z"}</Kbd>
+                </div>
+              </dl>
+              <p className="text-sm text-muted-foreground">Applies to the active NPC outside edit mode. While typing, undo and redo stay with the text editor.</p>
+            </section>
             <section>
               <h3 className="mb-2 text-xs font-semibold uppercase tracking-wide text-muted-foreground">Workspace</h3>
               <dl className="space-y-3">

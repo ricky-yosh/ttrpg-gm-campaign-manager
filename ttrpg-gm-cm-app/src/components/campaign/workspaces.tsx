@@ -1,3 +1,4 @@
+import { NpcHistoryContext, type NpcHistoryHandler } from "@/components/campaign/npc-history-context";
 import { FactionPanel } from "@/components/campaign/faction-panel";
 import { LocationPanel } from "@/components/campaign/location-panel";
 import { createContext, useContext, useEffect, useImperativeHandle, useRef, useState, type Ref } from "react";
@@ -10,8 +11,9 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { SidebarResizeHandle } from "@/components/ui/sidebar-resize-handle";
 import { Dialog, DialogDescription, DialogPopup, DialogTitle } from "@/components/ui/dialog";
-import { getCampaign, updateCampaign } from "@/lib/campaign-data";
+import { campaignStore, getCampaign, updateCampaign } from "@/lib/campaign-data";
 import { cn } from "@/lib/utils";
+import { updateHistoryMenu } from "@/lib/history-menu";
 import { MapPrototypePanel } from "@/components/campaign/map-prototype-panel";
 import { useSessionStore, type NavigationDestination } from "@/stores/session-store";
 
@@ -101,6 +103,7 @@ export function Workspaces({ ref, isDark, onSearch }: {
   const initialized = useRef(false);
   const api = useRef<DockviewApi | null>(null);
   const panels = useRef(new Map<string, DockviewApi>());
+  const historyHandlers = useRef(new Map<IDockviewPanelProps["api"], NpcHistoryHandler>());
   const nextId = useRef(initialState?.nextId ?? 1);
   const subscriptions = useRef<{ dispose: () => void }[]>([]);
   const isCollapsed = useSessionStore((state) => state.workspaceCollapsed);
@@ -132,6 +135,64 @@ export function Workspaces({ ref, isDark, onSearch }: {
     window.addEventListener("keydown", handleWorkspaceSidebarShortcut);
     return () => window.removeEventListener("keydown", handleWorkspaceSidebarShortcut);
   }, []);
+
+  useEffect(() => {
+    const isMacOS = /Mac|iPhone|iPad/.test(navigator.platform);
+    const textSelector = 'input, textarea, [contenteditable]:not([contenteditable="false"]), [role="textbox"]';
+    let disposed = false;
+    const getHistoryHandler = () => {
+      const campaign = getCampaign();
+      const session = useSessionStore.getState();
+      if (document.querySelector('[role="dialog"], [role="alertdialog"]')
+        || campaign.isLeaving || campaign.generation !== generation || session.generation !== generation
+        || session.section === "Settings" || session.commandPaletteOpen || session.npcDialogOpen
+        || session.campaignDialogOpen || session.shortcutsOpen) return;
+      const workspaceId = api.current?.activePanel?.id;
+      const panel = workspaceId ? panels.current.get(workspaceId)?.activePanel : null;
+      if (panel && campaign.pendingNpcOperations[panel.params?.name]) return;
+      return panel ? historyHandlers.current.get(panel.api) : undefined;
+    };
+    const applyHistory = (direction: "undo" | "redo") => {
+      if (document.activeElement?.closest(textSelector)) return false;
+      return getHistoryHandler()?.apply(direction) ?? false;
+    };
+    const syncMenu = () => {
+      if (disposed) return;
+      const handler = getHistoryHandler();
+      updateHistoryMenu({
+        textEditing: Boolean(document.activeElement?.closest(textSelector)),
+        canUndo: handler?.canUndo ?? false,
+        canRedo: handler?.canRedo ?? false,
+        apply: applyHistory,
+      });
+    };
+    const syncFocus = () => queueMicrotask(syncMenu);
+    const handleHistoryShortcut = (event: KeyboardEvent) => {
+      const primaryModifier = isMacOS ? event.metaKey && !event.ctrlKey : event.ctrlKey && !event.metaKey;
+      const target = event.target instanceof Element ? event.target : null;
+      if (event.defaultPrevented || event.repeat || event.isComposing || event.altKey || !primaryModifier
+        || event.key.toLowerCase() !== "z" || target?.closest(textSelector)) return;
+      if (applyHistory(event.shiftKey ? "redo" : "undo")) event.preventDefault();
+    };
+    const unsubscribeCampaign = campaignStore.subscribe(syncMenu);
+    const unsubscribeSession = useSessionStore.subscribe(syncMenu);
+    window.addEventListener("npc-history-change", syncMenu);
+    window.addEventListener("focusin", syncFocus);
+    window.addEventListener("focusout", syncFocus);
+    window.addEventListener("keydown", handleHistoryShortcut);
+    syncMenu();
+    return () => {
+      disposed = true;
+      unsubscribeCampaign();
+      unsubscribeSession();
+      window.removeEventListener("npc-history-change", syncMenu);
+      window.removeEventListener("focusin", syncFocus);
+      window.removeEventListener("focusout", syncFocus);
+      window.removeEventListener("keydown", handleHistoryShortcut);
+      updateHistoryMenu({ textEditing: Boolean(document.activeElement?.closest(textSelector)),
+        canUndo: false, canRedo: false, apply: () => {} });
+    };
+  }, [generation]);
 
   const captureWorkspace = () => {
     const container = api.current;
@@ -383,6 +444,7 @@ export function Workspaces({ ref, isDark, onSearch }: {
   );
 
   return (
+    <NpcHistoryContext.Provider value={historyHandlers.current}>
     <WorkspaceContext.Provider value={{ isDark, panels: panels.current, onSearch, onPanelReady }}>
       <Tabs
         orientation="vertical"
@@ -552,5 +614,6 @@ export function Workspaces({ ref, isDark, onSearch }: {
         </DialogPopup>
       </Dialog>
     </WorkspaceContext.Provider>
+    </NpcHistoryContext.Provider>
   );
 }
