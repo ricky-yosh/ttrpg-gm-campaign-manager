@@ -5,6 +5,7 @@ export type LocationReference = {
   currentSituation: string;
   secrets: string;
 };
+export type LocationAssociation = { targetId: string; label: string };
 export type Location = {
   id: string;
   name: string;
@@ -17,6 +18,8 @@ export type Location = {
   partyKnowledge?: "unknown" | "known" | "visited";
   banner?: LocationImage | null;
   gmReference?: LocationReference;
+  associatedNpcs?: LocationAssociation[];
+  associatedFactions?: LocationAssociation[];
 };
 
 export function withLocationDefaults(location: Location) {
@@ -28,7 +31,13 @@ export function withLocationDefaults(location: Location) {
     partyKnowledge: location.partyKnowledge ?? "unknown",
     banner: location.banner ?? null,
     gmReference: { atmosphere: "", background: "", currentSituation: "", secrets: "", ...location.gmReference },
+    associatedNpcs: location.associatedNpcs ?? [],
+    associatedFactions: location.associatedFactions ?? [],
   };
+}
+
+export function hasLocationChanges(draft: Location, saved: Location, tagsText: string, stagedChildren: { name: string; parentId: string | null }[] = []): boolean {
+  return stagedChildren.length > 0 || JSON.stringify(draft) !== JSON.stringify(saved) || tagsText !== (saved.tags ?? []).join(", ");
 }
 
 export function locationAncestors(locations: Location[], id: string): Location[] {

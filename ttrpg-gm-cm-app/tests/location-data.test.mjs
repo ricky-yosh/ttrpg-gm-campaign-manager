@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { canParentLocation, locationAncestors, locationSearchResults, withLocationDefaults } from "../src/lib/location-data.ts";
+import { canParentLocation, hasLocationChanges, locationAncestors, locationSearchResults, withLocationDefaults } from "../src/lib/location-data.ts";
 
 const place = (id, name, parentId = null) => ({ id, name, parentId, image: null, publicDescription: "Public", gmNotes: "Private" });
 const locations = [place("region", "Northern Reach"), place("city", "Greyhaven", "region"), place("inn", "The Lantern Inn", "city"), place("room", "Cellar", "inn"), place("other", "Cellar")];
@@ -19,6 +19,14 @@ test("duplicate-name search results retain their geographic paths", () => {
   assert.equal(results.length, 2);
   assert.equal(results[0].path, "Northern Reach / Greyhaven / The Lantern Inn");
   assert.equal(results[1].path, "");
+});
+
+test("staged child locations count as unsaved parent changes", () => {
+  const parent = withLocationDefaults(place("parent", "Harbor"));
+  const stagedChildren = [{ name: "The Lantern Inn", parentId: parent.id }];
+  assert.equal(hasLocationChanges(parent, parent, parent.tags.join(", ")), false);
+  assert.equal(hasLocationChanges(parent, parent, parent.tags.join(", "), stagedChildren), true);
+  assert.equal(hasLocationChanges(parent, parent, parent.tags.join(", "), []), false);
 });
 
 test("older location content is preserved and cyclic ancestry cannot loop forever", () => {

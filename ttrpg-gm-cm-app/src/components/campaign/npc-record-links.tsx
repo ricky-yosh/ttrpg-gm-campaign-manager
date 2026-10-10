@@ -31,12 +31,18 @@ type NpcRecordLinksProps = {
   value: NpcRelationship[];
   editable: boolean;
   onChange: (links: NpcRelationship[]) => void;
+  heading?: string;
+  addLabel?: string;
+  fieldLabel?: string;
 };
 
-export function NpcRecordLinks({ sourceNpcId, records, value, editable, onChange, kind = "npc" }: NpcRecordLinksProps) {
+export function NpcRecordLinks({ sourceNpcId, records, value, editable, onChange, kind = "npc", heading: headingOverride, addLabel: addLabelOverride, fieldLabel: fieldLabelOverride }: NpcRecordLinksProps) {
   const id = useId();
   const config = linkKinds[kind];
-  const { heading, targetType, placeholder: labelPlaceholder, fieldLabel: linkLabel, icon: Icon } = config;
+  const { heading: defaultHeading, targetType, placeholder: labelPlaceholder, fieldLabel: defaultLinkLabel, icon: Icon } = config;
+  const heading = headingOverride ?? defaultHeading;
+  const addLabel = addLabelOverride ?? config.addLabel;
+  const linkLabel = fieldLabelOverride ?? defaultLinkLabel;
   const [adding, setAdding] = useState(false);
   const [targetId, setTargetId] = useState("");
   const [label, setLabel] = useState("");
@@ -58,7 +64,7 @@ export function NpcRecordLinks({ sourceNpcId, records, value, editable, onChange
         </h2>
         {editable && (
           <Button type="button" variant="outline" size="sm" disabled={!available.length} onClick={() => setAdding(true)}>
-            <PlusIcon data-icon="inline-start" /> Add {config.addLabel}
+            <PlusIcon data-icon="inline-start" /> Add {addLabel}
           </Button>
         )}
       </header>

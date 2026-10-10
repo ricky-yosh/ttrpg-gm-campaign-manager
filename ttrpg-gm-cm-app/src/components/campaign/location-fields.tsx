@@ -31,8 +31,8 @@ export function LocationParentField({ locations, locationId = "", parentId, onCh
   </LocationSelect>;
 }
 
-export function LocationCreateForm({ initialParentId = null, onClose }: {
-  initialParentId?: string | null; onClose: () => void;
+export function LocationCreateForm({ initialParentId = null, onClose, onStage }: {
+  initialParentId?: string | null; onClose: () => void; onStage?: (name: string, parentId: string | null) => void;
 }) {
   const locations = useCampaign((state) => state.campaign.locations);
   const [name, setName] = useState("");
@@ -41,6 +41,12 @@ export function LocationCreateForm({ initialParentId = null, onClose }: {
   const id = useId();
   return <form onSubmit={(event) => {
     event.preventDefault();
+    if (onStage) {
+      if (!name.trim() || (parentId && !locations.some((location) => location.id === parentId))) { setError("Choose an available parent and enter a name."); return; }
+      onStage(name.trim(), parentId);
+      onClose();
+      return;
+    }
     const locationId = createLocation(name, parentId);
     if (!locationId) { setError("Choose an available parent and enter a name."); return; }
     onClose();

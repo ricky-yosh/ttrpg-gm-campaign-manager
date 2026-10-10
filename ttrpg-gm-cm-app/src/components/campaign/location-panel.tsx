@@ -11,11 +11,12 @@ import { Field, FieldGroup, FieldLabel } from "@/components/ui/field";
 import { Empty, EmptyDescription, EmptyHeader, EmptyTitle } from "@/components/ui/empty";
 import { Separator } from "@/components/ui/separator";
 import { NpcImageField } from "@/components/campaign/npc-image-field";
+import { NpcRecordLinks } from "@/components/campaign/npc-record-links";
 import { LocationCreateForm, LocationParentField, LocationSelect } from "@/components/campaign/location-fields";
 import { locationIcon } from "@/components/campaign/location-icon";
 import { appCommands } from "@/lib/app-commands";
-import { saveLocation, useCampaign } from "@/lib/campaign-data";
-import { canParentLocation, locationAncestors, withLocationDefaults, type LocationReference } from "@/lib/location-data";
+import { createLocation, saveLocation, useCampaign } from "@/lib/campaign-data";
+import { canParentLocation, hasLocationChanges, locationAncestors, withLocationDefaults, type LocationReference } from "@/lib/location-data";
 
 function LocationSection({ title, action, children }: { title: string; action?: ReactNode; children: ReactNode }) {
   const id = useId();
@@ -42,10 +43,12 @@ export function LocationPanel({ params, api }: IDockviewPanelProps) {
   const id = typeof params.locationId === "string" ? params.locationId : "";
   const locations = useCampaign((state) => state.campaign.locations);
   const npcs = useCampaign((state) => state.campaign.npcs);
+  const factions = useCampaign((state) => state.campaign.factions);
   const location = locations.find((item) => item.id === id);
   const [draft, setDraft] = useState(location ? withLocationDefaults(location) : undefined);
   const [editing, setEditing] = useState(false);
   const [creatingChild, setCreatingChild] = useState(false);
+  const [stagedChildren, setStagedChildren] = useState<{ name: string; parentId: string | null }[]>([]);
   const [tagsText, setTagsText] = useState(location?.tags?.join(", ") ?? "");
   const [error, setError] = useState("");
   const [isWide, setIsWide] = useState(false);
@@ -56,6 +59,7 @@ export function LocationPanel({ params, api }: IDockviewPanelProps) {
     setDraft(location ? withLocationDefaults(structuredClone(location)) : undefined);
     setTagsText(location?.tags?.join(", ") ?? "");
     setEditing(false);
+    setStagedChildren([]);
     setError("");
     if (location) api.setTitle(location.name);
   }, [location, api]);
@@ -72,25 +76,26 @@ export function LocationPanel({ params, api }: IDockviewPanelProps) {
 
   if (!location || !draft) return <article className="h-full overflow-auto p-8">This location is no longer available.</article>;
   const saved = withLocationDefaults(location);
-  const changed = JSON.stringify(draft) !== JSON.stringify(saved) || tagsText !== saved.tags.join(", ");
+  const changed = hasLocationChanges(draft, saved, tagsText, stagedChildren);
   const parent = locations.find((item) => item.id === draft.parentId);
   const ancestors = locationAncestors(locations, id);
   const children = locations.filter((item) => item.parentId === id);
-  const associatedNpcs = npcs.flatMap((npc) => {
-    const link = npc.presentation.locations?.find((item) => item.targetId === id);
-    return link ? [{ npc, label: link.label }] : [];
-  });
 
   const cancel = () => {
     setDraft(withLocationDefaults(structuredClone(location)));
     setTagsText(saved.tags.join(", "));
     setError("");
     setEditing(false);
+    setCreatingChild(false);
+    setStagedChildren([]);
   };
   const save = () => {
     const tags = [...new Set(tagsText.split(",").map((tag) => tag.trim()).filter(Boolean))];
     if (!saveLocation(id, { ...draft, tags })) { setError("Choose an available parent outside this location's descendants."); return; }
+    stagedChildren.forEach(({ name, parentId }) => createLocation(name, parentId));
     setEditing(false);
+    setCreatingChild(false);
+    setStagedChildren([]);
     setError("");
   };
 
@@ -158,8 +163,14 @@ export function LocationPanel({ params, api }: IDockviewPanelProps) {
       <Empty size="compact"><EmptyHeader><EmptyTitle>No maps attached</EmptyTitle><EmptyDescription>Maps of this place and its appearances on other maps will be listed here.</EmptyDescription></EmptyHeader></Empty>
       <Button type="button" variant="outline" size="sm" onClick={appCommands.openMap}><MapIcon data-icon="inline-start" />Open map prototype</Button>
     </LocationSection>
-    <LocationSection title="Places within" action={<Button type="button" variant="outline" size="sm" onClick={() => setCreatingChild(true)}><PlusIcon data-icon="inline-start" />Add location</Button>}>
-      {creatingChild && <LocationCreateForm initialParentId={id} onClose={() => setCreatingChild(false)} />}
+    <LocationSection title="Places within" action={editing && <Button type="button" variant="outline" size="sm" onClick={() => setCreatingChild(true)}><PlusIcon data-icon="inline-start" />Add location</Button>}>
+      {editing && creatingChild && <LocationCreateForm initialParentId={id} onClose={() => setCreatingChild(false)}
+        onStage={(name, parentId) => setStagedChildren((current) => [...current, { name, parentId }])} />}
+      {stagedChildren.length > 0 && <ul aria-label="New places to create when changes are saved" className="flex flex-col gap-1">
+        {stagedChildren.map((child, index) => <li key={`${child.name}-${index}`} className="flex items-center justify-between rounded-md border border-dashed px-3 py-2 text-sm">
+          <span>{child.name}</span><Button type="button" variant="ghost" size="sm" onClick={() => setStagedChildren((current) => current.filter((_, itemIndex) => itemIndex !== index))}>Remove</Button>
+        </li>)}
+      </ul>}
       {children.length ? <ul className="flex flex-col gap-1">{children.map((child) => {
         const Icon = locationIcon(child.locationType);
         return <li key={child.id}><Button variant="ghost" className="h-auto min-h-9 w-full justify-start" title={child.name} onClick={() => appCommands.openLocation(child.id)}>
@@ -168,19 +179,11 @@ export function LocationPanel({ params, api }: IDockviewPanelProps) {
         </Button></li>;
       })}</ul> : <p className="text-sm text-muted-foreground">No places within this location yet.</p>}
     </LocationSection>
-    <LocationSection title="Associated NPCs">
-      {associatedNpcs.length ? <ul className="flex flex-col gap-2">{associatedNpcs.map(({ npc, label }) => <li key={npc.id}>
-        <Button variant="ghost" className="h-auto min-h-12 w-full justify-start" onClick={() => appCommands.openCharacter(npc.id)}>
-          {npc.presentation.portrait ? <img src={npc.presentation.portrait.url} alt="" className="size-9 shrink-0 rounded-full object-cover" />
-            : <span aria-hidden="true" className="flex size-9 shrink-0 items-center justify-center rounded-full bg-muted font-serif">{npc.name.slice(0, 1)}</span>}
-          <span className="flex min-w-0 flex-1 flex-col items-start"><span className="w-full truncate text-left">{npc.name}</span>
-            {label && <span className="w-full truncate text-left text-xs text-muted-foreground">{label}</span>}</span><ChevronRightIcon data-icon="inline-end" />
-        </Button>
-      </li>)}</ul> : <p className="text-sm text-muted-foreground">Link this place from an NPC's Locations card to see them here.</p>}
-    </LocationSection>
-    <LocationSection title="Associated Factions">
-      <Empty size="compact"><EmptyHeader><EmptyTitle>No faction associations yet</EmptyTitle><EmptyDescription>Groups connected to this place will be listed here.</EmptyDescription></EmptyHeader></Empty>
-    </LocationSection>
+    <NpcRecordLinks key={`location-npcs-${id}-${editing}`} kind="npc" sourceNpcId={id} records={npcs}
+      value={draft.associatedNpcs} editable={editing} heading="Associated NPCs" addLabel="NPC" fieldLabel="Association"
+      onChange={(associatedNpcs) => setDraft({ ...draft, associatedNpcs })} />
+    <NpcRecordLinks key={`location-factions-${id}-${editing}`} kind="faction" sourceNpcId={id} records={factions}
+      value={draft.associatedFactions} editable={editing} onChange={(associatedFactions) => setDraft({ ...draft, associatedFactions })} />
   </div>;
 
   return <article ref={scrollRef} className="@container h-full overflow-auto p-6 sm:p-8" onScroll={(event) => {
