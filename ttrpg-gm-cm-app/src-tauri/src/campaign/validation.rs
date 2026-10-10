@@ -80,7 +80,31 @@ impl Campaign {
                     .panels
                     .get(id)
                     .ok_or("Missing workspace contents.")?;
-                validate_layout(layout, &["character", "map", "location", "faction"])?;
+                validate_layout(
+                    layout,
+                    &["character", "map", "location", "faction", "inventory"],
+                )?;
+            }
+        }
+        const MAX_SAFE_INTEGER: u64 = 9_007_199_254_740_991;
+        if self.inventory.gold > MAX_SAFE_INTEGER {
+            return Err("Gold exceeds the supported amount.".into());
+        }
+        let mut inventory_ids = HashSet::new();
+        for entry in &self.inventory.entries {
+            if entry.id.trim().is_empty()
+                || !inventory_ids.insert(&entry.id)
+                || entry.name.trim().is_empty()
+            {
+                return Err("Inventory entries need unique IDs and nonempty names.".into());
+            }
+            if !["item", "material"].contains(&entry.kind.as_str())
+                || entry.quantity == 0
+                || entry.quantity > MAX_SAFE_INTEGER
+            {
+                return Err(
+                    "Inventory entries need a category and a positive whole quantity.".into(),
+                );
             }
         }
         let mut ids = HashSet::new();

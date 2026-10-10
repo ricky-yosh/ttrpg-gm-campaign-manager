@@ -1,10 +1,11 @@
+import { normalizeSection } from "../lib/navigation-sections.ts";
 import { create } from "zustand";
 
 export type NavigationDestination =
   | { kind: "faction"; workspaceId: string; factionId: string; section: string | null }
   | { kind: "location"; workspaceId: string; locationId: string; section: string | null }
   | { kind: "character"; workspaceId: string; characterId: string; section: string | null }
-  | { kind: "map" | "workspace"; workspaceId: string; section: string | null }
+  | { kind: "map" | "inventory" | "workspace"; workspaceId: string; section: string | null }
   | { kind: "settings" }
   | { kind: "section"; section: string | null };
 export type NavigationHistory = { entries: NavigationDestination[]; index: number };
@@ -22,7 +23,7 @@ type CampaignSession = {
   workspace: { history: StoredNavigationHistory; sidebarWidth: number; collapsed: boolean } | null;
 };
 
-type LocationDirectoryState = { view: "places" | "maps"; query: string; collapsedIds: string[] };
+type LocationDirectoryState = { query: string; collapsedIds: string[] };
 
 export type SessionState = {
   locationDirectory: LocationDirectoryState;
@@ -101,14 +102,14 @@ export const selectCanGoForward = (state: SessionState) => findDestinationIndex(
 export function normalizeNavigationHistory(history?: StoredNavigationHistory): NavigationHistory {
   if (!history) return { entries: [], index: -1 };
   const entries = history.entries.map((destination): NavigationDestination => "kind" in destination
-    ? destination
+    ? destination.kind === "settings" ? destination : { ...destination, section: normalizeSection(destination.section, destination.kind) }
     : { kind: "character", workspaceId: destination.workspaceId, characterId: destination.name, section: null });
   const trimmed = entries.slice(-100);
   return { entries: trimmed, index: Math.max(-1, Math.min(trimmed.length - 1, history.index - (entries.length - trimmed.length))) };
 }
 
 export const useSessionStore = create<SessionState>()((set, get) => ({
-  locationDirectory: { view: "places", query: "", collapsedIds: [] },
+  locationDirectory: { query: "", collapsedIds: [] },
   setLocationDirectory: (change) => set((state) => ({ locationDirectory: { ...state.locationDirectory, ...change } })),
   generation: 0,
   section: null,
@@ -217,8 +218,8 @@ export const useSessionStore = create<SessionState>()((set, get) => ({
 export function hydrateSession(campaign: CampaignSession, generation: number) {
   useSessionStore.setState({
     generation,
-    locationDirectory: { view: "places", query: "", collapsedIds: [] },
-    section: campaign.section,
+    locationDirectory: { query: "", collapsedIds: [] },
+    section: normalizeSection(campaign.section, normalizeNavigationHistory(campaign.workspace?.history).entries[campaign.workspace?.history.index ?? -1]?.kind),
     sidebar: { ...campaign.sidebar },
     presenterSidebar: { width: 256, open: true },
     commandPaletteOpen: false,

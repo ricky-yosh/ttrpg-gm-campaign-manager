@@ -5,7 +5,7 @@ import { useShallow } from "zustand/react/shallow";
 import { appCommands } from "@/lib/app-commands";
 import { useSessionStore } from "@/stores/session-store";
 import {
-  ArrowLeftIcon, BookOpenIcon, ChevronsUpDownIcon, CircleHelpIcon, Dice5Icon, FlagIcon, FolderOpenIcon,
+  BackpackIcon, MapPinIcon, ArrowLeftIcon, BookOpenIcon, ChevronsUpDownIcon, CircleHelpIcon, Dice5Icon, FlagIcon, FolderOpenIcon,
   LayoutDashboardIcon, MapIcon, MonitorIcon, PackageIcon, PaletteIcon, PuzzleIcon, ScrollTextIcon, SettingsIcon, UserPlusIcon, UsersIcon,
 } from "lucide-react";
 import {
@@ -50,22 +50,31 @@ function rememberCampaign(name: string, path: string): RecentCampaign[] {
   return recent;
 }
 
-const destinations = [
-  { label: "Overview", icon: LayoutDashboardIcon },
-  { label: "Sessions", icon: BookOpenIcon },
-  { label: "Characters", icon: UsersIcon },
-  { label: "Factions", icon: FlagIcon },
-  { label: "Locations & Maps", icon: MapIcon },
-  { label: "Items", icon: PackageIcon },
-  { label: "Story Threads", icon: ScrollTextIcon },
-  { label: "Puzzles", icon: PuzzleIcon },
+const destinationGroups = [
+  { label: "Campaign", destinations: [
+    { label: "Overview", icon: LayoutDashboardIcon },
+    { label: "Sessions", icon: BookOpenIcon },
+    { label: "Story Threads", icon: ScrollTextIcon },
+  ] },
+  { label: "World", destinations: [
+    { label: "Locations", icon: MapPinIcon },
+    { label: "Maps", icon: MapIcon },
+    { label: "Factions", icon: FlagIcon },
+  ] },
+  { label: "People & Things", destinations: [
+    { label: "Characters", icon: UsersIcon },
+    { label: "Items", icon: PackageIcon },
+    { label: "Inventory", icon: BackpackIcon },
+    { label: "Puzzles", icon: PuzzleIcon },
+  ] },
 ];
 
-function PresenterSidebarContent({ navigationSection, activeSection, selectedNpcId, onSelectMap, onShowNpcs, onShowAllSections, onSelectNpc }: {
+function PresenterSidebarContent({ navigationSection, activeSection, selectedNpcId, onSelectMap, onSelectInventory, onShowNpcs, onShowAllSections, onSelectNpc }: {
   navigationSection: PresenterSidebarSection;
   activeSection: PresenterSection;
   selectedNpcId: string | null;
   onSelectMap: () => void;
+  onSelectInventory: () => void;
   onShowNpcs: () => void;
   onShowAllSections: () => void;
   onSelectNpc: (id: string, name: string) => void;
@@ -123,6 +132,9 @@ function PresenterSidebarContent({ navigationSection, activeSection, selectedNpc
                   </SidebarMenuButton>
                 </SidebarMenuItem>
                 <SidebarMenuItem>
+                  <SidebarMenuButton isActive={activeSection === "inventory"} tooltip="Inventory" onClick={onSelectInventory}><BackpackIcon /><span>Inventory</span></SidebarMenuButton>
+                </SidebarMenuItem>
+                <SidebarMenuItem>
                   <SidebarMenuButton tooltip="NPCs" onClick={onShowNpcs}>
                     <UsersIcon aria-hidden="true" />
                     <span>NPCs</span>
@@ -137,12 +149,13 @@ function PresenterSidebarContent({ navigationSection, activeSection, selectedNpc
   );
 }
 
-export function AppSidebar({ isPresenterView = false, presenterSection = "map", presenterSidebarSection = "home", selectedNpcId = null, onSelectMap = () => {}, onShowPresenterNpcs = () => {}, onShowPresenterSections = () => {}, onSelectNpc = () => {} }: {
+export function AppSidebar({ isPresenterView = false, presenterSection = "map", presenterSidebarSection = "home", selectedNpcId = null, onSelectMap = () => {}, onSelectInventory = () => {}, onShowPresenterNpcs = () => {}, onShowPresenterSections = () => {}, onSelectNpc = () => {} }: {
   isPresenterView?: boolean;
   presenterSection?: PresenterSection;
   presenterSidebarSection?: PresenterSidebarSection;
   selectedNpcId?: string | null;
   onSelectMap?: () => void;
+  onSelectInventory?: () => void;
   onShowPresenterNpcs?: () => void;
   onShowPresenterSections?: () => void;
   onSelectNpc?: (id: string, name: string) => void;
@@ -230,7 +243,7 @@ export function AppSidebar({ isPresenterView = false, presenterSection = "map", 
       <SidebarSeparator />
       <SidebarContent>
         {isPresenterView ? (
-          <PresenterSidebarContent navigationSection={presenterSidebarSection} activeSection={presenterSection} selectedNpcId={selectedNpcId} onSelectMap={onSelectMap} onShowNpcs={onShowPresenterNpcs} onShowAllSections={onShowPresenterSections} onSelectNpc={onSelectNpc} />
+          <PresenterSidebarContent navigationSection={presenterSidebarSection} activeSection={presenterSection} selectedNpcId={selectedNpcId} onSelectMap={onSelectMap} onSelectInventory={onSelectInventory} onShowNpcs={onShowPresenterNpcs} onShowAllSections={onShowPresenterSections} onSelectNpc={onSelectNpc} />
         ) : section && section !== "Settings" ? (
           <div key={`section:${section}`} className="animate-in fade-in slide-in-from-right-2 duration-200">
           <SidebarGroup>
@@ -263,8 +276,12 @@ export function AppSidebar({ isPresenterView = false, presenterSection = "map", 
                   </SidebarMenuItem>
                 )) : section === "Factions" ? (
                   <FactionsDirectory key={generation} />
-                ) : section === "Locations & Maps" ? (
+                ) : section === "Locations" ? (
                   <LocationsDirectory key={generation} />
+                ) : section === "Maps" ? (
+                  <SidebarMenuItem><SidebarMenuButton tooltip="Map prototype" onClick={appCommands.openMap}><MapIcon /><span>Map prototype</span></SidebarMenuButton></SidebarMenuItem>
+                ) : section === "Inventory" ? (
+                  <SidebarMenuItem><SidebarMenuButton tooltip="Party Inventory" onClick={appCommands.openInventory}><BackpackIcon /><span>Party Inventory</span></SidebarMenuButton></SidebarMenuItem>
                 ) : (
                   <li className="px-2 py-2 text-sm text-muted-foreground">Nothing here yet</li>
                 )}
@@ -299,23 +316,25 @@ export function AppSidebar({ isPresenterView = false, presenterSection = "map", 
           </div>
         ) : (
           <div key="sections" className="animate-in fade-in slide-in-from-left-2 duration-200">
-          <SidebarGroup>
-            <SidebarGroupLabel>Campaign</SidebarGroupLabel>
+          {destinationGroups.map((group) => <SidebarGroup key={group.label}>
+            <SidebarGroupLabel>{group.label}</SidebarGroupLabel>
             <SidebarGroupContent>
-              <nav aria-label="Campaign navigation">
+              <nav aria-label={`${group.label} navigation`}>
                 <SidebarMenu>
-                  {destinations.map(({ label, icon: Icon }) => (
+                  {group.destinations.map(({ label, icon: Icon }) => (
                     <SidebarMenuItem key={label}>
-                      <SidebarMenuButton tooltip={label} onClick={() => selectSection(label)}>
-                        <Icon aria-hidden="true" />
-                        <span>{label}</span>
+                      <SidebarMenuButton tooltip={label} onClick={() => {
+                        selectSection(label);
+                        if (label === "Inventory") appCommands.openInventory();
+                      }}>
+                        <Icon aria-hidden="true" /><span>{label}</span>
                       </SidebarMenuButton>
                     </SidebarMenuItem>
                   ))}
                 </SidebarMenu>
               </nav>
             </SidebarGroupContent>
-          </SidebarGroup>
+          </SidebarGroup>)}
           </div>
         )}
       </SidebarContent>

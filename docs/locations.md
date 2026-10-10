@@ -4,7 +4,7 @@ Locations are campaign records with a name, optional parent, type, tags, party k
 
 ## Authoring and navigation
 
-Open **Locations & Maps** in the GM sidebar and use the **+** button to create a location. Choose an optional parent, or use **Add location** in a place’s **Places within** card to start with that parent selected. The **Places** view shows an expandable geographic tree; search results include parent paths. Branch expansion, search, and the selected view stay in session memory across section changes and reset when the campaign changes.
+Open **Locations** in the GM sidebar and use the **+** button to create a location. Choose an optional parent, or use **Add location** in a place’s **Places within** card to start with that parent selected. The location directory shows an expandable geographic tree; search results include parent paths. Branch expansion and search stay in session memory across section changes and reset when the campaign changes.
 
 Use **Edit** in a location’s tab to add details or change its parent. Parent choices exclude the location and its descendants, and both frontend commands and Rust validation reject cycles. Save changes applies the draft; Cancel restores the saved values. Location images use the shared Rust WebP importer. Canceling edit mode ignores unfinished image imports.
 
@@ -24,7 +24,7 @@ The NPC's **Locations** card sits below Relationships in the statblock column. I
 - `workspaces.tsx`, `app-commands.ts`, and session state: tab opening and navigation history.
 - Rust `campaign/` modules: validates records and links, handles image assets, and stores location JSON in a dedicated SQLite table in the same campaign save transaction.
 
-Database version 2 adds the `location` table. Version 1 packages still load with no locations and upgrade when saved. Factions subsequently raises the current database version to 3; see [Factions](factions.md). Older app builds reject version 2 packages to prevent accidental loss of location data. The campaign JSON schema version remains 1; new collection fields default to empty when absent.
+Database version 2 adds the `location` table. Version 1 packages still load with no locations and upgrade when saved. Factions raises the database version to 3; Inventory raises it to 4. See [Factions](factions.md) and [Inventory](inventory.md). Older app builds reject version 2 packages to prevent accidental loss of location data. The campaign JSON schema version remains 1; new collection fields default to empty when absent.
 
 The new dossier fields use the existing location JSON column without a table migration. Missing fields in older records default to empty values, no parent, and Unknown party knowledge. Older builds that reject unknown location fields cannot open packages saved with the new dossier fields.
 

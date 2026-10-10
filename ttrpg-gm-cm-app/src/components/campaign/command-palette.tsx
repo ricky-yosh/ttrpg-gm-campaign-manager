@@ -5,7 +5,7 @@ import { useEffect, useState } from "react";
 import { Autocomplete } from "@base-ui/react/autocomplete";
 import {
   ArrowLeftIcon, ArrowRightIcon, CircleHelpIcon, FilePlus2Icon, FolderOpenIcon, LayoutTemplateIcon,
-  MapIcon, MonitorIcon, PanelLeftCloseIcon, PanelLeftIcon, PanelTopCloseIcon, SaveIcon, SearchIcon, SettingsIcon, UserPlusIcon, UserRoundIcon,
+  BackpackIcon, MapPinIcon, MapIcon, MonitorIcon, PanelLeftCloseIcon, PanelLeftIcon, PanelTopCloseIcon, SaveIcon, SearchIcon, SettingsIcon, UserPlusIcon, UserRoundIcon,
   type LucideIcon,
 } from "lucide-react";
 import { Dialog, DialogDescription, DialogPopup, DialogTitle } from "@/components/ui/dialog";
@@ -118,6 +118,11 @@ export function CommandPalette({ isPresenterView, onTogglePresenterView, onClose
           icon: UserPlusIcon,
           onSelect: appCommands.createNpc,
         },
+        ...(!isPresenterView ? [
+          { id: "locations", label: "Browse locations", description: "Open the location tree", keywords: ["places", "world"], icon: MapPinIcon, onSelect: () => appCommands.selectSection("Locations") },
+          { id: "maps", label: "Browse maps", description: "Open the map library", keywords: ["atlas", "world"], icon: MapIcon, onSelect: () => appCommands.selectSection("Maps") },
+          { id: "inventory", label: "Open party inventory", description: "Gold, carried items, and materials", keywords: ["gold", "items", "materials", "holdings"], icon: BackpackIcon, onSelect: () => { appCommands.selectSection("Inventory"); appCommands.openInventory(); } },
+        ] : []),
         {
           id: "open-map",
           label: "Open map",

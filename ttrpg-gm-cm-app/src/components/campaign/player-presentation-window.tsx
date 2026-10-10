@@ -3,7 +3,7 @@ import { emit, listen } from "@tauri-apps/api/event";
 import { getCurrentWebviewWindow } from "@tauri-apps/api/webviewWindow";
 import { Button } from "@/components/ui/button";
 import { Dialog, DialogDescription, DialogPopup, DialogTitle } from "@/components/ui/dialog";
-import { NpcPlayerCard } from "@/components/campaign/npc-player-card";
+import { PlayerContentView } from "@/components/campaign/player-content-view";
 import type { PlayerPresentationContent } from "@/lib/presentation-window";
 
 type PresentationStatus = "stopped" | "live" | "paused";
@@ -63,7 +63,7 @@ export function PlayerPresentationWindow() {
       <main className="flex min-h-svh items-center justify-center overflow-auto bg-background p-8 text-foreground">
         {status !== "stopped" && content ? (
           <div className="w-full" aria-live="polite">
-            <NpcPlayerCard content={content} />
+            <PlayerContentView content={content} />
           </div>
         ) : (
           <section className="flex w-full max-w-5xl flex-col items-center justify-center gap-4 text-center" aria-live="polite">
@@ -73,7 +73,7 @@ export function PlayerPresentationWindow() {
             </h1>
             <p className="max-w-lg text-muted-foreground">
               {status === "live"
-                ? "Choose an NPC in Presenter mode to display their portrait and player description."
+                ? "Choose an NPC or Inventory in Presenter mode to display player-facing information."
                 : status === "paused"
                   ? "The current player view is being held while the GM prepares."
                   : "This read-only display is waiting for the GM to start presenting."}

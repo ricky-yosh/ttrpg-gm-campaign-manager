@@ -6,9 +6,12 @@ import { WorkspaceEmptyState } from "@/components/campaign/workspace-empty-state
 import { NpcPlayerCard } from "@/components/campaign/npc-player-card";
 import { useCampaign } from "@/lib/campaign-data";
 
-export type PresenterSection = "map" | "npcs";
+import { buildPlayerContent, type PresenterSection } from "@/lib/presentation-content";
+export type { PresenterSection } from "@/lib/presentation-content";
+import { PlayerContentView } from "@/components/campaign/player-content-view";
 export type PresenterWorkspaceHandle = {
   openMap: () => void;
+  openInventory: () => void;
   openNpc: (id: string, name: string) => void;
   closeActiveTab: () => void;
 };
@@ -20,6 +23,12 @@ function PresenterPanel({ params }: IDockviewPanelProps) {
   const npcName = typeof params?.npcName === "string" ? params.npcName : null;
   const npcId = typeof params?.npcId === "string" ? params.npcId : null;
   const npc = useCampaign((state) => state.campaign.npcs.find((item) => item.id === npcId));
+
+  const campaign = useCampaign((state) => state.campaign);
+  if (params?.section === "inventory") {
+    const content = buildPlayerContent(campaign, "inventory", null);
+    return content ? <div className="flex size-full flex-col overflow-auto p-6"><p className="mb-6 text-xs text-muted-foreground">Player preview</p><PlayerContentView content={content} /></div> : null;
+  }
 
   if (isNpc && npc) {
     return (
@@ -71,7 +80,7 @@ export function PresenterView({ ref, isDark, onActiveSelectionChange }: {
     const currentApi = api.current;
     if (!currentApi) return;
 
-    const id = params.section === "map" ? "presenter:map" : `presenter:npc:${params.npcId}`;
+    const id = params.section === "npcs" ? `presenter:npc:${params.npcId}` : `presenter:${params.section}`;
     const existing = currentApi.getPanel(id);
     if (existing) {
       existing.api.setActive();
@@ -80,7 +89,7 @@ export function PresenterView({ ref, isDark, onActiveSelectionChange }: {
 
     currentApi.addPanel({
       id,
-      title: params.section === "map" ? "Map" : params.npcName ?? "NPC",
+      title: params.section === "map" ? "Map" : params.section === "inventory" ? "Inventory" : params.npcName ?? "NPC",
       component: "presentation",
       params,
     });
@@ -88,6 +97,7 @@ export function PresenterView({ ref, isDark, onActiveSelectionChange }: {
 
   useImperativeHandle(ref, () => ({
     openMap: () => addOrActivate({ section: "map" }),
+    openInventory: () => addOrActivate({ section: "inventory" }),
     openNpc: (id, name) => addOrActivate({ section: "npcs", npcId: id, npcName: name }),
     closeActiveTab: () => api.current?.activePanel?.api.close(),
   }));
@@ -108,7 +118,7 @@ export function PresenterView({ ref, isDark, onActiveSelectionChange }: {
       if (params?.section === "npcs") {
         onActiveSelectionChange("npcs", params.npcId ?? null, params.npcName ?? null);
       } else {
-        onActiveSelectionChange("map", null, null);
+        onActiveSelectionChange(params?.section === "inventory" ? "inventory" : "map", null, null);
       }
     });
     addOrActivate({ section: "map" });

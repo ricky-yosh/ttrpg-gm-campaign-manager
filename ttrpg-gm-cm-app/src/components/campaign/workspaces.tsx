@@ -1,3 +1,4 @@
+import { InventoryPanel } from "@/components/campaign/inventory-panel";
 import { NpcHistoryContext, type NpcHistoryHandler } from "@/components/campaign/npc-history-context";
 import { FactionPanel } from "@/components/campaign/faction-panel";
 import { LocationPanel } from "@/components/campaign/location-panel";
@@ -23,6 +24,7 @@ export type WorkspaceHandle = {
   openLocation: (id: string) => void;
   openFaction: (id: string) => void;
   openMap: () => void;
+  openInventory: () => void;
   closeActiveTab: () => void;
   goBack: () => void;
   goForward: () => void;
@@ -42,7 +44,7 @@ function useWorkspaceContext() {
   return context;
 }
 
-const characterComponents = { character: CharacterPanel, map: MapPrototypePanel, location: LocationPanel, faction: FactionPanel };
+const characterComponents = { character: CharacterPanel, map: MapPrototypePanel, location: LocationPanel, faction: FactionPanel, inventory: InventoryPanel };
 
 function WorkspacePanel({ api }: IDockviewPanelProps) {
   const { isDark, panels, onPanelReady } = useWorkspaceContext();
@@ -209,7 +211,8 @@ export function Workspaces({ ref, isDark, onSearch, historyEnabled }: {
     if (section === "Settings" && record) return;
     const visibleSection = section === "Settings" ? null : section;
     let destination: NavigationDestination;
-    if (panel.id === "map:prototype") destination = { kind: "map", workspaceId, section: visibleSection };
+    if (panel.id === "inventory:party") destination = { kind: "inventory", workspaceId, section: visibleSection };
+    else if (panel.id === "map:prototype") destination = { kind: "map", workspaceId, section: visibleSection };
     else if (typeof panel.params?.factionId === "string") destination = { kind: "faction", workspaceId, factionId: panel.params.factionId, section: visibleSection };
     else if (typeof panel.params?.locationId === "string") destination = { kind: "location", workspaceId, locationId: panel.params.locationId, section: visibleSection };
     else if (typeof panel.params?.name === "string") destination = { kind: "character", workspaceId, characterId: panel.params.name, section: visibleSection };
@@ -256,6 +259,12 @@ export function Workspaces({ ref, isDark, onSearch, historyEnabled }: {
     else workspace.addPanel({ id, title: "Map prototype", component: "map" });
   };
 
+  const openInventoryInWorkspace = (workspace: DockviewApi) => {
+    const existing = workspace.getPanel("inventory:party");
+    if (existing) existing.api.setActive();
+    else workspace.addPanel({ id: "inventory:party", title: "Party Inventory", component: "inventory" });
+  };
+
   const navigate = (direction: -1 | 1) => {
     isNavigating.current = true;
     try {
@@ -272,6 +281,7 @@ export function Workspaces({ ref, isDark, onSearch, historyEnabled }: {
         if (destination.kind === "location") return openLocationInWorkspace(workspace, destination.locationId);
         if (destination.kind === "character") return openCharacterInWorkspace(workspace, destination.characterId);
         if (destination.kind === "map") openMapInWorkspace(workspace);
+        if (destination.kind === "inventory") openInventoryInWorkspace(workspace);
         return true;
       });
     } finally {
@@ -383,6 +393,14 @@ export function Workspaces({ ref, isDark, onSearch, historyEnabled }: {
       if (!workspace || !getCampaign().campaign.factions?.some((faction) => faction.id === id)) return;
       useSessionStore.getState().leaveSettings();
       openFactionInWorkspace(workspace, id);
+      recordVisit();
+    },
+    openInventory: () => {
+      const active = api.current?.activePanel;
+      const workspace = active && panels.current.get(active.id);
+      if (!workspace) return;
+      useSessionStore.getState().leaveSettings();
+      openInventoryInWorkspace(workspace);
       recordVisit();
     },
     openMap: () => {

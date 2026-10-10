@@ -83,6 +83,16 @@ fn write_transaction(transaction: &Transaction<'_>, campaign: &Campaign) -> Resu
         params![campaign.id, serde_json::to_string(&campaign.statblock_field_set).map_err(|e| e.to_string())?],
     ).map_err(|e| e.to_string())?;
     transaction
+        .execute(
+            "INSERT INTO party_inventory (campaign_id,inventory_json) VALUES (?1,?2)
+         ON CONFLICT(campaign_id) DO UPDATE SET inventory_json=excluded.inventory_json",
+            params![
+                campaign.id,
+                serde_json::to_string(&campaign.inventory).map_err(|e| e.to_string())?
+            ],
+        )
+        .map_err(|e| e.to_string())?;
+    transaction
         .execute("DELETE FROM npc WHERE campaign_id = ?1", [&campaign.id])
         .map_err(|e| e.to_string())?;
     for (index, npc) in campaign.npcs.iter().enumerate() {
@@ -169,7 +179,7 @@ pub(super) fn read_campaign(folder: &Path) -> Result<Campaign, String> {
     let version: i32 = connection
         .pragma_query_value(None, "user_version", |row| row.get(0))
         .map_err(|e| e.to_string())?;
-    if !(1..=3).contains(&version) {
+    if !(1..=4).contains(&version) {
         return Err(format!("Unsupported campaign database version {version}."));
     }
     let mut statement = connection.prepare("SELECT id,name,schema_version,created_at,updated_at,section,sidebar_width,sidebar_open FROM campaign").map_err(|e| e.to_string())?;
@@ -303,6 +313,21 @@ pub(super) fn read_campaign(folder: &Path) -> Result<Campaign, String> {
             factions.push(faction);
         }
     }
+    let inventory = if table_exists(&connection, "party_inventory")? {
+        let json: Option<String> = connection
+            .query_row(
+                "SELECT inventory_json FROM party_inventory WHERE campaign_id=?1",
+                [&id],
+                |row| row.get(0),
+            )
+            .optional()
+            .map_err(|e| e.to_string())?;
+        json.map(|value| serde_json::from_str(&value).map_err(|e| e.to_string()))
+            .transpose()?
+            .unwrap_or_default()
+    } else {
+        PartyInventory::default()
+    };
     let mut campaign = Campaign {
         format: "ttrpg-campaign".into(),
         schema_version,
@@ -314,6 +339,7 @@ pub(super) fn read_campaign(folder: &Path) -> Result<Campaign, String> {
         npcs,
         locations,
         factions,
+        inventory,
         workspace,
         section,
         sidebar: Sidebar { width, open },

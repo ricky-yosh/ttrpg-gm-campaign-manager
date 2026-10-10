@@ -40,6 +40,7 @@ export const appCommands = {
   openFaction: (id: string) => workspace()?.openFaction(id),
   openLocation: (id: string) => workspace()?.openLocation(id),
   openMap: () => workspace()?.openMap(),
+  openInventory: () => workspace()?.openInventory(),
   createWorkspace: () => workspace()?.createWorkspace(),
   closeActiveTab: () => {
     if (getCampaign().isLeaving) return;

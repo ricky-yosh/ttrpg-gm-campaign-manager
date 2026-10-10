@@ -1,3 +1,4 @@
+import { emptyInventory, inventoryError, type PartyInventory } from "./inventory-data.ts";
 import { useStore } from "zustand";
 import { canParentLocation, withLocationDefaults, type Location } from "./location-data.ts";
 export type { Location } from "./location-data.ts";
@@ -119,6 +120,7 @@ export type Campaign = {
   npcs: Npc[];
   locations: Location[];
   factions: Faction[];
+  inventory?: PartyInventory;
   statblockFieldSet: { id: string; version: number };
   workspace: WorkspaceState | null;
   section: string | null;
@@ -133,7 +135,7 @@ export function statblockFieldSetLabel(fieldSet: { id: string; version: number }
 export function emptyCampaign(name: string): Campaign {
   const now = new Date().toISOString();
   return { format: "ttrpg-campaign", schemaVersion: 1, id: crypto.randomUUID(), name,
-    createdAt: now, updatedAt: now, npcs: [], locations: [], factions: [], statblockFieldSet: { id: "dnd-5.5e", version: 1 },
+    createdAt: now, updatedAt: now, npcs: [], locations: [], factions: [], inventory: emptyInventory(), statblockFieldSet: { id: "dnd-5.5e", version: 1 },
     workspace: null, section: null, sidebar: { width: 256, open: true } };
 }
 
@@ -662,4 +664,13 @@ export async function replaceCampaign(name?: string) {
     await loadCampaignPath(path);
     return true;
   });
+}
+
+export function saveInventory(inventory: PartyInventory): string | null {
+  if (getCampaign().isLeaving) return "Wait for the campaign transition to finish.";
+  const error = inventoryError(inventory);
+  if (error) return error;
+  const saved = { gold: inventory.gold, entries: inventory.entries.map((entry) => ({ ...entry, name: entry.name.trim(), note: entry.note.trim() })) };
+  updateCampaign({ inventory: structuredClone(saved) });
+  return null;
 }

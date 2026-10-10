@@ -39,6 +39,8 @@ pub struct Campaign {
     locations: Vec<Location>,
     #[serde(default)]
     factions: Vec<Faction>,
+    #[serde(default)]
+    inventory: PartyInventory,
     workspace: Option<Workspace>,
     section: Option<String>,
     sidebar: Sidebar,
@@ -205,6 +207,23 @@ struct Faction {
     gm_notes: String,
 }
 
+#[derive(Debug, Default, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+struct PartyInventory {
+    gold: u64,
+    entries: Vec<InventoryEntry>,
+}
+
+#[derive(Debug, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+struct InventoryEntry {
+    id: String,
+    name: String,
+    kind: String,
+    quantity: u64,
+    note: String,
+}
+
 #[derive(Debug, Serialize, Deserialize)]
 struct Sidebar {
     width: f64,
@@ -246,6 +265,10 @@ enum Destination {
     Location {
         workspace_id: String,
         location_id: String,
+        section: Option<String>,
+    },
+    Inventory {
+        workspace_id: String,
         section: Option<String>,
     },
     Map {
@@ -362,6 +385,54 @@ mod tests {
             .unwrap()
             .validate()
             .is_err());
+    }
+
+    #[test]
+    fn inventory_round_trip_legacy_upgrade_and_invalid_save() {
+        let folder = tempfile::tempdir().unwrap();
+        let path = folder.path().join("inventory.campaign");
+        let mut value = serde_json::to_value(example()).unwrap();
+        value["inventory"] = json!({"gold": 250, "entries": [
+            {"id":"rope","name":"Rope","kind":"item","quantity":2,"note":"50 feet"},
+            {"id":"ore","name":"Iron ore","kind":"material","quantity":8,"note":""}
+        ]});
+        value["workspace"]["history"] = json!({"entries":[
+            {"kind":"inventory","workspaceId":"workspace:1","section":"Inventory"}
+        ],"index":0});
+        write_campaign(&path, serde_json::from_value(value.clone()).unwrap()).unwrap();
+        assert_eq!(
+            serde_json::to_value(read_campaign(&path).unwrap()).unwrap(),
+            value
+        );
+        for patch in [
+            json!({"quantity":0}),
+            json!({"name":" "}),
+            json!({"kind":"unknown"}),
+        ] {
+            let mut invalid = value.clone();
+            for (key, replacement) in patch.as_object().unwrap() {
+                invalid["inventory"]["entries"][0][key] = replacement.clone();
+            }
+            assert!(write_campaign(&path, serde_json::from_value(invalid).unwrap()).is_err());
+            assert_eq!(
+                serde_json::to_value(read_campaign(&path).unwrap()).unwrap(),
+                value
+            );
+        }
+        let db = Connection::open(path.join("campaign.sqlite")).unwrap();
+        db.execute_batch("DROP TABLE party_inventory; PRAGMA user_version=3;")
+            .unwrap();
+        drop(db);
+        let legacy = read_campaign(&path).unwrap();
+        assert_eq!(legacy.inventory.gold, 0);
+        assert!(legacy.inventory.entries.is_empty());
+        write_campaign(&path, legacy).unwrap();
+        let db = Connection::open(path.join("campaign.sqlite")).unwrap();
+        assert_eq!(
+            db.pragma_query_value(None, "user_version", |row| row.get::<_, i32>(0))
+                .unwrap(),
+            4
+        );
     }
 
     #[test]
@@ -595,7 +666,7 @@ mod tests {
         assert_eq!(
             db.pragma_query_value(None, "user_version", |row| row.get::<_, i32>(0))
                 .unwrap(),
-            3
+            4
         );
         assert!(table_exists(&db, "location").unwrap());
     }
@@ -772,7 +843,7 @@ mod tests {
         assert_eq!(
             db.pragma_query_value(None, "user_version", |row| row.get::<_, i32>(0))
                 .unwrap(),
-            3
+            4
         );
         assert!(table_exists(&db, "faction").unwrap());
     }

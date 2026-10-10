@@ -1,10 +1,10 @@
 import { emit } from "@tauri-apps/api/event";
 import { isTauri } from "@tauri-apps/api/core";
 import { WebviewWindow } from "@tauri-apps/api/webviewWindow";
-import type { NpcPlayerContent } from "@/components/campaign/npc-player-card";
+import type { PlayerPresentationContent } from "./presentation-content.ts";
+export type { PlayerPresentationContent } from "./presentation-content.ts";
 
 export type PresentationStatus = "stopped" | "live" | "paused";
-export type PlayerPresentationContent = NpcPlayerContent | null;
 
 export async function openPlayerPresentationWindow() {
   if (!isTauri()) return;

@@ -1,3 +1,4 @@
+import { buildPlayerContent, resolvePresentationContent } from "@/lib/presentation-content";
 import { useEffect, useLayoutEffect, useRef, useState } from "react";
 import { useShallow } from "zustand/react/shallow";
 import { isTauri } from "@tauri-apps/api/core";
@@ -35,16 +36,6 @@ function CampaignAutosave() {
   return null;
 }
 
-function getPlayerPresentationContent(npcId: string | null): PlayerPresentationContent {
-  if (!npcId) return null;
-  const npc = getCampaign().campaign.npcs.find((item) => item.id === npcId);
-  if (!npc) return null;
-  return {
-    name: npc.name,
-    description: npc.presentation.playerDescription,
-    portraitUrl: npc.presentation.portrait?.url ?? null,
-  };
-}
 
 function App() {
   useEffect(startHistoryDispatcher, []);
@@ -64,8 +55,15 @@ function App() {
   const [presenterSidebarSection, setPresenterSidebarSection] = useState<"home" | "npcs">("home");
   const [selectedPresenterNpcId, setSelectedPresenterNpcId] = useState<string | null>(null);
   const presenterWorkspace = useRef<PresenterWorkspaceHandle>(null);
-  const activePresenterNpcId = useRef<string | null>(null);
+  const activePresenterSelection = useRef<{ section: PresenterSection; npcId: string | null }>({ section: "map", npcId: null });
   const lastLivePresentationContent = useRef<PlayerPresentationContent>(null);
+  useLayoutEffect(() => {
+    activePresenterSelection.current = { section: "map", npcId: null };
+    lastLivePresentationContent.current = null;
+    setPresenterSection("map");
+    setSelectedPresenterNpcId(null);
+    setPresenterSidebarSection("home");
+  }, [generation]);
   const choiceResolver = useRef<((choice: UnsavedChoice) => void) | null>(null);
   const workspaces = useRef<WorkspaceHandle>(null);
   const closeActiveTab = () => {
@@ -121,9 +119,9 @@ function App() {
         ? "paused"
         : state.presentationStartedAt === null ? "stopped" : "live";
       void publishPresentationStatus(currentStatus);
-      void publishPresentationContent(currentStatus === "paused"
-        ? lastLivePresentationContent.current
-        : getPlayerPresentationContent(activePresenterNpcId.current));
+      void publishPresentationContent(resolvePresentationContent(currentStatus,
+        buildPlayerContent(getCampaign().campaign, activePresenterSelection.current.section, activePresenterSelection.current.npcId),
+        lastLivePresentationContent.current));
     };
 
     void Promise.all([
@@ -150,10 +148,10 @@ function App() {
   }, []);
   useEffect(() => {
     if (!isPresenting || presentationPaused) return;
-    const content = getPlayerPresentationContent(selectedPresenterNpcId);
+    const content = resolvePresentationContent("live", buildPlayerContent(getCampaign().campaign, presenterSection, selectedPresenterNpcId), lastLivePresentationContent.current);
     lastLivePresentationContent.current = content;
     void publishPresentationContent(content);
-  }, [campaignRevision, isPresenting, presentationPaused, selectedPresenterNpcId]);
+  }, [campaignRevision, isPresenting, presentationPaused, selectedPresenterNpcId, presenterSection]);
   useEffect(() => {
     const handleCloseTabShortcut = (event: KeyboardEvent) => {
       const isMacOS = /Mac|iPhone|iPad/.test(navigator.platform);
@@ -211,6 +209,7 @@ function App() {
               presenterSidebarSection={presenterSidebarSection}
               selectedNpcId={selectedPresenterNpcId}
               onSelectMap={() => presenterWorkspace.current?.openMap()}
+              onSelectInventory={() => presenterWorkspace.current?.openInventory()}
               onShowPresenterNpcs={() => setPresenterSidebarSection("npcs")}
               onShowPresenterSections={() => setPresenterSidebarSection("home")}
               onSelectNpc={(id, name) => {
@@ -242,7 +241,7 @@ function App() {
                   ref={presenterWorkspace}
                   isDark={isDark}
                   onActiveSelectionChange={(nextSection, npcId) => {
-                    activePresenterNpcId.current = npcId;
+                    activePresenterSelection.current = { section: nextSection, npcId };
                     setPresenterSection(nextSection);
                     setSelectedPresenterNpcId(npcId);
                   }}
