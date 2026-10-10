@@ -11,6 +11,7 @@ import {
 import { Dialog, DialogDescription, DialogPopup, DialogTitle } from "@/components/ui/dialog";
 import { Kbd } from "@/components/ui/kbd";
 import { useCampaign } from "@/lib/campaign-data";
+import { locationAncestors } from "@/lib/location-data";
 import { useSidebar } from "@/components/ui/sidebar";
 
 type PaletteItem = {
@@ -39,6 +40,7 @@ export function CommandPalette({ isPresenterView, onTogglePresenterView, onClose
   const canGoForward = useSessionStore(selectCanGoForward);
   const ids = useCampaign(useShallow((state) => state.campaign.npcs.map((npc) => npc.id)));
   const names = useCampaign(useShallow((state) => state.campaign.npcs.map((npc) => npc.name)));
+  const locations = useCampaign(useShallow((state) => state.campaign.locations ?? []));
   const paletteGroups: PaletteGroup[] = [
     {
       value: "Actions",
@@ -184,6 +186,24 @@ export function CommandPalette({ isPresenterView, onTogglePresenterView, onClose
         onSelect: () => appCommands.openCharacter(id),
       })),
     },
+    ...(!isPresenterView ? [{
+      value: "Locations",
+      items: locations.map((location) => {
+        const ancestors = locationAncestors(locations, location.id);
+        const path = [...ancestors.map((ancestor) => ancestor.name), location.name].join(" / ");
+        return {
+          id: `location:${location.id}`,
+          label: location.name,
+          description: [location.locationType, path].filter(Boolean).join(" · "),
+          keywords: [...ancestors.map((ancestor) => ancestor.name), ...(location.tags ?? []), location.locationType ?? "", location.publicDescription].filter(Boolean),
+          icon: MapPinIcon,
+          onSelect: () => {
+            appCommands.selectSection("Locations");
+            appCommands.openLocation(location.id);
+          },
+        };
+      }),
+    }] : []),
   ];
 
   const [query, setQuery] = useState("");

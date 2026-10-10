@@ -1,24 +1,22 @@
 import { useEffect, useState } from "react";
 import { ChevronDownIcon, ChevronRightIcon, PlusIcon } from "lucide-react";
 import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
 import { SidebarMenu, SidebarMenuButton, SidebarMenuItem } from "@/components/ui/sidebar";
 import { Empty, EmptyDescription, EmptyHeader, EmptyTitle } from "@/components/ui/empty";
 import { locationIcon } from "@/components/campaign/location-icon";
 import { LocationCreateForm } from "@/components/campaign/location-fields";
 import { appCommands } from "@/lib/app-commands";
 import { useCampaign } from "@/lib/campaign-data";
-import { locationAncestors, locationSearchResults, type Location } from "@/lib/location-data";
+import { locationAncestors, type Location } from "@/lib/location-data";
 import { useSessionStore } from "@/stores/session-store";
 
 export function LocationsDirectory() {
   const locations = useCampaign((state) => state.campaign.locations);
   const destination = useSessionStore((state) => state.workspaceDestination);
   const activeId = destination?.kind === "location" ? destination.locationId : null;
-  const directory = useSessionStore((state) => state.locationDirectory);
+  const collapsedIds = useSessionStore((state) => state.locationDirectory.collapsedIds);
   const setDirectory = useSessionStore((state) => state.setLocationDirectory);
   const [creating, setCreating] = useState(false);
-  const { query, collapsedIds } = directory;
 
   useEffect(() => {
     if (!activeId) return;
@@ -56,22 +54,12 @@ export function LocationsDirectory() {
         <Button type="button" size="icon-sm" variant="outline" aria-label="New location" onClick={() => { setCreating(true); }}><PlusIcon /></Button>
       </div>
       {creating && <LocationCreateForm onClose={() => setCreating(false)} />}
-      <Input aria-label="Search places" placeholder="Search places…" value={query} onChange={(event) => setDirectory({ query: event.currentTarget.value })} />
       <SidebarMenu>
-        {query.trim() ? locationSearchResults(locations, query).map(({ location, path }) => {
-          const Icon = locationIcon(location.locationType);
-          return <SidebarMenuItem key={location.id}>
-            <SidebarMenuButton className="h-auto min-h-9" title={path ? `${path} / ${location.name}` : location.name}
-              isActive={activeId === location.id} onClick={() => appCommands.openLocation(location.id)}>
-              <Icon aria-hidden="true" />
-              <span className="flex min-w-0 flex-col"><span className="truncate">{location.name}</span>{path && <span className="truncate text-xs text-muted-foreground">{path}</span>}</span>
-            </SidebarMenuButton>
-          </SidebarMenuItem>;
-        }) : locations.filter((location) => !location.parentId || !locations.some((parent) => parent.id === location.parentId)).map((location) => renderLocation(location, 0))}
+        {locations.filter((location) => !location.parentId || !locations.some((parent) => parent.id === location.parentId)).map((location) => renderLocation(location, 0))}
       </SidebarMenu>
-      {(!locations.length || (query.trim() && !locationSearchResults(locations, query).length)) && <Empty size="compact">
-        <EmptyHeader><EmptyTitle>{query.trim() ? "No matching places" : "Your atlas starts here"}</EmptyTitle>
-          <EmptyDescription>{query.trim() ? "Try another name." : "Create a location, then add places within it."}</EmptyDescription></EmptyHeader>
+      {!locations.length && <Empty size="compact">
+        <EmptyHeader><EmptyTitle>Your atlas starts here</EmptyTitle>
+          <EmptyDescription>Create a location, then add places within it.</EmptyDescription></EmptyHeader>
       </Empty>}
 
     </div>
