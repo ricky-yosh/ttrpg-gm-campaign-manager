@@ -156,14 +156,43 @@ impl Default for NpcStatblock {
     }
 }
 
-#[derive(Debug, Serialize, Deserialize)]
+#[derive(Debug, Default, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase", deny_unknown_fields)]
 struct Location {
+    #[serde(default)]
+    parent_id: Option<String>,
+    #[serde(default)]
+    location_type: String,
+    #[serde(default)]
+    tags: Vec<String>,
+    #[serde(default = "unknown_party_knowledge")]
+    party_knowledge: String,
+    #[serde(default)]
+    banner: Option<NpcImage>,
+    #[serde(default)]
+    gm_reference: LocationReference,
     id: String,
     name: String,
     image: Option<NpcImage>,
     public_description: String,
     gm_notes: String,
+}
+
+fn unknown_party_knowledge() -> String {
+    "unknown".into()
+}
+
+#[derive(Debug, Default, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+struct LocationReference {
+    #[serde(default)]
+    atmosphere: String,
+    #[serde(default)]
+    background: String,
+    #[serde(default)]
+    current_situation: String,
+    #[serde(default)]
+    secrets: String,
 }
 
 #[derive(Debug, Serialize, Deserialize)]
@@ -490,6 +519,28 @@ mod tests {
             }),
             public_description: "A woodland village.".into(),
             gm_notes: "A hidden passage.".into(),
+            party_knowledge: unknown_party_knowledge(),
+            ..Default::default()
+        });
+        campaign.locations.push(
+            serde_json::from_value(serde_json::json!({
+                "id": "region-1", "name": "Northern Reach", "image": null,
+                "publicDescription": "A rugged region.", "gmNotes": "Old prep."
+            }))
+            .unwrap(),
+        );
+        let location = &mut campaign.locations[0];
+        location.parent_id = Some("region-1".into());
+        location.location_type = "Village".into();
+        location.tags = vec!["Forest".into(), "Social".into()];
+        location.party_knowledge = "visited".into();
+        location.gm_reference.atmosphere = "Wood smoke and birdsong.".into();
+        location.gm_reference.background = "An old refuge.".into();
+        location.gm_reference.current_situation = "Preparing a festival.".into();
+        location.gm_reference.secrets = "A hidden cellar.".into();
+        location.banner = Some(NpcImage {
+            kind: "img".into(),
+            url: "data:image/webp;base64,YmFubmVy".into(),
         });
         campaign.npcs[0]
             .presentation
@@ -550,6 +601,47 @@ mod tests {
     }
 
     #[test]
+    fn location_dossier_defaults_and_hierarchy_validation() {
+        let legacy = serde_json::json!({
+            "id": "loc-1", "name": "Village", "image": null,
+            "publicDescription": "Existing description", "gmNotes": "Existing notes"
+        });
+        let mut campaign = example();
+        campaign
+            .locations
+            .push(serde_json::from_value(legacy.clone()).unwrap());
+        assert!(campaign.validate().is_ok());
+        assert_eq!(campaign.locations[0].party_knowledge, "unknown");
+        assert!(campaign.locations[0].tags.is_empty());
+        assert!(campaign.locations[0].gm_reference.background.is_empty());
+        assert_eq!(
+            campaign.locations[0].public_description,
+            "Existing description"
+        );
+        campaign.locations[0].parent_id = Some("loc-1".into());
+        assert!(campaign.validate().is_err());
+        campaign.locations[0].parent_id = Some("missing".into());
+        assert!(campaign.validate().is_err());
+        campaign.locations[0].parent_id = None;
+        let mut child: Location = serde_json::from_value(legacy).unwrap();
+        child.id = "loc-2".into();
+        child.parent_id = Some("loc-1".into());
+        campaign.locations.push(child);
+        assert!(campaign.validate().is_ok());
+        campaign.locations[0].parent_id = Some("loc-2".into());
+        assert!(campaign.validate().is_err());
+        campaign.locations[0].parent_id = None;
+        campaign.locations[0].party_knowledge = "published".into();
+        assert!(campaign.validate().is_err());
+        campaign.locations[0].party_knowledge = "known".into();
+        campaign.locations[0].banner = Some(NpcImage {
+            kind: "invalid".into(),
+            url: "unused".into(),
+        });
+        assert!(campaign.validate().is_err());
+    }
+
+    #[test]
     fn invalid_locations_and_duplicate_location_links_are_rejected() {
         let mut campaign = example();
         campaign.locations.push(Location {
@@ -558,6 +650,8 @@ mod tests {
             image: None,
             public_description: String::new(),
             gm_notes: String::new(),
+            party_knowledge: unknown_party_knowledge(),
+            ..Default::default()
         });
         assert!(campaign.validate().is_err());
         campaign.locations[0].name = "Village".into();
@@ -662,6 +756,8 @@ mod tests {
             image: None,
             public_description: "An old village.".into(),
             gm_notes: "Private.".into(),
+            party_knowledge: unknown_party_knowledge(),
+            ..Default::default()
         });
         write_campaign(&path, campaign).unwrap();
         let db = Connection::open(path.join("campaign.sqlite")).unwrap();

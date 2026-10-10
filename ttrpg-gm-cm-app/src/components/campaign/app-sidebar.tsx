@@ -264,15 +264,7 @@ export function AppSidebar({ isPresenterView = false, presenterSection = "map", 
                 )) : section === "Factions" ? (
                   <FactionsDirectory key={generation} />
                 ) : section === "Locations & Maps" ? (
-                  <>
                   <LocationsDirectory key={generation} />
-                  <SidebarMenuItem>
-                    <SidebarMenuButton tooltip="Map prototype" onClick={appCommands.openMap}>
-                      <MapIcon aria-hidden="true" />
-                      <span>Map prototype</span>
-                    </SidebarMenuButton>
-                  </SidebarMenuItem>
-                  </>
                 ) : (
                   <li className="px-2 py-2 text-sm text-muted-foreground">Nothing here yet</li>
                 )}

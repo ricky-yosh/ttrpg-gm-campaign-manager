@@ -1,4 +1,6 @@
 import { useStore } from "zustand";
+import { canParentLocation, withLocationDefaults, type Location } from "./location-data.ts";
+export type { Location } from "./location-data.ts";
 import { createCampaignStore, type CampaignSnapshot } from "../stores/campaign-store.ts";
 import type { StoredNavigationHistory } from "../stores/session-store.ts";
 import { invoke, isTauri } from "@tauri-apps/api/core";
@@ -80,7 +82,6 @@ export type NpcReference = {
   other: string;
 };
 export type NpcRelationship = { targetId: string; label: string };
-export type Location = { id: string; name: string; image: NpcImage | null; publicDescription: string; gmNotes: string };
 export type Faction = { id: string; name: string; image: NpcImage | null; description: string; gmNotes: string };
 export type NpcPresentation = {
   factions: NpcRelationship[];
@@ -387,18 +388,21 @@ export function updateCampaign(change: Partial<Campaign>) {
   campaignStore.setState((state) => ({ campaign: { ...state.campaign, ...change, updatedAt: new Date().toISOString() },
     revision: state.revision + 1, status: "Unsaved changes", error: "" }));
 }
-export function createLocation(name: string) {
+export function createLocation(name: string, parentId: string | null = null) {
   const trimmed = name.trim();
   if (!trimmed) return null;
   const { campaign } = getCampaign();
-  const location: Location = { id: crypto.randomUUID(), name: trimmed, image: null, publicDescription: "", gmNotes: "" };
+  if (parentId && !campaign.locations.some((location) => location.id === parentId)) return;
+  const location = withLocationDefaults({ id: crypto.randomUUID(), name: trimmed, image: null, publicDescription: "", gmNotes: "", parentId });
   updateCampaign({ locations: [...(campaign.locations ?? []), location] });
   return location.id;
 }
 export function saveLocation(id: string, changes: Omit<Location, "id">) {
   const { campaign } = getCampaign();
-  if (!changes.name.trim() || !campaign.locations.some((location) => location.id === id)) return;
-  updateCampaign({ locations: campaign.locations.map((location) => location.id === id ? { id, ...structuredClone(changes), name: changes.name.trim() } : location) });
+  if (!changes.name.trim() || !campaign.locations.some((location) => location.id === id)) return false;
+  if (!canParentLocation(campaign.locations, id, changes.parentId ?? null)) return false;
+  updateCampaign({ locations: campaign.locations.map((location) => location.id === id ? withLocationDefaults({ ...structuredClone(changes), id, name: changes.name.trim() }) : location) });
+  return true;
 }
 export function createFaction(name: string) {
   const trimmed = name.trim();

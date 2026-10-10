@@ -22,7 +22,11 @@ type CampaignSession = {
   workspace: { history: StoredNavigationHistory; sidebarWidth: number; collapsed: boolean } | null;
 };
 
+type LocationDirectoryState = { view: "places" | "maps"; query: string; collapsedIds: string[] };
+
 export type SessionState = {
+  locationDirectory: LocationDirectoryState;
+  setLocationDirectory: (change: Partial<LocationDirectoryState>) => void;
   generation: number;
   section: string | null;
   sidebar: SidebarState;
@@ -104,6 +108,8 @@ export function normalizeNavigationHistory(history?: StoredNavigationHistory): N
 }
 
 export const useSessionStore = create<SessionState>()((set, get) => ({
+  locationDirectory: { view: "places", query: "", collapsedIds: [] },
+  setLocationDirectory: (change) => set((state) => ({ locationDirectory: { ...state.locationDirectory, ...change } })),
   generation: 0,
   section: null,
   sidebar: { width: 256, open: true },
@@ -211,6 +217,7 @@ export const useSessionStore = create<SessionState>()((set, get) => ({
 export function hydrateSession(campaign: CampaignSession, generation: number) {
   useSessionStore.setState({
     generation,
+    locationDirectory: { view: "places", query: "", collapsedIds: [] },
     section: campaign.section,
     sidebar: { ...campaign.sidebar },
     presenterSidebar: { width: 256, open: true },

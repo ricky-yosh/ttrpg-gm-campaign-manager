@@ -92,12 +92,31 @@ impl Campaign {
             {
                 return Err("Locations must have unique IDs and nonempty names.".into());
             }
-            if location
-                .image
-                .as_ref()
-                .is_some_and(|image| image.kind != "img")
+            if [location.image.as_ref(), location.banner.as_ref()]
+                .into_iter()
+                .flatten()
+                .any(|image| image.kind != "img")
             {
                 return Err("Location images must use type 'img'.".into());
+            }
+        }
+        let locations: std::collections::HashMap<_, _> = self
+            .locations
+            .iter()
+            .map(|location| (location.id.as_str(), location))
+            .collect();
+        for location in &self.locations {
+            if !["unknown", "known", "visited"].contains(&location.party_knowledge.as_str()) {
+                return Err("Invalid location party knowledge.".into());
+            }
+            let mut seen = HashSet::from([location.id.as_str()]);
+            let mut parent_id = location.parent_id.as_deref();
+            while let Some(id) = parent_id {
+                if !seen.insert(id) {
+                    return Err("Location parents cannot form a cycle.".into());
+                }
+                let parent = locations.get(id).ok_or("Location parent is unavailable.")?;
+                parent_id = parent.parent_id.as_deref();
             }
         }
         let mut faction_ids = HashSet::new();
