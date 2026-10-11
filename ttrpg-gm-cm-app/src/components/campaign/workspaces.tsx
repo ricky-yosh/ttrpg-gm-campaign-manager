@@ -119,6 +119,8 @@ export function Workspaces({ ref, isDark, onSearch, historyEnabled }: {
   const historyHandlers = useRef(new Map<IDockviewPanelProps["api"], NpcHistoryHandler>());
   const nextId = useRef(initialState?.nextId ?? 1);
   const subscriptions = useRef<{ dispose: () => void }[]>([]);
+  const captureFrame = useRef<number | null>(null);
+  const lastCapturedWorkspace = useRef<string | null>(null);
   const isCollapsed = useSessionStore((state) => state.workspaceCollapsed);
   const sidebarWidth = useSessionStore((state) => state.workspaceSidebarWidth);
   const workspaceTabs = useSessionStore((state) => state.workspaceTabs);
@@ -201,13 +203,27 @@ export function Workspaces({ ref, isDark, onSearch, historyEnabled }: {
       history: structuredClone(session.navigation),
     };
     const campaign = getCampaign().campaign;
-    if (JSON.stringify(campaign.workspace) !== JSON.stringify(workspace) || campaign.section !== session.section || JSON.stringify(campaign.sidebar) !== JSON.stringify(session.sidebar)) {
+    const workspaceJson = JSON.stringify(workspace);
+    const snapshot = JSON.stringify({ workspace, section: session.section, sidebar: session.sidebar });
+    // Dockview can emit more than one change for a pan; don't write the same snapshot back into campaign state repeatedly.
+    if (snapshot === lastCapturedWorkspace.current) return;
+    lastCapturedWorkspace.current = snapshot;
+    if (JSON.stringify(campaign.workspace) !== workspaceJson || campaign.section !== session.section || JSON.stringify(campaign.sidebar) !== JSON.stringify(session.sidebar)) {
       updateCampaign({ workspace, section: session.section, sidebar: session.sidebar });
     }
   };
   const captureRef = useRef(captureWorkspace);
   captureRef.current = captureWorkspace;
-  const scheduleCapture = () => queueMicrotask(() => captureRef.current());
+  const scheduleCapture = () => {
+    if (captureFrame.current !== null) return;
+    captureFrame.current = requestAnimationFrame(() => {
+      captureFrame.current = null;
+      captureRef.current();
+    });
+  };
+  useEffect(() => () => {
+    if (captureFrame.current !== null) cancelAnimationFrame(captureFrame.current);
+  }, []);
   useEffect(() => useSessionStore.subscribe((state, previous) => {
     if (state.generation !== generation) return;
     if (state.section !== previous.section || state.sidebar !== previous.sidebar || state.navigation !== previous.navigation

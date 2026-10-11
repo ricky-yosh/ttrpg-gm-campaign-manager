@@ -32,7 +32,10 @@ export function MapPanel({ params, api }: IDockviewPanelProps) {
   const [viewport, setViewport] = useState({ x: 800, y: 600 });
   const [rootWidth, setRootWidth] = useState(1000);
   const [image, setImage] = useState<HTMLImageElement | null>(null);
-  const [camera, setCamera] = useState<MapCamera>(readMapCamera(params.camera));
+  // Dockview params are the camera source of truth; mirroring them through React state made trackpad pan updates echo between effects until React hit its update-depth limit.
+  const camera = readMapCamera(params.camera);
+  const cameraRef = useRef<MapCamera>(camera);
+  cameraRef.current = camera;
   const [previewId, setPreviewId] = useState<string | null>(params.previewLocationId ?? null);
   const [selectedPinId, setSelectedPinId] = useState<string | null>(params.selectedPinId ?? null);
   const [collapsed, setCollapsed] = useState(Boolean(params.collapsed));
@@ -64,12 +67,6 @@ export function MapPanel({ params, api }: IDockviewPanelProps) {
     return () => { historyContext?.delete(api); window.dispatchEvent(new Event("npc-history-change")); };
   }, [api, historyContext, map, canUndo, canRedo, undoEdit, redoEdit]);
   useEffect(() => {
-    if (params.camera) {
-      const nextCamera = readMapCamera(params.camera);
-      setCamera((current) => current.x === nextCamera.x && current.y === nextCamera.y && current.zoom === nextCamera.zoom
-        ? current
-        : nextCamera);
-    }
     if (params.previewLocationId !== undefined) setPreviewId(params.previewLocationId);
     if (params.selectedPinId !== undefined) setSelectedPinId(params.selectedPinId);
     if (params.collapsed !== undefined) setCollapsed(params.collapsed);
@@ -80,11 +77,14 @@ export function MapPanel({ params, api }: IDockviewPanelProps) {
     setCollapsed(true);
   }, [params.placeRequest, params.placeLocationId]);
   useEffect(() => {
-    remember({ camera, previewLocationId: previewId, selectedPinId, collapsed, inspectorWidth: sidebarWidth });
-  }, [camera, previewId, selectedPinId, collapsed, sidebarWidth]);
+    remember({ previewLocationId: previewId, selectedPinId, collapsed, inspectorWidth: sidebarWidth });
+  }, [previewId, selectedPinId, collapsed, sidebarWidth]);
   useEffect(() => {
     const observer = new ResizeObserver(() => {
-      if (viewportRef.current) setViewport({ x: Math.max(1, viewportRef.current.clientWidth), y: Math.max(1, viewportRef.current.clientHeight) });
+      if (viewportRef.current) {
+        const nextViewport = { x: Math.max(1, viewportRef.current.clientWidth), y: Math.max(1, viewportRef.current.clientHeight) };
+        setViewport((current) => current.x === nextViewport.x && current.y === nextViewport.y ? current : nextViewport);
+      }
       if (root.current) setRootWidth(root.current.clientWidth);
     });
     if (viewportRef.current) observer.observe(viewportRef.current);
@@ -124,12 +124,17 @@ export function MapPanel({ params, api }: IDockviewPanelProps) {
     setCollapsed(false);
     remember({ previewLocationId: locationId, selectedPinId: selected, collapsed: false });
   };
+  const updateCamera = (next: MapCamera | ((current: MapCamera) => MapCamera)) => {
+    const resolved = typeof next === "function" ? next(cameraRef.current) : next;
+    cameraRef.current = resolved;
+    remember({ camera: resolved });
+  };
   const center = (pinId: string) => {
     const pin = map.pins.find((item) => item.id === pinId);
-    if (pin) setCamera({ x: pin.x, y: pin.y, zoom: Math.max(2, camera.zoom) });
+    if (pin) updateCamera({ x: pin.x, y: pin.y, zoom: Math.max(2, cameraRef.current.zoom) });
   };
   const changeZoom = (factor: number, point = { x: viewport.x / 2, y: viewport.y / 2 }) => {
-    setCamera((current) => {
+    updateCamera((current) => {
       const old = mapTransform(map.width, map.height, viewport, current);
       const zoom = Math.max(0.2, Math.min(12, current.zoom * factor));
       const scale = old.scale * zoom / current.zoom;
@@ -166,7 +171,7 @@ export function MapPanel({ params, api }: IDockviewPanelProps) {
           if ((event.target as HTMLElement).closest("button,input,select,textarea")) return;
           if (event.key === "Escape") cancelPlacement();
           else if (event.code === "Space") { event.preventDefault(); setSpacePressed(true); }
-          else if (event.shiftKey && event.code === "Digit1") { event.preventDefault(); setCamera(defaultMapCamera); }
+          else if (event.shiftKey && event.code === "Digit1") { event.preventDefault(); updateCamera(defaultMapCamera); }
           else if ((event.metaKey || event.ctrlKey) && ["+", "=", "-"].includes(event.key)) { event.preventDefault(); changeZoom(event.key === "-" ? 1 / 1.2 : 1.2); }
         }}
         onWheel={(event) => {
@@ -175,12 +180,15 @@ export function MapPanel({ params, api }: IDockviewPanelProps) {
           if (event.ctrlKey || event.metaKey) {
             const bounds = event.currentTarget.getBoundingClientRect();
             changeZoom(Math.exp(-event.deltaY * mode * 0.003), { x: event.clientX - bounds.left, y: event.clientY - bounds.top });
-          } else setCamera((current) => ({ ...current, x: current.x + event.deltaX * mode / (map.width * transform.scale), y: current.y + event.deltaY * mode / (map.height * transform.scale) }));
+          } else updateCamera((current) => {
+            const currentTransform = mapTransform(map.width, map.height, viewport, current);
+            return { ...current, x: current.x + event.deltaX * mode / (map.width * currentTransform.scale), y: current.y + event.deltaY * mode / (map.height * currentTransform.scale) };
+          });
         }}>
         {image && <Stage ref={stageRef} width={viewport.x} height={viewport.y} x={transform.x} y={transform.y} scaleX={transform.scale} scaleY={transform.scale} draggable={spacePressed && !pendingPin}
           onDragEnd={(event) => {
             if (event.target !== stageRef.current) return;
-            setCamera((current) => ({ ...current, x: (viewport.x / 2 - event.target.x()) / (map.width * transform.scale), y: (viewport.y / 2 - event.target.y()) / (map.height * transform.scale) }));
+            updateCamera((current) => ({ ...current, x: (viewport.x / 2 - event.target.x()) / (map.width * transform.scale), y: (viewport.y / 2 - event.target.y()) / (map.height * transform.scale) }));
           }}
           onClick={(event) => {
             if (event.evt.button !== 0 || (!pendingPin && tool !== "party")) return;
@@ -223,7 +231,7 @@ export function MapPanel({ params, api }: IDockviewPanelProps) {
           <Button variant="ghost" size="icon" title="Add location pin" aria-label="Add location pin" onClick={() => setPinEditor("new")}><MapPinIcon /></Button>
           <Separator orientation="vertical" className="mx-1 h-6" />
           <Button variant="ghost" size="icon" aria-label="Zoom out" onClick={() => changeZoom(1 / 1.2)}><MinusIcon /></Button><span className="min-w-10 text-center text-xs tabular-nums">{Math.round(camera.zoom * 100)}%</span><Button variant="ghost" size="icon" aria-label="Zoom in" onClick={() => changeZoom(1.2)}><PlusIcon /></Button>
-          <Button variant="ghost" size="icon" aria-label="Fit map" title="Fit map (Shift+1)" onClick={() => setCamera(defaultMapCamera)}><RotateCcwIcon /></Button>
+          <Button variant="ghost" size="icon" aria-label="Fit map" title="Fit map (Shift+1)" onClick={() => updateCamera(defaultMapCamera)}><RotateCcwIcon /></Button>
         </div>
         <p className="pointer-events-none absolute bottom-2 left-3 rounded bg-background/90 px-2 py-1 text-xs text-muted-foreground">Space + drag to pan · Pinch to zoom{tool === "move" && " · Drag a pin or the party"}</p>
       </div>
