@@ -374,6 +374,7 @@ const demoNpcPresentations: Record<CharacterName, NpcPresentation> = {
 };
 
 const demo = emptyCampaign("My campaign");
+export const sampleCampaignId = demo.id;
 const demoLocations = {
   greyhaven: crypto.randomUUID(), harbor: crypto.randomUUID(), inn: crypto.randomUUID(), seawall: crypto.randomUUID(),
 };

@@ -9,7 +9,7 @@ import { NativeSelectOption } from "@/components/ui/native-select";
 import { Badge } from "@/components/ui/badge";
 import { Dialog, DialogDescription, DialogPopup, DialogTitle } from "@/components/ui/dialog";
 import { NpcImageField } from "@/components/campaign/npc-image-field";
-import { saveFaction, useCampaign } from "@/lib/campaign-data";
+import { sampleCampaignId, saveFaction, useCampaign } from "@/lib/campaign-data";
 import { appCommands } from "@/lib/app-commands";
 import { cn } from "@/lib/utils";
 import { initialFactionPrototype, publicFactionNodes, removeFactionNode, type FactionAlliance, type FactionNode } from "@/lib/faction-prototype";
@@ -17,6 +17,7 @@ import { useFactionPrototypeStore } from "@/stores/faction-prototype-store";
 import { FactionEmpty, FactionSection, FactionSelect } from "./faction-fields";
 import { FactionStructure, openFactionNode } from "./faction-structure";
 import { FactionAllianceEditor, FactionNodeEditor } from "./faction-relationship-editor";
+import { sampleFactionPrototype } from "@/assets/sample-campaign/faction-prototypes";
 
 export function FactionPanel({ params, api }: IDockviewPanelProps) {
   const id = typeof params.factionId === "string" ? params.factionId : "";
@@ -24,9 +25,12 @@ export function FactionPanel({ params, api }: IDockviewPanelProps) {
   const npcs = useCampaign((state) => state.campaign.npcs);
   const factions = useCampaign((state) => state.campaign.factions);
   const locations = useCampaign((state) => state.campaign.locations);
+  const campaignId = useCampaign((state) => state.campaign.id);
   const storedPrototype = useFactionPrototypeStore((state) => state.records[id]);
   const records = useFactionPrototypeStore((state) => state.records);
-  const savedPrototype = useMemo(() => storedPrototype ?? initialFactionPrototype(id, npcs), [storedPrototype, id, npcs]);
+  const savedPrototype = useMemo(() => storedPrototype ?? (campaignId === sampleCampaignId
+    ? sampleFactionPrototype(id, factions, npcs, locations) ?? initialFactionPrototype(id, npcs)
+    : initialFactionPrototype(id, npcs)), [storedPrototype, id, campaignId, factions, npcs, locations]);
   const [draft, setDraft] = useState(faction);
   const [prototype, setPrototype] = useState(savedPrototype);
   const [editing, setEditing] = useState(false);

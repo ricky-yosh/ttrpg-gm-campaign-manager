@@ -1,6 +1,7 @@
 import { useId, useState } from "react";
 import { FlagIcon, PlusIcon } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
 import { Field, FieldGroup, FieldLabel } from "@/components/ui/field";
 import { SidebarMenuButton, SidebarMenuItem } from "@/components/ui/sidebar";
 import { appCommands } from "@/lib/app-commands";
