@@ -46,7 +46,11 @@ function useWorkspaceContext() {
   return context;
 }
 
-const characterComponents = { character: CharacterPanel, map: MapPrototypePanel, location: LocationPanel, faction: FactionPanel, inventory: InventoryPanel, sample: SampleSectionPage };
+function SampleSectionPanel({ params }: IDockviewPanelProps) {
+  return <SampleSectionPage section={typeof params.sampleSection === "string" ? params.sampleSection : ""} />;
+}
+
+const characterComponents = { character: CharacterPanel, map: MapPrototypePanel, location: LocationPanel, faction: FactionPanel, inventory: InventoryPanel, sample: SampleSectionPanel };
 
 function WorkspacePanel({ api }: IDockviewPanelProps) {
   const { isDark, panels, onPanelReady } = useWorkspaceContext();
@@ -269,7 +273,7 @@ export function Workspaces({ ref, isDark, onSearch, historyEnabled }: {
   };
 
   const openSampleSectionInWorkspace = (workspace: DockviewApi, section: string) => {
-    const id = `sample:${section.toLowerCase().replaceAll(" ", "-")}`;
+    const id = `sample:${section.toLowerCase().replace(/ /g, "-")}`;
     const existing = workspace.getPanel(id);
     if (existing) existing.api.setActive();
     else workspace.addPanel({ id, title: `${section} · Sample`, component: "sample", params: { section, sampleSection: section } });
