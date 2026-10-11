@@ -5,7 +5,7 @@ import { useEffect, useState } from "react";
 import { Autocomplete } from "@base-ui/react/autocomplete";
 import {
   ArrowLeftIcon, ArrowRightIcon, CircleHelpIcon, FilePlus2Icon, FolderOpenIcon, LayoutTemplateIcon,
-  BackpackIcon, MapPinIcon, MapIcon, MonitorIcon, PanelLeftCloseIcon, PanelLeftIcon, PanelTopCloseIcon, SaveIcon, SearchIcon, SettingsIcon, UserPlusIcon, UserRoundIcon,
+  BackpackIcon, FlagIcon, MapPinIcon, MapIcon, MonitorIcon, PanelLeftCloseIcon, PanelLeftIcon, PanelTopCloseIcon, SaveIcon, SearchIcon, SettingsIcon, UserPlusIcon, UserRoundIcon,
   type LucideIcon,
 } from "lucide-react";
 import { Dialog, DialogDescription, DialogPopup, DialogTitle } from "@/components/ui/dialog";
@@ -41,6 +41,7 @@ export function CommandPalette({ isPresenterView, onTogglePresenterView, onClose
   const ids = useCampaign(useShallow((state) => state.campaign.npcs.map((npc) => npc.id)));
   const names = useCampaign(useShallow((state) => state.campaign.npcs.map((npc) => npc.name)));
   const locations = useCampaign(useShallow((state) => state.campaign.locations ?? []));
+  const factions = useCampaign(useShallow((state) => state.campaign.factions ?? []));
   const paletteGroups: PaletteGroup[] = [
     {
       value: "Actions",
@@ -203,6 +204,20 @@ export function CommandPalette({ isPresenterView, onTogglePresenterView, onClose
           },
         };
       }),
+    }] : []),
+    ...(!isPresenterView ? [{
+      value: "Factions",
+      items: factions.map((faction) => ({
+        id: `faction:${faction.id}`,
+        label: faction.name,
+        description: "Open faction dossier",
+        keywords: ["faction", "organization"],
+        icon: FlagIcon,
+        onSelect: () => {
+          appCommands.selectSection("Factions");
+          appCommands.openFaction(faction.id);
+        },
+      })),
     }] : []),
   ];
 

@@ -1,7 +1,6 @@
 import { useId, useState } from "react";
 import { FlagIcon, PlusIcon } from "lucide-react";
 import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
 import { Field, FieldGroup, FieldLabel } from "@/components/ui/field";
 import { SidebarMenuButton, SidebarMenuItem } from "@/components/ui/sidebar";
 import { appCommands } from "@/lib/app-commands";
@@ -13,8 +12,6 @@ export function FactionsDirectory() {
   const factions = useCampaign((state) => state.campaign.factions);
   const [creating, setCreating] = useState(false);
   const [name, setName] = useState("");
-  const [search, setSearch] = useState("");
-  const matches = (factions ?? []).filter((faction) => faction.name.toLocaleLowerCase().includes(search.trim().toLocaleLowerCase()));
   const id = useId();
   return <>
     <SidebarMenuItem>
@@ -40,11 +37,9 @@ export function FactionsDirectory() {
         </FieldGroup>
       </form>
     </li>}
-    {Boolean(factions?.length) && <li className="px-2 pb-2 group-data-[collapsible=icon]:hidden"><Input aria-label="Search factions" placeholder="Search factions…" value={search} onChange={(event) => setSearch(event.currentTarget.value)} /></li>}
-    {matches.map((faction) => <SidebarMenuItem key={faction.id}>
+    {(factions ?? []).map((faction) => <SidebarMenuItem key={faction.id}>
       <SidebarMenuButton tooltip={faction.name} onClick={() => appCommands.openFaction(faction.id)}><FlagIcon aria-hidden="true" /><span>{faction.name}</span></SidebarMenuButton>
     </SidebarMenuItem>)}
     {!factions?.length && <li className="px-2 py-2 text-sm text-muted-foreground">No factions yet.</li>}
-    {Boolean(factions?.length) && !matches.length && <li className="px-2 py-2 text-sm text-muted-foreground">No matching factions.</li>}
   </>;
 }
