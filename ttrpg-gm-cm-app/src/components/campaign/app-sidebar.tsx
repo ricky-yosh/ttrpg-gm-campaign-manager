@@ -7,7 +7,7 @@ import { appCommands } from "@/lib/app-commands";
 import { useSessionStore } from "@/stores/session-store";
 import {
   BackpackIcon, MapPinIcon, ArrowLeftIcon, BookOpenIcon, ChevronsUpDownIcon, CircleHelpIcon, Dice5Icon, FlagIcon, FolderOpenIcon,
-  LayoutDashboardIcon, MapIcon, MonitorIcon, PackageIcon, PaletteIcon, PuzzleIcon, ScrollTextIcon, SettingsIcon, UserPlusIcon, UsersIcon,
+  MapIcon, MonitorIcon, PackageIcon, PaletteIcon, PuzzleIcon, ScrollTextIcon, SettingsIcon, UserPlusIcon, UsersIcon,
 } from "lucide-react";
 import {
   Sidebar, SidebarContent, SidebarFooter, SidebarGroup, SidebarGroupContent,
@@ -53,7 +53,6 @@ function rememberCampaign(name: string, path: string): RecentCampaign[] {
 
 const destinationGroups = [
   { label: "Campaign", destinations: [
-    { label: "Overview", icon: LayoutDashboardIcon },
     { label: "Sessions", icon: BookOpenIcon },
     { label: "Story Threads", icon: ScrollTextIcon },
   ] },
@@ -71,7 +70,6 @@ const destinationGroups = [
 ];
 
 const sampleSidebarEntries: Record<string, string[]> = {
-  Overview: ["The story so far", "Recent activity", "Upcoming session"],
   Sessions: ["The Low Tide · Upcoming", "Ashes at the Quay", "A Debt in Salt"],
   "Story Threads": ["The Lantern Below", "The Missing Morrow", "A Favor for the Guild", "Mossgate Watch"],
   Items: ["Tideglass Compass", "Morrow’s Wax Seal", "Lantern of the Deep"],
@@ -294,7 +292,7 @@ export function AppSidebar({ isPresenterView = false, presenterSection = "map", 
                 ) : section === "Inventory" ? (
                   <SidebarMenuItem><SidebarMenuButton tooltip="Party Inventory" onClick={appCommands.openInventory}><BackpackIcon /><span>Party Inventory</span></SidebarMenuButton></SidebarMenuItem>
                 ) : sampleSidebarEntries[section] ? (
-                  sampleSidebarEntries[section].map((entry) => ["Overview", "Sessions", "Story Threads", "Items", "Puzzles"].includes(section) ? (
+                  sampleSidebarEntries[section].map((entry) => ["Sessions", "Story Threads", "Items", "Puzzles"].includes(section) ? (
                     <SidebarMenuItem key={entry}>
                       <SidebarMenuButton tooltip={entry} onClick={() => appCommands.openSampleSection(section)}>
                         <BookOpenIcon aria-hidden="true" /><span>{entry}</span>

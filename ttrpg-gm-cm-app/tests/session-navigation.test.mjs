@@ -194,3 +194,27 @@ test("faction navigation restores the correct record and skips removed factions"
   hydrateSession(campaign(), 2);
   assert.deepEqual(useSessionStore.getState().factionIds, []);
 });
+
+
+test("saved Overview visits are removed while surviving history keeps its cursor and records", () => {
+  const overview = { kind: "sample", workspaceId: "workspace:1", sampleSection: "Overview", section: "Overview" };
+  const entries = [character("npc-a", "workspace:1", "Overview"), overview, { kind: "section", section: "Overview" }, map];
+  const surviving = [character("npc-a", "workspace:1", null), { ...map, section: "Maps" }];
+  for (const [index, expectedIndex] of [[0, 0], [1, 0], [2, 0], [3, 1]]) {
+    assert.deepEqual(normalizeNavigationHistory({ entries, index }), { entries: surviving, index: expectedIndex });
+  }
+  assert.deepEqual(normalizeNavigationHistory({ entries: [overview], index: 0 }), { entries: [], index: -1 });
+  assert.deepEqual(normalizeNavigationHistory({ entries: [overview, map], index: 0 }), { entries: [surviving[1]], index: -1 });
+});
+
+test("campaigns saved on Overview return to all sections and history cannot reopen Overview", () => {
+  const overview = { kind: "sample", workspaceId: "workspace:1", sampleSection: "Overview", section: "Overview" };
+  hydrateSession({ ...campaign({ history: { entries: [character("npc-a"), overview, map], index: 1 }, sidebarWidth: 192, collapsed: false }), section: "Overview" }, 2);
+  const session = useSessionStore.getState();
+  assert.equal(session.section, null);
+  assert.equal(session.navigation.index, 0);
+  session.setWorkspaceSnapshot([{ id: "workspace:1", title: "Workspace 1" }], "workspace:1");
+  assert.equal(selectCanGoBack(useSessionStore.getState()), false);
+  assert.deepEqual(session.navigate(1, () => true), { ...map, section: "Maps" });
+  assert.deepEqual(session.navigate(-1, () => true), character("npc-a"));
+});

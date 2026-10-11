@@ -102,11 +102,21 @@ export const selectCanGoForward = (state: SessionState) => findDestinationIndex(
 
 export function normalizeNavigationHistory(history?: StoredNavigationHistory): NavigationHistory {
   if (!history) return { entries: [], index: -1 };
-  const entries = history.entries.map((destination): NavigationDestination => "kind" in destination
-    ? destination.kind === "settings" ? destination : { ...destination, section: normalizeSection(destination.section, destination.kind) }
-    : { kind: "character", workspaceId: destination.workspaceId, characterId: destination.name, section: null });
+  const entries: NavigationDestination[] = [];
+  let index = -1;
+  history.entries.forEach((destination, position) => {
+    if ("kind" in destination) {
+      if (destination.kind === "sample" && destination.sampleSection === "Overview") return;
+      if (destination.kind === "section" && destination.section === "Overview") return;
+      entries.push(destination.kind === "settings" ? destination
+        : { ...destination, section: normalizeSection(destination.section, destination.kind) });
+    } else {
+      entries.push({ kind: "character", workspaceId: destination.workspaceId, characterId: destination.name, section: null });
+    }
+    if (position <= history.index) index = entries.length - 1;
+  });
   const trimmed = entries.slice(-100);
-  return { entries: trimmed, index: Math.max(-1, Math.min(trimmed.length - 1, history.index - (entries.length - trimmed.length))) };
+  return { entries: trimmed, index: Math.max(-1, Math.min(trimmed.length - 1, index - (entries.length - trimmed.length))) };
 }
 
 export const useSessionStore = create<SessionState>()((set, get) => ({
@@ -218,10 +228,11 @@ export const useSessionStore = create<SessionState>()((set, get) => ({
 
 /** Reset all window session state together before mounting the next campaign's Dockview. */
 export function hydrateSession(campaign: CampaignSession, generation: number) {
+  const navigation = normalizeNavigationHistory(campaign.workspace?.history);
   useSessionStore.setState({
     generation,
     locationDirectory: { query: "", collapsedIds: [] },
-    section: normalizeSection(campaign.section, normalizeNavigationHistory(campaign.workspace?.history).entries[campaign.workspace?.history.index ?? -1]?.kind),
+    section: normalizeSection(campaign.section, navigation.entries[navigation.index]?.kind),
     sidebar: { ...campaign.sidebar },
     presenterSidebar: { width: 256, open: true },
     commandPaletteOpen: false,
@@ -235,7 +246,7 @@ export function hydrateSession(campaign: CampaignSession, generation: number) {
     activeWorkspaceId: null,
     workspaceSidebarWidth: campaign.workspace?.sidebarWidth ?? 192,
     workspaceCollapsed: campaign.workspace?.collapsed ?? false,
-    navigation: normalizeNavigationHistory(campaign.workspace?.history),
+    navigation,
     workspaceDestination: null,
     validWorkspaceIds: [],
     characterIds: campaign.npcs.map((npc) => npc.id),

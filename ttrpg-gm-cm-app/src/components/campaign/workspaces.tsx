@@ -273,6 +273,7 @@ export function Workspaces({ ref, isDark, onSearch, historyEnabled }: {
   };
 
   const openSampleSectionInWorkspace = (workspace: DockviewApi, section: string) => {
+    if (section === "Overview") return;
     const id = `sample:${section.toLowerCase().replace(/ /g, "-")}`;
     const existing = workspace.getPanel(id);
     if (existing) existing.api.setActive();
@@ -307,7 +308,12 @@ export function Workspaces({ ref, isDark, onSearch, historyEnabled }: {
 
   const onPanelReady = (workspaceId: string, workspace: DockviewApi) => {
     const saved = initialState?.panels[workspaceId];
-    if (saved) workspace.fromJSON(saved);
+    if (saved) {
+      workspace.fromJSON(saved);
+      for (const panel of workspace.panels) {
+        if (panel.id === "sample:overview" || panel.params?.sampleSection === "Overview") workspace.removePanel(panel);
+      }
+    }
     // Closing or moving a tab can activate another tab without a new visit.
     let isChangingLayout = false;
     const listeners = [

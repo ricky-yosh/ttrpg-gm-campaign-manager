@@ -1,10 +1,9 @@
-import { BookOpenIcon, CalendarDaysIcon, CheckCircle2Icon, Clock3Icon, MapPinIcon, PackageIcon, PuzzleIcon, ScrollTextIcon, SwordsIcon, UsersIcon } from "lucide-react";
+import { BookOpenIcon, PackageIcon, PuzzleIcon, ScrollTextIcon, SwordsIcon } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import sampleArtwork from "@/assets/sample-campaign/artwork.json";
 
 const sectionArtwork: Record<string, { banner: string; entries: string[] }> = {
-  Overview: { banner: "greyhaven", entries: [] },
   Sessions: { banner: "harbor", entries: ["eastern-seawall", "harbor", "lantern-inn"] },
   "Story Threads": { banner: "eastern-seawall", entries: ["eastern-seawall", "harbor", "dockworkers-guild", "greyhaven"] },
   Items: { banner: "harbor-relics", entries: ["harbor-relics", "harbor-relics", "harbor-relics", "harbor-relics"] },
@@ -16,10 +15,6 @@ function artworkUrl(name: string) {
 }
 
 const sections = {
-  Overview: {
-    eyebrow: "Campaign dashboard", title: "The Lanterns of Greyhaven", description: "A coastal mystery about old promises, missing ships, and lights that should not be burning.",
-    stats: [["Next session", "The Low Tide", "Tomorrow · 6:30 PM"], ["Active threads", "4", "2 ready to resolve"], ["Known places", "12", "Across 3 regions"], ["Party funds", "248 gp", "Shared inventory"]],
-  },
   Sessions: {
     eyebrow: "Campaign journal", title: "Sessions", description: "A running record of the party’s adventures and the choices that changed Greyhaven.",
     entries: [
@@ -56,7 +51,7 @@ const sections = {
   },
 } as const;
 
-const icons: Record<string, typeof BookOpenIcon> = { Overview: CalendarDaysIcon, Sessions: BookOpenIcon, "Story Threads": ScrollTextIcon, Items: PackageIcon, Puzzles: PuzzleIcon };
+const icons: Record<string, typeof BookOpenIcon> = { Sessions: BookOpenIcon, "Story Threads": ScrollTextIcon, Items: PackageIcon, Puzzles: PuzzleIcon };
 
 export function SampleSectionPage({ section }: { section: string }) {
   const data = sections[section as keyof typeof sections];
@@ -72,21 +67,9 @@ export function SampleSectionPage({ section }: { section: string }) {
           <h1 className="font-serif text-3xl font-semibold tracking-tight">{data.title}</h1>
           <p className="max-w-3xl text-sm leading-6 text-muted-foreground">{data.description}</p>
         </header>
-        {"stats" in data ? (
-          <>
-            <section className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
-              {data.stats.map(([label, value, detail]) => <Card key={label}><CardHeader><CardDescription>{label}</CardDescription><CardTitle variant="dossier">{value}</CardTitle></CardHeader><CardContent><p className="text-xs text-muted-foreground">{detail}</p></CardContent></Card>)}
-            </section>
-            <div className="grid gap-4 lg:grid-cols-2">
-              <Card><CardHeader><CardTitle variant="dossier">The story so far</CardTitle><CardDescription>Recent events in Greyhaven</CardDescription></CardHeader><CardContent><div className="flex flex-col gap-4 text-sm leading-6"><p>The party arrived in Greyhaven looking for passage north. A missing ship, a stolen cargo ledger, and a lantern shining beneath the harbor have pulled them into the city’s older secrets.</p><div className="flex items-start gap-3 rounded-lg bg-muted/50 p-3"><Clock3Icon className="mt-0.5 size-4 text-muted-foreground" /><span><strong>Next up:</strong> The tide will expose a sealed stair beneath the eastern seawall.</span></div></div></CardContent></Card>
-              <Card><CardHeader><CardTitle variant="dossier">Recent activity</CardTitle><CardDescription>At the table and around town</CardDescription></CardHeader><CardContent><div className="flex flex-col gap-3 text-sm"><p className="flex gap-3"><CheckCircle2Icon className="size-4 text-muted-foreground" />The party recovered a waterlogged cargo manifest.</p><p className="flex gap-3"><MapPinIcon className="size-4 text-muted-foreground" />Niya found a lead at the Lantern Inn.</p><p className="flex gap-3"><UsersIcon className="size-4 text-muted-foreground" />Carlos warned the group about Mossgate Watch.</p></div></CardContent></Card>
-            </div>
-          </>
-        ) : (
-          <section className="grid gap-4 lg:grid-cols-2">
-            {data.entries.map(([title, meta, description, status], index) => <Card key={title}><img src={artworkUrl(artwork.entries[index])} alt={`Illustration for ${title}`} loading="lazy" className="aspect-video w-full object-cover" /><CardHeader><div className="flex items-start justify-between gap-3"><CardTitle variant="dossier">{title}</CardTitle><Badge variant="secondary">{status}</Badge></div><CardDescription>{meta}</CardDescription></CardHeader><CardContent><p className="text-sm leading-6 text-muted-foreground">{description}</p></CardContent></Card>)}
-          </section>
-        )}
+        <section className="grid gap-4 lg:grid-cols-2">
+          {data.entries.map(([title, meta, description, status], index) => <Card key={title}><img src={artworkUrl(artwork.entries[index])} alt={`Illustration for ${title}`} loading="lazy" className="aspect-video w-full object-cover" /><CardHeader><div className="flex items-start justify-between gap-3"><CardTitle variant="dossier">{title}</CardTitle><Badge variant="secondary">{status}</Badge></div><CardDescription>{meta}</CardDescription></CardHeader><CardContent><p className="text-sm leading-6 text-muted-foreground">{description}</p></CardContent></Card>)}
+        </section>
       </div>
     </main>
   );

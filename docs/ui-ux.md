@@ -42,7 +42,6 @@ The initial implementation keeps record-tab history in a frontend Zustand store 
 The app has **one shared sidebar shell**. In GM mode it shows campaign navigation, with record tabs in each workspace pane; in Presenter mode it shows player-facing views and cues, with tabs above the single preview. Each mode remembers the sidebar's open or closed state and width. The top bar remains in place in both modes.
 
 - **Campaign selector**
-- **Overview**
 - **Sessions:** The next session and previous sessions
 - **Characters:** NPCs and enemies
 - **Factions**
