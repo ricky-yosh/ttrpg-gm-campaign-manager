@@ -2,6 +2,22 @@
 
 Working design for a sandbox atlas that helps the GM track where the party is, what is nearby, and what to show players. See [UI/UX](ui-ux.md) for the app workspace and [Campaign Data Model](data-model.md) for related records.
 
+For the current first-pass visual requirements, see [Maps — designer requirements](maps-designer-requirements.md): retain the existing map UI, expand the right-hand location preview with child-location navigation and map thumbnails, and omit a mini-map.
+
+## Implemented atlas
+
+Maps now persist as campaign records. Open the **Map library** from Maps, or find a saved map through campaign search. Import PNG, JPEG, or WebP artwork in the desktop app; the shared importer converts it to WebP and retains the existing 10 MiB upload limit. Map details include a name, kind, and optional attachments to locations. Artwork previews identify maps in the library and location dossiers.
+
+Location cards distinguish **Maps of this place** (Open) from **Appears on** (Locate a pin). Attaching a map does not change location parentage. A location can have several maps and placements. Removing a pin preserves its location; deleting a map clears incoming map shortcuts and removes attachments while keeping location pages.
+
+The Konva canvas retains Space-drag panning, trackpad panning, pointer-centered zoom, and Fit map. Select mode browses pins; Move mode enables deliberate pin/party dragging; the party tool places an approximate group marker. Add pin can select an existing place or stage a new location with an explicit parent. A staged new location is created only when its pin is placed. Map gestures form single undo steps, with bounded in-memory history for the current campaign. Editing map metadata separately can invalidate earlier history rather than overwrite newer edits.
+
+The resizable, collapsible right preview shows the selected location's artwork, details, public description, child places, maps, and associated records. Browsing children retains canvas framing and works without pins. Open location opens its full dossier beside the map and collapses the preview so the map stays usable. Narrow map panes use an overlay preview. There is no mini-map.
+
+Each saved map opens in its own Dockview tab. Back/Forward returns to linked maps; Locate selects and centers a placement. Camera centers are stored in map coordinates, so restoring a view or resizing a pane preserves framing. Camera, preview selection, and inspector settings are saved with the workspace. Legacy prototype tabs are removed on restoration because their local content was never saved.
+
+SQLite version 5 adds `map_record`; versions 1–4 load with an empty map collection when the table is absent and upgrade on save. Map images use the campaign's hashed assets directory. Older app builds reject version 5 packages. Party knowledge and player output do not change when browsing or moving a marker. Fog, tactical tools, session visits, and map presentation remain future features described below.
+
 ## Core idea: linked maps
 
 The campaign can contain many maps at different levels of detail: world, region, city, building, dungeon, and battle. A pin on one map can open a more detailed map. For example:
@@ -67,13 +83,13 @@ The map kind provides useful defaults, but should not prevent a GM from placing 
 - Session-related commands include `LinkStoryBeatToPin`, `RecordLocationVisit`, `UpdateLocationVisit`, and `RemoveLocationVisit`.
 - A drag or fog stroke should become one undo step. Moving the party into a linked map may need one grouped command to preserve its former map and position.
 
-## Map canvas tooling (evaluation proposal)
+## Map canvas tooling
 
 The map canvas is a separate integration to evaluate alongside the note editor. **Confirmed scope:** artists create the map artwork outside the app. The app imports and displays those images, adding pins, tokens, fog, grids, measurement, pan/zoom, and links to other maps. Map-art generation and tools for drawing terrain, rooms, or walls are outside the current scope.
 
-**Evaluate Konva + react-konva first** for the shared interactive map canvas. It supplies React bindings for images, shapes, layers, pointer events, dragging, and tweening; its official examples demonstrate pointer-centered zoom. We still implement grid snapping, measurement rules, fog editing, linked-map navigation, and command integration. Sources: [React integration](https://konvajs.org/docs/react/index.html), [zoom example](https://konvajs.org/docs/sandbox/Zooming_Relative_To_Pointer.html), [license](https://github.com/konvajs/konva/blob/master/LICENSE).
+**The implemented atlas uses Konva + react-konva** for the shared interactive map canvas. It supplies React bindings for images, shapes, layers, pointer events, dragging, and tweening; its official examples demonstrate pointer-centered zoom. We still implement grid snapping, measurement rules, fog editing, linked-map navigation, and command integration. Sources: [React integration](https://konvajs.org/docs/react/index.html), [zoom example](https://konvajs.org/docs/sandbox/Zooming_Relative_To_Pointer.html), [license](https://github.com/konvajs/konva/blob/master/LICENSE).
 
-Alternatives: [Leaflet](https://leafletjs.com/reference) supplies image overlays, markers, and pan/zoom with `CRS.Simple` for non-geographic maps; it is worth evaluating if atlas navigation dominates. [PixiJS](https://pixijs.com/8.x/guides/getting-started/intro) with [pixi-viewport](https://github.com/pixijs-userland/pixi-viewport) is an alternative for GPU-rendered scenes if representative map tests show a need. No map library has been selected or installed.
+Alternatives: [Leaflet](https://leafletjs.com/reference) supplies image overlays, markers, and pan/zoom with `CRS.Simple` for non-geographic maps; it is worth evaluating if atlas navigation dominates. [PixiJS](https://pixijs.com/8.x/guides/getting-started/intro) with [pixi-viewport](https://github.com/pixijs-userland/pixi-viewport) is an alternative for GPU-rendered scenes if representative map tests show a need. These alternatives are historical evaluation context; Konva/react-konva is installed and used by the current atlas.
 
 Keep map-space positions separate from camera pan/zoom. Opening a child map uses its ID and restores its own camera; returning restores the previous map's camera. Renderer objects are not the database model. Persist pins, tokens, fog, and camera state through the application boundary, and render the player window from its explicitly safe projection. Evaluate a large representative map, token dragging/tweening, fog, and two-window output in Tauri before settling the renderer.
 

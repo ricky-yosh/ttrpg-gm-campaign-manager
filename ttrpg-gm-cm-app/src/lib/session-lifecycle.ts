@@ -7,6 +7,7 @@ hydrateSession(initial.campaign, initial.generation);
 const unsubscribe = campaignStore.subscribe((state, previous) => {
   if (state.generation !== previous.generation) hydrateSession(state.campaign, state.generation);
   else {
+    if (state.campaign.maps !== previous.campaign.maps) useSessionStore.getState().setMapIds((state.campaign.maps ?? []).map((map) => map.id));
     if (state.campaign.factions !== previous.campaign.factions) useSessionStore.getState().setFactionIds((state.campaign.factions ?? []).map((faction) => faction.id));
     if (state.campaign.locations !== previous.campaign.locations) useSessionStore.getState().setLocationIds((state.campaign.locations ?? []).map((location) => location.id));
     if (state.campaign.npcs !== previous.campaign.npcs) {

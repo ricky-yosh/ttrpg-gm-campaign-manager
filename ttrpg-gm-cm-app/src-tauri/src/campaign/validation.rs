@@ -82,7 +82,14 @@ impl Campaign {
                     .ok_or("Missing workspace contents.")?;
                 validate_layout(
                     layout,
-                    &["character", "map", "location", "faction", "inventory"],
+                    &[
+                        "character",
+                        "map",
+                        "mapLibrary",
+                        "location",
+                        "faction",
+                        "inventory",
+                    ],
                 )?;
             }
         }
@@ -141,6 +148,54 @@ impl Campaign {
                 }
                 let parent = locations.get(id).ok_or("Location parent is unavailable.")?;
                 parent_id = parent.parent_id.as_deref();
+            }
+        }
+        let map_ids: HashSet<_> = self.maps.iter().map(|map| map.id.as_str()).collect();
+        if map_ids.len() != self.maps.len() {
+            return Err("Map IDs must be unique.".into());
+        }
+        let valid_point = |x: f64, y: f64| {
+            x.is_finite() && y.is_finite() && (0.0..=1.0).contains(&x) && (0.0..=1.0).contains(&y)
+        };
+        for map in &self.maps {
+            if map.id.trim().is_empty()
+                || map.name.trim().is_empty()
+                || map.width == 0
+                || map.height == 0
+                || !["World", "Region", "City", "Building", "Dungeon", "Battle"]
+                    .contains(&map.kind.as_str())
+                || map.image.kind != "img"
+            {
+                return Err("Invalid map identity, kind, dimensions, or image.".into());
+            }
+            let mut attached = HashSet::new();
+            if map
+                .location_ids
+                .iter()
+                .any(|id| !locations.contains_key(id.as_str()) || !attached.insert(id))
+            {
+                return Err("Map attachments must reference unique existing locations.".into());
+            }
+            let mut pins = HashSet::new();
+            for pin in &map.pins {
+                if pin.id.trim().is_empty()
+                    || !pins.insert(&pin.id)
+                    || !valid_point(pin.x, pin.y)
+                    || !locations.contains_key(pin.location_id.as_str())
+                    || pin
+                        .destination_map_id
+                        .as_ref()
+                        .is_some_and(|id| id == &map.id || !map_ids.contains(id.as_str()))
+                {
+                    return Err("Invalid map pin or linked destination.".into());
+                }
+            }
+            if map
+                .party
+                .as_ref()
+                .is_some_and(|point| !valid_point(point.x, point.y))
+            {
+                return Err("Invalid party marker position.".into());
             }
         }
         let mut faction_ids = HashSet::new();

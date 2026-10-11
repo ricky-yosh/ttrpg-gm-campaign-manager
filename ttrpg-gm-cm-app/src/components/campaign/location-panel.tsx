@@ -1,6 +1,6 @@
 import { useEffect, useId, useRef, useState, type ReactNode } from "react";
 import type { IDockviewPanelProps } from "dockview-react";
-import { ChevronRightIcon, MapIcon, PencilIcon, PlusIcon } from "lucide-react";
+import { ChevronRightIcon, PencilIcon, PlusIcon } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Card, CardAction, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { NativeSelectOption } from "@/components/ui/native-select";
@@ -8,10 +8,10 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { AutoSizeTextarea } from "@/components/ui/auto-size-textarea";
 import { Field, FieldGroup, FieldLabel } from "@/components/ui/field";
-import { Empty, EmptyDescription, EmptyHeader, EmptyTitle } from "@/components/ui/empty";
 import { Separator } from "@/components/ui/separator";
 import { NpcImageField } from "@/components/campaign/npc-image-field";
 import { NpcRecordLinks } from "@/components/campaign/npc-record-links";
+import { LocationMaps } from "@/components/campaign/location-maps";
 import { LocationCreateForm, LocationParentField, LocationSelect } from "@/components/campaign/location-fields";
 import { locationIcon } from "@/components/campaign/location-icon";
 import { appCommands } from "@/lib/app-commands";
@@ -160,8 +160,7 @@ export function LocationPanel({ params, api }: IDockviewPanelProps) {
       </dl>}
     </LocationSection>
     <LocationSection title="Maps">
-      <Empty size="compact"><EmptyHeader><EmptyTitle>No maps attached</EmptyTitle><EmptyDescription>Maps of this place and its appearances on other maps will be listed here.</EmptyDescription></EmptyHeader></Empty>
-      <Button type="button" variant="outline" size="sm" onClick={appCommands.openMap}><MapIcon data-icon="inline-start" />Open map prototype</Button>
+      <LocationMaps locationId={id} editable={!editing} />
     </LocationSection>
     <LocationSection title="Places within" action={editing && <Button type="button" variant="outline" size="sm" onClick={() => setCreatingChild(true)}><PlusIcon data-icon="inline-start" />Add location</Button>}>
       {editing && creatingChild && <LocationCreateForm initialParentId={id} onClose={() => setCreatingChild(false)}

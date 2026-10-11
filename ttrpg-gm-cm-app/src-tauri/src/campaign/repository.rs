@@ -36,6 +36,11 @@ pub(super) fn write_campaign(folder: &Path, mut campaign: Campaign) -> Result<()
         transform_faction_image(faction, folder, true)?;
     }
 
+    for map in &mut campaign.maps {
+        let mut image = serde_json::to_value(&map.image).map_err(|e| e.to_string())?;
+        transform_images(&mut image, folder, true)?;
+        map.image = serde_json::from_value(image).map_err(|e| e.to_string())?;
+    }
     let db_path = folder.join("campaign.sqlite");
     let mut connection = Connection::open(&db_path).map_err(|e| e.to_string())?;
     connection
@@ -154,6 +159,16 @@ fn write_transaction(transaction: &Transaction<'_>, campaign: &Campaign) -> Resu
             .map_err(|e| e.to_string())?;
     }
     transaction
+        .execute(
+            "DELETE FROM map_record WHERE campaign_id=?1",
+            [&campaign.id],
+        )
+        .map_err(|e| e.to_string())?;
+    for (index, map) in campaign.maps.iter().enumerate() {
+        transaction.execute("INSERT INTO map_record (id,campaign_id,sort_order,record_json) VALUES (?1,?2,?3,?4)",
+            params![map.id, campaign.id, index as i64, serde_json::to_string(map).map_err(|e| e.to_string())?]).map_err(|e| e.to_string())?;
+    }
+    transaction
         .execute("DELETE FROM workspace_state", [])
         .map_err(|e| e.to_string())?;
     if let Some(workspace) = &campaign.workspace {
@@ -179,7 +194,7 @@ pub(super) fn read_campaign(folder: &Path) -> Result<Campaign, String> {
     let version: i32 = connection
         .pragma_query_value(None, "user_version", |row| row.get(0))
         .map_err(|e| e.to_string())?;
-    if !(1..=4).contains(&version) {
+    if !(1..=5).contains(&version) {
         return Err(format!("Unsupported campaign database version {version}."));
     }
     let mut statement = connection.prepare("SELECT id,name,schema_version,created_at,updated_at,section,sidebar_width,sidebar_open FROM campaign").map_err(|e| e.to_string())?;
@@ -328,6 +343,27 @@ pub(super) fn read_campaign(folder: &Path) -> Result<Campaign, String> {
     } else {
         PartyInventory::default()
     };
+    let mut maps = Vec::new();
+    if table_exists(&connection, "map_record")? {
+        let mut statement = connection
+            .prepare(
+                "SELECT id,record_json FROM map_record WHERE campaign_id=?1 ORDER BY sort_order",
+            )
+            .map_err(|e| e.to_string())?;
+        let rows = statement
+            .query_map([&id], |row| {
+                Ok((row.get::<_, String>(0)?, row.get::<_, String>(1)?))
+            })
+            .map_err(|e| e.to_string())?;
+        for row in rows {
+            let (record_id, json) = row.map_err(|e| e.to_string())?;
+            let map: CampaignMap = serde_json::from_str(&json).map_err(|e| e.to_string())?;
+            if map.id != record_id {
+                return Err("Map record ID does not match its stored ID.".into());
+            }
+            maps.push(map);
+        }
+    }
     let mut campaign = Campaign {
         format: "ttrpg-campaign".into(),
         schema_version,
@@ -338,6 +374,7 @@ pub(super) fn read_campaign(folder: &Path) -> Result<Campaign, String> {
         statblock_field_set,
         npcs,
         locations,
+        maps,
         factions,
         inventory,
         workspace,
@@ -356,6 +393,11 @@ pub(super) fn read_campaign(folder: &Path) -> Result<Campaign, String> {
     }
     for faction in &mut campaign.factions {
         transform_faction_image(faction, folder, false)?;
+    }
+    for map in &mut campaign.maps {
+        let mut image = serde_json::to_value(&map.image).map_err(|e| e.to_string())?;
+        transform_images(&mut image, folder, false)?;
+        map.image = serde_json::from_value(image).map_err(|e| e.to_string())?;
     }
     Ok(campaign)
 }

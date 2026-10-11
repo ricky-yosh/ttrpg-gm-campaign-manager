@@ -38,6 +38,8 @@ pub struct Campaign {
     #[serde(default)]
     locations: Vec<Location>,
     #[serde(default)]
+    maps: Vec<CampaignMap>,
+    #[serde(default)]
     factions: Vec<Faction>,
     #[serde(default)]
     inventory: PartyInventory,
@@ -162,6 +164,10 @@ impl Default for NpcStatblock {
 #[serde(rename_all = "camelCase", deny_unknown_fields)]
 struct Location {
     #[serde(default)]
+    associated_npcs: Vec<NpcRelationship>,
+    #[serde(default)]
+    associated_factions: Vec<NpcRelationship>,
+    #[serde(default)]
     parent_id: Option<String>,
     #[serde(default)]
     location_type: String,
@@ -178,6 +184,36 @@ struct Location {
     image: Option<NpcImage>,
     public_description: String,
     gm_notes: String,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+struct CampaignMap {
+    id: String,
+    name: String,
+    kind: String,
+    image: NpcImage,
+    width: u32,
+    height: u32,
+    location_ids: Vec<String>,
+    pins: Vec<MapPin>,
+    party: Option<MapPoint>,
+}
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+struct MapPoint {
+    x: f64,
+    y: f64,
+}
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+struct MapPin {
+    id: String,
+    x: f64,
+    y: f64,
+    location_id: String,
+    label: String,
+    destination_map_id: Option<String>,
 }
 
 fn unknown_party_knowledge() -> String {
@@ -272,6 +308,8 @@ enum Destination {
         section: Option<String>,
     },
     Map {
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        map_id: Option<String>,
         workspace_id: String,
         section: Option<String>,
     },
@@ -431,7 +469,7 @@ mod tests {
         assert_eq!(
             db.pragma_query_value(None, "user_version", |row| row.get::<_, i32>(0))
                 .unwrap(),
-            4
+            5
         );
     }
 
@@ -666,7 +704,7 @@ mod tests {
         assert_eq!(
             db.pragma_query_value(None, "user_version", |row| row.get::<_, i32>(0))
                 .unwrap(),
-            4
+            5
         );
         assert!(table_exists(&db, "location").unwrap());
     }
@@ -843,7 +881,7 @@ mod tests {
         assert_eq!(
             db.pragma_query_value(None, "user_version", |row| row.get::<_, i32>(0))
                 .unwrap(),
-            4
+            5
         );
         assert!(table_exists(&db, "faction").unwrap());
     }
@@ -894,5 +932,97 @@ mod tests {
         assert!(read_campaign(&path)
             .unwrap_err()
             .contains("Missing or unreadable image"));
+    }
+    fn atlas_example() -> Campaign {
+        let mut campaign = example();
+        campaign.locations.push(serde_json::from_value(json!({
+            "id": "city", "name": "Greyhaven", "image": null, "publicDescription": "A harbor city", "gmNotes": "Private",
+            "associatedNpcs": [{"targetId": "npc-1", "label": "Home"}], "associatedFactions": []
+        })).unwrap());
+        campaign.maps.push(serde_json::from_value(json!({
+            "id": "city-map", "name": "City map", "kind": "City", "image": {"type": "img", "url": "data:image/png;base64,bWFw"},
+            "width": 1400, "height": 900, "locationIds": ["city"], "party": {"x": 0.2, "y": 0.8},
+            "pins": [{"id": "city-pin", "x": 0.5, "y": 0.6, "locationId": "city", "label": "Harbor", "destinationMapId": null}]
+        })).unwrap());
+        campaign
+            .workspace
+            .as_mut()
+            .unwrap()
+            .history
+            .entries
+            .push(Destination::Map {
+                map_id: Some("city-map".into()),
+                workspace_id: "workspace:1".into(),
+                section: Some("Maps".into()),
+            });
+        campaign
+    }
+
+    #[test]
+    fn saved_maps_assets_links_and_navigation_survive_moving_package() {
+        let folder = tempfile::tempdir().unwrap();
+        let path = folder.path().join("atlas.campaign");
+        let campaign = atlas_example();
+        let expected = serde_json::to_value(&campaign).unwrap();
+        write_campaign(&path, campaign).unwrap();
+        let moved = folder.path().join("moved.campaign");
+        fs::rename(&path, &moved).unwrap();
+        let loaded = read_campaign(&moved).unwrap();
+        assert_eq!(serde_json::to_value(loaded).unwrap(), expected);
+        let db = Connection::open(moved.join("campaign.sqlite")).unwrap();
+        let stored: String = db
+            .query_row("SELECT record_json FROM map_record", [], |row| row.get(0))
+            .unwrap();
+        assert!(stored.contains("assets/"));
+        assert!(!stored.contains("data:image"));
+    }
+
+    #[test]
+    fn maps_validate_links_and_positions_before_changing_saved_campaign() {
+        let folder = tempfile::tempdir().unwrap();
+        let path = folder.path().join("atlas.campaign");
+        let expected = serde_json::to_value(atlas_example()).unwrap();
+        write_campaign(&path, atlas_example()).unwrap();
+        for invalid in 0..5 {
+            let mut campaign = atlas_example();
+            match invalid {
+                0 => campaign.maps[0].pins[0].x = 1.5,
+                1 => campaign.maps[0].pins[0].destination_map_id = Some("missing".into()),
+                2 => campaign.maps[0].location_ids.push("missing".into()),
+                3 => campaign.maps[0].width = 0,
+                _ => {
+                    campaign.maps[0].party = Some(MapPoint {
+                        x: f64::NAN,
+                        y: 0.5,
+                    })
+                }
+            }
+            assert!(write_campaign(&path, campaign).is_err());
+            assert_eq!(
+                serde_json::to_value(read_campaign(&path).unwrap()).unwrap(),
+                expected
+            );
+        }
+    }
+
+    #[test]
+    fn version_four_packages_load_without_maps_and_upgrade_on_save() {
+        let folder = tempfile::tempdir().unwrap();
+        let path = folder.path().join("legacy.campaign");
+        write_campaign(&path, example()).unwrap();
+        let db = Connection::open(path.join("campaign.sqlite")).unwrap();
+        db.execute_batch("DROP TABLE map_record; PRAGMA user_version=4;")
+            .unwrap();
+        drop(db);
+        let campaign = read_campaign(&path).unwrap();
+        assert!(campaign.maps.is_empty());
+        write_campaign(&path, campaign).unwrap();
+        let db = Connection::open(path.join("campaign.sqlite")).unwrap();
+        assert!(table_exists(&db, "map_record").unwrap());
+        assert_eq!(
+            db.pragma_query_value(None, "user_version", |row| row.get::<_, i32>(0))
+                .unwrap(),
+            5
+        );
     }
 }

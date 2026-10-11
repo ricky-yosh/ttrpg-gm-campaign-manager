@@ -111,6 +111,9 @@ export type WorkspaceState = {
   collapsed: boolean;
   history: StoredNavigationHistory;
 };
+import type { CampaignMap } from "./map-data.ts";
+import { SAMPLE_MAP } from "../assets/sample-campaign/map.ts";
+
 export type Campaign = {
   format: "ttrpg-campaign";
   schemaVersion: 1;
@@ -120,6 +123,7 @@ export type Campaign = {
   updatedAt: string;
   npcs: Npc[];
   locations: Location[];
+  maps?: CampaignMap[];
   factions: Faction[];
   inventory?: PartyInventory;
   statblockFieldSet: { id: string; version: number };
@@ -136,7 +140,7 @@ export function statblockFieldSetLabel(fieldSet: { id: string; version: number }
 export function emptyCampaign(name: string): Campaign {
   const now = new Date().toISOString();
   return { format: "ttrpg-campaign", schemaVersion: 1, id: crypto.randomUUID(), name,
-    createdAt: now, updatedAt: now, npcs: [], locations: [], factions: [], inventory: emptyInventory(), statblockFieldSet: { id: "dnd-5.5e", version: 1 },
+    createdAt: now, updatedAt: now, npcs: [], locations: [], maps: [], factions: [], inventory: emptyInventory(), statblockFieldSet: { id: "dnd-5.5e", version: 1 },
     workspace: null, section: null, sidebar: { width: 256, open: true } };
 }
 
@@ -399,6 +403,13 @@ demo.inventory = { gold: 248, entries: [
   { id: crypto.randomUUID(), name: "Rope", kind: "material", quantity: 50, note: "50 feet, hempen." },
   { id: crypto.randomUUID(), name: "Silvered Bolts", kind: "material", quantity: 8, note: "Recovered from the Morrow’s cargo." },
 ] };
+demo.maps = [{ id: "greyhaven-city-map", name: "Greyhaven city", kind: "City", image: { type: "img", url: SAMPLE_MAP },
+  width: 1400, height: 900, locationIds: [demoLocations.greyhaven], party: null, pins: [
+    { id: "harbor-pin", x: 0.56, y: 0.65, locationId: demoLocations.harbor, label: "", destinationMapId: null },
+    { id: "inn-pin", x: 0.76, y: 0.79, locationId: demoLocations.inn, label: "", destinationMapId: null },
+    { id: "seawall-pin", x: 0.31, y: 0.55, locationId: demoLocations.seawall, label: "", destinationMapId: null },
+  ] }];
+
 export const campaignStore = createCampaignStore({ campaign: demo, path: null, revision: 0, savedRevision: 0,
   status: "Choose Save to keep this campaign", error: "", generation: 0, isLeaving: false,
   npcEditHistory: {}, pendingNpcOperations: {} });

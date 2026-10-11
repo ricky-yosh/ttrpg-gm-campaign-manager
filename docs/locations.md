@@ -8,7 +8,7 @@ Open **Locations** in the GM sidebar and use the **+** button to create a locati
 
 Use **Edit** in a location’s tab to add details or change its parent. Parent choices exclude the location and its descendants, and both frontend commands and Rust validation reject cycles. Save changes applies the draft; Cancel restores the saved values. Location images use the shared Rust WebP importer. Canceling edit mode ignores unfinished image imports.
 
-The dossier uses the NPC page’s serif identity, public-description treatment, and independent columns. At panel widths below 900 px, the columns stack. Breadcrumbs and **Places within** rows open linked location pages. **Associated NPCs** reads existing NPC location links, including their association labels; these links are still edited on the NPC page. Maps and faction associations have empty states for this first UI pass. **Maps** in the sidebar and the location card open the existing unsaved map prototype.
+The dossier uses the NPC page’s serif identity, public-description treatment, and independent columns. At panel widths below 900 px, the columns stack. Breadcrumbs and **Places within** rows open linked location pages. Associated NPCs and factions use the existing record-link cards. The Maps card now shows image previews for **Maps of this place** (Open) and **Appears on** (Locate). In read mode, import or attach maps and choose a map on which to place this location. These operations apply separately from the location dossier's Edit / Save changes / Cancel flow. See [Maps](maps.md) for saved atlas behavior.
 
 Locations open in Dockview tabs. Opening the same record focuses its existing tab in the active workspace. Tabs, scroll positions, and Back/Forward destinations are saved with the campaign. Removed records are skipped during history navigation.
 
@@ -28,4 +28,4 @@ Database version 2 adds the `location` table. Version 1 packages still load with
 
 The new dossier fields use the existing location JSON column without a table migration. Missing fields in older records default to empty values, no parent, and Unknown party knowledge. Older builds that reject unknown location fields cannot open packages saved with the new dossier fields.
 
-Save/reopen tests cover location scene and banner images, dossier fields, hierarchy, NPC links, navigation destinations, moved packages, and database upgrades. There is no location deletion UI, map integration, or player-window location view in this pass.
+Save/reopen tests cover location scene and banner images, dossier fields, hierarchy, NPC links, map attachments and placements, navigation destinations, moved packages, and database upgrades. Map integration adds SQLite version 5. There is no location deletion UI or player-window location view in this pass.

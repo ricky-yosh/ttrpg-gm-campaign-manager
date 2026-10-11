@@ -288,7 +288,7 @@ export function AppSidebar({ isPresenterView = false, presenterSection = "map", 
                 ) : section === "Locations" ? (
                   <LocationsDirectory key={generation} />
                 ) : section === "Maps" ? (
-                  <SidebarMenuItem><SidebarMenuButton tooltip="Map prototype" onClick={appCommands.openMap}><MapIcon /><span>Map prototype</span></SidebarMenuButton></SidebarMenuItem>
+                  <SidebarMenuItem><SidebarMenuButton tooltip="Map library" onClick={() => appCommands.openMap()}><MapIcon /><span>Map library</span></SidebarMenuButton></SidebarMenuItem>
                 ) : section === "Inventory" ? (
                   <SidebarMenuItem><SidebarMenuButton tooltip="Party Inventory" onClick={appCommands.openInventory}><BackpackIcon /><span>Party Inventory</span></SidebarMenuButton></SidebarMenuItem>
                 ) : sampleSidebarEntries[section] ? (

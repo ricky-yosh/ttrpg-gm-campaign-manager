@@ -41,6 +41,7 @@ export function CommandPalette({ isPresenterView, onTogglePresenterView, onClose
   const ids = useCampaign(useShallow((state) => state.campaign.npcs.map((npc) => npc.id)));
   const names = useCampaign(useShallow((state) => state.campaign.npcs.map((npc) => npc.name)));
   const locations = useCampaign(useShallow((state) => state.campaign.locations ?? []));
+  const maps = useCampaign((state) => state.campaign.maps);
   const factions = useCampaign(useShallow((state) => state.campaign.factions ?? []));
   const paletteGroups: PaletteGroup[] = [
     {
@@ -123,7 +124,7 @@ export function CommandPalette({ isPresenterView, onTogglePresenterView, onClose
         },
         ...(!isPresenterView ? [
           { id: "locations", label: "Browse locations", description: "Open the location tree", keywords: ["places", "world"], icon: MapPinIcon, onSelect: () => appCommands.selectSection("Locations") },
-          { id: "maps", label: "Browse maps", description: "Open the map library", keywords: ["atlas", "world"], icon: MapIcon, onSelect: () => appCommands.selectSection("Maps") },
+          { id: "maps", label: "Browse maps", description: "Open the map library", keywords: ["atlas", "world"], icon: MapIcon, onSelect: () => { appCommands.selectSection("Maps"); appCommands.openMap(); } },
           { id: "inventory", label: "Open party inventory", description: "Gold, carried items, and materials", keywords: ["gold", "items", "materials", "holdings"], icon: BackpackIcon, onSelect: () => { appCommands.selectSection("Inventory"); appCommands.openInventory(); } },
         ] : []),
         {
@@ -176,6 +177,12 @@ export function CommandPalette({ isPresenterView, onTogglePresenterView, onClose
         },
       ],
     },
+    ...(!isPresenterView ? [{
+      value: "Maps",
+      items: (maps ?? []).map((map) => ({ id: `map:${map.id}`, label: map.name,
+        description: `${map.kind} map`, keywords: ["map", "atlas", ...map.locationIds.map((id) => locations.find((place) => place.id === id)?.name ?? "")],
+        icon: MapIcon, onSelect: () => { appCommands.selectSection("Maps"); appCommands.openMap(map.id); } })),
+    }] : []),
     {
       value: "Characters",
       items: ids.map((id, index) => ({

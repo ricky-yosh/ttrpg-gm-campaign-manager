@@ -1,0 +1,12 @@
+export const SAMPLE_MAP = `data:image/svg+xml;base64,${btoa(`<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1400 900">
+  <defs><pattern id="paper" width="36" height="36" patternUnits="userSpaceOnUse"><path d="M36 0H0V36" fill="none" stroke="#7c694d" stroke-opacity=".12"/></pattern></defs>
+  <rect width="1400" height="900" fill="#d7c7a4"/><rect width="1400" height="900" fill="url(#paper)"/>
+  <path d="M0 0h1400v230c-120 14-174 43-266 80-119 48-183 70-296 66-121-4-186-83-289-64-94 17-155 112-257 122C181 445 96 382 0 420Z" fill="#8fb8b5" stroke="#596d62" stroke-width="8"/>
+  <path d="M0 0h1400v230c-120 14-174 43-266 80-119 48-183 70-296 66-121-4-186-83-289-64-94 17-155 112-257 122C181 445 96 382 0 420Z" fill="none" stroke="#f1e6c8" stroke-width="18" stroke-dasharray="6 18"/>
+  <path d="M0 450 292 418 421 489l190-31 135 99 245-36 186 77 223-25v326H0Z" fill="#a9ad82" stroke="#6f775e" stroke-width="6"/>
+  <path d="m80 570 280-55 211 103 240-27 182 88 251-48 160 45M119 741l229-85 212 60 219-71 231 103 263-56M473 467l-38 365m262-292 28 290m292-300 27 307" fill="none" stroke="#eee1bd" stroke-width="20"/>
+  <path d="m80 570 280-55 211 103 240-27 182 88 251-48 160 45M119 741l229-85 212 60 219-71 231 103 263-56M473 467l-38 365m262-292 28 290m292-300 27 307" fill="none" stroke="#796b51" stroke-width="3"/>
+  <g fill="#eee1bd" stroke="#665d4a" stroke-width="5"><rect x="477" y="523" width="96" height="62"/><rect x="587" y="545" width="104" height="64"/><rect x="701" y="516" width="104" height="68"/><rect x="818" y="560" width="92" height="65"/><rect x="413" y="629" width="92" height="67"/><rect x="527" y="659" width="118" height="69"/><rect x="672" y="635" width="90" height="72"/><rect x="791" y="677" width="110" height="68"/><rect x="938" y="626" width="116" height="68"/><rect x="1070" y="677" width="102" height="70"/></g>
+  <g font-family="Georgia,serif" fill="#423d32"><text x="680" y="318" font-size="42" letter-spacing="7">GREYHAVEN HARBOR</text><text x="790" y="828" font-size="32" letter-spacing="5">DOCK WARD</text><text x="92" y="488" font-size="25">Old seawall</text><text x="84" y="90" font-size="28" font-style="italic">Northern Reach</text></g>
+  <circle cx="1190" cy="105" r="55" fill="none" stroke="#494638" stroke-width="4"/><path d="m1190 43 18 62-18 62-18-62Z" fill="#494638"/><text x="1181" y="33" font-family="Georgia,serif" font-size="22" fill="#494638">N</text>
+</svg>`)}`;

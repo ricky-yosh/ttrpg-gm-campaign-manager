@@ -15,7 +15,8 @@ import { Dialog, DialogDescription, DialogPopup, DialogTitle } from "@/component
 import { campaignStore, getCampaign, updateCampaign } from "@/lib/campaign-data";
 import { cn } from "@/lib/utils";
 import { registerSavedHistory, refreshHistory } from "@/lib/history-dispatcher";
-import { MapPrototypePanel } from "@/components/campaign/map-prototype-panel";
+import { MapPanel } from "@/components/campaign/map-panel";
+import { MapLibrary } from "@/components/campaign/map-library";
 import { SampleSectionPage } from "@/components/campaign/sample-section-page";
 import { useSessionStore, type NavigationDestination } from "@/stores/session-store";
 
@@ -24,7 +25,8 @@ export type WorkspaceHandle = {
   openCharacter: (name: string) => void;
   openLocation: (id: string) => void;
   openFaction: (id: string) => void;
-  openMap: () => void;
+  openMap: (id?: string, pinId?: string, placeLocationId?: string) => void;
+  openLocationBesideMap: (id: string) => void;
   openInventory: () => void;
   openSampleSection: (section: string) => void;
   closeActiveTab: () => void;
@@ -50,7 +52,7 @@ function SampleSectionPanel({ params }: IDockviewPanelProps) {
   return <SampleSectionPage section={typeof params.sampleSection === "string" ? params.sampleSection : ""} />;
 }
 
-const characterComponents = { character: CharacterPanel, map: MapPrototypePanel, location: LocationPanel, faction: FactionPanel, inventory: InventoryPanel, sample: SampleSectionPanel };
+const characterComponents = { character: CharacterPanel, map: MapPanel, mapLibrary: MapLibrary, location: LocationPanel, faction: FactionPanel, inventory: InventoryPanel, sample: SampleSectionPanel };
 
 function WorkspacePanel({ api }: IDockviewPanelProps) {
   const { isDark, panels, onPanelReady } = useWorkspaceContext();
@@ -172,6 +174,19 @@ export function Workspaces({ ref, isDark, onSearch, historyEnabled }: {
     };
   }, [generation, historyEnabled]);
 
+  useEffect(() => {
+    const syncMaps = () => {
+      const maps = getCampaign().campaign.maps ?? [];
+      for (const workspace of panels.current.values()) for (const panel of workspace.panels) {
+        if (typeof panel.params?.mapId !== "string") continue;
+        const map = maps.find((item) => item.id === panel.params?.mapId);
+        if (!map) workspace.removePanel(panel);
+        else if (panel.title !== map.name) panel.api.setTitle(map.name);
+      }
+    };
+    return campaignStore.subscribe((state, previous) => { if (state.campaign.maps !== previous.campaign.maps) syncMaps(); });
+  }, []);
+
   const captureWorkspace = () => {
     const container = api.current;
     if (getCampaign().generation !== generation || !initialized.current || !container || container.panels.some((panel) => !panels.current.has(panel.id))) return;
@@ -218,7 +233,8 @@ export function Workspaces({ ref, isDark, onSearch, historyEnabled }: {
     const visibleSection = section === "Settings" ? null : section;
     let destination: NavigationDestination;
     if (panel.id === "inventory:party") destination = { kind: "inventory", workspaceId, section: visibleSection };
-    else if (panel.id === "map:prototype") destination = { kind: "map", workspaceId, section: visibleSection };
+    else if (typeof panel.params?.mapId === "string") destination = { kind: "map", mapId: panel.params.mapId, workspaceId, section: visibleSection };
+    else if (panel.id === "map:library") destination = { kind: "map", workspaceId, section: visibleSection };
     else if (typeof panel.params?.sampleSection === "string") destination = { kind: "sample", workspaceId, sampleSection: panel.params.sampleSection, section: visibleSection };
     else if (typeof panel.params?.factionId === "string") destination = { kind: "faction", workspaceId, factionId: panel.params.factionId, section: visibleSection };
     else if (typeof panel.params?.locationId === "string") destination = { kind: "location", workspaceId, locationId: panel.params.locationId, section: visibleSection };
@@ -259,11 +275,20 @@ export function Workspaces({ ref, isDark, onSearch, historyEnabled }: {
     return true;
   };
 
-  const openMapInWorkspace = (workspace: DockviewApi) => {
-    const id = "map:prototype";
+  const openMapInWorkspace = (workspace: DockviewApi, mapId?: string, pinId?: string, placeLocationId?: string) => {
+    const map = mapId ? getCampaign().campaign.maps?.find((item) => item.id === mapId) : null;
+    if (mapId && !map) return false;
+    const id = map ? `map:${map.id}` : "map:library";
     const existing = workspace.getPanel(id);
-    if (existing) existing.api.setActive();
-    else workspace.addPanel({ id, title: "Map prototype", component: "map" });
+    const pin = map?.pins.find((item) => item.id === pinId);
+    const locate = pin ? { selectedPinId: pin.id, previewLocationId: pin.locationId,
+      camera: { x: pin.x, y: pin.y, zoom: 2 }, collapsed: false } : {};
+    if (existing) {
+      if (pin || placeLocationId) existing.api.updateParameters({ ...locate, ...(placeLocationId ? { placeLocationId, placeRequest: Date.now() } : {}) });
+      existing.api.setActive();
+    } else workspace.addPanel({ id, title: map?.name ?? "Maps", component: map ? "map" : "mapLibrary",
+      params: map ? { mapId: map.id, ...locate, ...(placeLocationId ? { placeLocationId, placeRequest: Date.now() } : {}) } : {} });
+    return true;
   };
 
   const openInventoryInWorkspace = (workspace: DockviewApi) => {
@@ -295,7 +320,7 @@ export function Workspaces({ ref, isDark, onSearch, historyEnabled }: {
         if (destination.kind === "faction") return openFactionInWorkspace(workspace, destination.factionId);
         if (destination.kind === "location") return openLocationInWorkspace(workspace, destination.locationId);
         if (destination.kind === "character") return openCharacterInWorkspace(workspace, destination.characterId);
-        if (destination.kind === "map") openMapInWorkspace(workspace);
+        if (destination.kind === "map") return openMapInWorkspace(workspace, destination.mapId);
         if (destination.kind === "inventory") openInventoryInWorkspace(workspace);
         if (destination.kind === "sample") openSampleSectionInWorkspace(workspace, destination.sampleSection);
         return true;
@@ -311,7 +336,8 @@ export function Workspaces({ ref, isDark, onSearch, historyEnabled }: {
     if (saved) {
       workspace.fromJSON(saved);
       for (const panel of workspace.panels) {
-        if (panel.id === "sample:overview" || panel.params?.sampleSection === "Overview") workspace.removePanel(panel);
+        if (panel.id === "sample:overview" || panel.params?.sampleSection === "Overview" || panel.id === "map:prototype") workspace.removePanel(panel);
+        else if (typeof panel.params?.mapId === "string" && !getCampaign().campaign.maps?.some((map) => map.id === panel.params?.mapId)) workspace.removePanel(panel);
       }
     }
     // Closing or moving a tab can activate another tab without a new visit.
@@ -408,6 +434,17 @@ export function Workspaces({ ref, isDark, onSearch, historyEnabled }: {
       openLocationInWorkspace(workspace, id);
       recordVisit();
     },
+    openLocationBesideMap: (id) => {
+      const active = api.current?.activePanel;
+      const workspace = active && panels.current.get(active.id);
+      const location = getCampaign().campaign.locations.find((item) => item.id === id);
+      if (!workspace || !location) return;
+      const existing = workspace.getPanel(`location:${id}`);
+      if (existing) existing.api.setActive();
+      else workspace.addPanel({ id: `location:${id}`, title: location.name, component: "location", params: { locationId: id },
+        ...(workspace.activePanel ? { position: { referencePanel: workspace.activePanel.id, direction: "right" as const } } : {}) });
+      recordVisit();
+    },
     openFaction: (id) => {
       const active = api.current?.activePanel;
       const workspace = active && panels.current.get(active.id);
@@ -432,12 +469,12 @@ export function Workspaces({ ref, isDark, onSearch, historyEnabled }: {
       openSampleSectionInWorkspace(workspace, section);
       recordVisit();
     },
-    openMap: () => {
+    openMap: (id, pinId, placeLocationId) => {
       const active = api.current?.activePanel;
       const workspace = active && panels.current.get(active.id);
       if (workspace) {
         useSessionStore.getState().leaveSettings();
-        openMapInWorkspace(workspace);
+        openMapInWorkspace(workspace, id, pinId, placeLocationId);
         recordVisit();
       }
     },

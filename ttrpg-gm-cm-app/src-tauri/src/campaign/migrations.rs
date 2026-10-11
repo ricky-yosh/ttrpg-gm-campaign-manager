@@ -4,7 +4,7 @@ pub(super) fn ensure_schema(connection: &mut Connection) -> Result<(), String> {
     let version: i32 = connection
         .pragma_query_value(None, "user_version", |row| row.get(0))
         .map_err(|e| e.to_string())?;
-    if version > 4 {
+    if version > 5 {
         return Err(format!(
             "Campaign database version {version} is newer than this app supports."
         ));
@@ -61,7 +61,13 @@ pub(super) fn ensure_schema(connection: &mut Connection) -> Result<(), String> {
             campaign_id TEXT PRIMARY KEY NOT NULL REFERENCES campaign(id) ON DELETE CASCADE,
             inventory_json TEXT NOT NULL
         );
-        PRAGMA user_version = 4;
+        CREATE TABLE IF NOT EXISTS map_record (
+            id TEXT PRIMARY KEY NOT NULL,
+            campaign_id TEXT NOT NULL REFERENCES campaign(id) ON DELETE CASCADE,
+            sort_order INTEGER NOT NULL,
+            record_json TEXT NOT NULL
+        );
+        PRAGMA user_version = 5;
     ",
         )
         .map_err(|e| e.to_string())?;
