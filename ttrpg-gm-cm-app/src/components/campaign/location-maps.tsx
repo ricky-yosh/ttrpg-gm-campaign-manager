@@ -1,8 +1,8 @@
 import { useId, useState } from "react";
 import { Button } from "@/components/ui/button";
+import { Empty, EmptyDescription, EmptyHeader, EmptyTitle } from "@/components/ui/empty";
 import { NativeSelect, NativeSelectOption } from "@/components/ui/native-select";
 import { Field, FieldLabel } from "@/components/ui/field";
-import { MapEditor } from "./map-editor";
 import { getCampaign, useCampaign } from "@/lib/campaign-data";
 import { appCommands } from "@/lib/app-commands";
 import { locationPlacements, mapsOfLocation, type CampaignMap } from "@/lib/map-data";
@@ -18,7 +18,6 @@ export function MapLinkRow({ map, pinId }: { map: CampaignMap; pinId?: string })
 
 export function LocationMaps({ locationId, currentMapId, editable = false }: { locationId: string; currentMapId?: string; editable?: boolean }) {
   const maps = useCampaign((state) => state.campaign.maps) ?? [];
-  const [importing, setImporting] = useState(false);
   const [chosenMap, setChosenMap] = useState("");
   const [placingMap, setPlacingMap] = useState("");
   const selectId = useId();
@@ -27,10 +26,9 @@ export function LocationMaps({ locationId, currentMapId, editable = false }: { l
   const placements = locationPlacements(maps, locationId).filter(({ map }) => map.id !== currentMapId);
   return <div className="flex min-w-0 flex-col gap-3">
     <h3 className="text-sm font-medium">Maps of this place</h3>
-    {own.length ? own.map((map) => <MapLinkRow key={map.id} map={map} />) : <p className="text-sm text-muted-foreground">No maps attached.</p>}
+    {own.length ? own.map((map) => <MapLinkRow key={map.id} map={map} />) : <Empty size="inline"><EmptyHeader><EmptyTitle>No maps attached</EmptyTitle><EmptyDescription>Attach a map to make it easy to open from this location.</EmptyDescription></EmptyHeader></Empty>}
     {placements.length > 0 && <><h3 className="mt-2 text-sm font-medium">Appears on</h3>{placements.map(({ map, pin }) => <MapLinkRow key={pin.id} map={map} pinId={pin.id} />)}</>}
     {editable && <>
-      <Button size="sm" variant="outline" onClick={() => setImporting(true)}>Import map of this place</Button>
       <Field><FieldLabel htmlFor={selectId}>Attach existing map</FieldLabel><NativeSelect id={selectId} value={chosenMap} onChange={(event) => setChosenMap(event.currentTarget.value)}><NativeSelectOption value="">Choose a map…</NativeSelectOption>{maps.filter((map) => !map.locationIds.includes(locationId)).map((map) => <NativeSelectOption key={map.id} value={map.id}>{map.name}</NativeSelectOption>)}</NativeSelect>
         <Button size="sm" variant="outline" disabled={!chosenMap} onClick={() => {
           const map = getCampaign().campaign.maps?.find((item) => item.id === chosenMap);
@@ -40,6 +38,5 @@ export function LocationMaps({ locationId, currentMapId, editable = false }: { l
       </Field>
       <Field><FieldLabel htmlFor={placeId}>Place this location on a map</FieldLabel><NativeSelect id={placeId} value={placingMap} onChange={(event) => setPlacingMap(event.currentTarget.value)}><NativeSelectOption value="">Choose a map…</NativeSelectOption>{maps.map((map) => <NativeSelectOption key={map.id} value={map.id}>{map.name}</NativeSelectOption>)}</NativeSelect><Button size="sm" variant="outline" disabled={!placingMap} onClick={() => appCommands.openMap(placingMap, undefined, locationId)}>Choose pin position</Button></Field>
     </>}
-    {importing && <MapEditor locationId={locationId} onClose={() => setImporting(false)} onSaved={(id) => appCommands.openMap(id)} />}
   </div>;
 }

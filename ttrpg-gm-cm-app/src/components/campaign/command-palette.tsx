@@ -124,16 +124,16 @@ export function CommandPalette({ isPresenterView, onTogglePresenterView, onClose
         },
         ...(!isPresenterView ? [
           { id: "locations", label: "Browse locations", description: "Open the location tree", keywords: ["places", "world"], icon: MapPinIcon, onSelect: () => appCommands.selectSection("Locations") },
-          { id: "maps", label: "Browse maps", description: "Open the map library", keywords: ["atlas", "world"], icon: MapIcon, onSelect: () => { appCommands.selectSection("Maps"); appCommands.openMap(); } },
+          { id: "maps", label: "Browse maps", description: "Show saved maps in the sidebar", keywords: ["atlas", "world"], icon: MapIcon, onSelect: () => appCommands.selectSection("Maps") },
           { id: "inventory", label: "Open party inventory", description: "Gold, carried items, and materials", keywords: ["gold", "items", "materials", "holdings"], icon: BackpackIcon, onSelect: () => { appCommands.selectSection("Inventory"); appCommands.openInventory(); } },
         ] : []),
         {
-          id: "open-map",
-          label: "Open map",
-          description: "Open the map workspace",
+          id: "create-map",
+          label: "Add map",
+          description: "Import map artwork into this campaign",
           keywords: ["location", "world", "atlas"],
           icon: MapIcon,
-          onSelect: appCommands.openMap,
+          onSelect: appCommands.createMap,
         },
         {
           id: "settings",

@@ -37,6 +37,7 @@ export type SessionState = {
   presenterSidebar: PresenterSidebarState;
   commandPaletteOpen: boolean;
   npcDialogOpen: boolean;
+  mapDialogOpen: boolean;
   campaignDialogOpen: boolean;
   shortcutsOpen: boolean;
   presentationStartedAt: number | null;
@@ -88,7 +89,7 @@ function isValidDestination(state: SessionState, destination: NavigationDestinat
     && (destination.kind !== "character" || state.characterIds.includes(destination.characterId))
     && (destination.kind !== "location" || state.locationIds.includes(destination.locationId))
     && (destination.kind !== "faction" || state.factionIds.includes(destination.factionId))
-    && (destination.kind !== "map" || !destination.mapId || state.mapIds.includes(destination.mapId));
+    && (destination.kind !== "map" || !!destination.mapId && state.mapIds.includes(destination.mapId));
 }
 
 function findDestinationIndex(state: SessionState, direction: -1 | 1) {
@@ -113,7 +114,8 @@ export function normalizeNavigationHistory(history?: StoredNavigationHistory): N
     if ("kind" in destination) {
       if (destination.kind === "sample" && destination.sampleSection === "Overview") return;
       if (destination.kind === "section" && destination.section === "Overview") return;
-      entries.push(destination.kind === "settings" ? destination
+      entries.push(destination.kind === "map" && !destination.mapId ? { kind: "section", section: "Maps" }
+        : destination.kind === "settings" ? destination
         : { ...destination, section: normalizeSection(destination.section, destination.kind) });
     } else {
       entries.push({ kind: "character", workspaceId: destination.workspaceId, characterId: destination.name, section: null });
@@ -133,6 +135,7 @@ export const useSessionStore = create<SessionState>()((set, get) => ({
   presenterSidebar: { width: 256, open: true },
   commandPaletteOpen: false,
   npcDialogOpen: false,
+  mapDialogOpen: false,
   campaignDialogOpen: false,
   shortcutsOpen: false,
   presentationStartedAt: null,
@@ -237,14 +240,18 @@ export const useSessionStore = create<SessionState>()((set, get) => ({
 /** Reset all window session state together before mounting the next campaign's Dockview. */
 export function hydrateSession(campaign: CampaignSession, generation: number) {
   const navigation = normalizeNavigationHistory(campaign.workspace?.history);
+  const destination = navigation.entries[navigation.index];
+  const section = campaign.section === "Locations & Maps" && destination?.kind === "section" && destination.section === "Maps"
+    ? "Maps" : normalizeSection(campaign.section, destination?.kind);
   useSessionStore.setState({
     generation,
     locationDirectory: { query: "", collapsedIds: [] },
-    section: normalizeSection(campaign.section, navigation.entries[navigation.index]?.kind),
+    section,
     sidebar: { ...campaign.sidebar },
     presenterSidebar: { width: 256, open: true },
     commandPaletteOpen: false,
     npcDialogOpen: false,
+    mapDialogOpen: false,
     campaignDialogOpen: false,
     shortcutsOpen: false,
     presentationStartedAt: null,

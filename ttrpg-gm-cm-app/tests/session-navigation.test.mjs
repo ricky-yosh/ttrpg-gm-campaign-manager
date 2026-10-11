@@ -2,11 +2,12 @@ import assert from "node:assert/strict";
 import test from "node:test";
 import { hydrateSession, normalizeNavigationHistory, selectCanGoBack, selectCanGoForward, useSessionStore } from "../src/stores/session-store.ts";
 
-const campaign = (workspace = null) => ({ section: null, sidebar: { width: 256, open: true }, npcs: [{ id: "npc-a" }, { id: "npc-b" }], workspace });
+const campaign = (workspace = null) => ({ section: null, sidebar: { width: 256, open: true }, npcs: [{ id: "npc-a" }, { id: "npc-b" }], maps: [{ id: "map-a" }], workspace });
 const character = (id, workspaceId = "workspace:1", section = "Characters") => ({ kind: "character", workspaceId, characterId: id, section });
-const map = { kind: "map", workspaceId: "workspace:1", section: "Locations & Maps" };
+const map = { kind: "map", mapId: "map-a", workspaceId: "workspace:1", section: "Locations & Maps" };
 const ready = () => {
   hydrateSession(campaign(), 1);
+  useSessionStore.getState().setMapIds(["map-a"]);
   useSessionStore.getState().setWorkspaceSnapshot([{ id: "workspace:1", title: "Workspace 1" }, { id: "workspace:2", title: "Workspace 2" }], "workspace:1");
   return useSessionStore.getState();
 };
@@ -217,4 +218,15 @@ test("campaigns saved on Overview return to all sections and history cannot reop
   assert.equal(selectCanGoBack(useSessionStore.getState()), false);
   assert.deepEqual(session.navigate(1, () => true), { ...map, section: "Maps" });
   assert.deepEqual(session.navigate(-1, () => true), character("npc-a"));
+});
+
+
+test("old map library visits become sidebar routes without losing the history cursor", () => {
+  const library = { kind: "map", workspaceId: "workspace:1", section: "Locations & Maps" };
+  const entries = [character("npc-a"), library, map];
+  for (const index of [0, 1, 2]) {
+    assert.deepEqual(normalizeNavigationHistory({ entries, index }), {
+      entries: [character("npc-a"), { kind: "section", section: "Maps" }, { ...map, section: "Maps" }], index,
+    });
+  }
 });

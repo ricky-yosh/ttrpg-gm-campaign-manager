@@ -15,11 +15,12 @@ function workspace(): WorkspaceHandle | null {
   return !isLeaving && workspaceController?.generation === generation ? workspaceController.getHandle() : null;
 }
 
-function openDialog(kind: "palette" | "npc" | "shortcuts" | "campaign") {
+function openDialog(kind: "palette" | "npc" | "map" | "shortcuts" | "campaign") {
   if (getCampaign().isLeaving) return;
   useSessionStore.setState({
     commandPaletteOpen: kind === "palette",
     npcDialogOpen: kind === "npc",
+    mapDialogOpen: kind === "map",
     shortcutsOpen: kind === "shortcuts",
     campaignDialogOpen: kind === "campaign",
   });
@@ -28,18 +29,24 @@ function openDialog(kind: "palette" | "npc" | "shortcuts" | "campaign") {
 export const appCommands = {
   openCommandPalette: () => openDialog("palette"),
   createNpc: () => openDialog("npc"),
+  createMap: () => {
+    if (getCampaign().isLeaving) return;
+    useSessionStore.getState().setSection("Maps");
+    useSessionStore.getState().setSidebar({ open: true });
+    openDialog("map");
+  },
   openShortcuts: () => openDialog("shortcuts"),
   newCampaign: () => openDialog("campaign"),
   openSettings: () => {
     if (getCampaign().isLeaving) return;
-    useSessionStore.setState({ commandPaletteOpen: false, npcDialogOpen: false, shortcutsOpen: false, campaignDialogOpen: false });
+    useSessionStore.setState({ commandPaletteOpen: false, npcDialogOpen: false, mapDialogOpen: false, shortcutsOpen: false, campaignDialogOpen: false });
     useSessionStore.getState().setSection("Settings");
   },
   selectSection: (section: string | null) => { if (!getCampaign().isLeaving) useSessionStore.getState().setSection(section); },
   openCharacter: (id: string) => workspace()?.openCharacter(id),
   openFaction: (id: string) => workspace()?.openFaction(id),
   openLocation: (id: string) => workspace()?.openLocation(id),
-  openMap: (id?: string, pinId?: string, placeLocationId?: string) => workspace()?.openMap(id, pinId, placeLocationId),
+  openMap: (id: string, pinId?: string, placeLocationId?: string) => workspace()?.openMap(id, pinId, placeLocationId),
   openLocationBesideMap: (id: string) => workspace()?.openLocationBesideMap(id),
   openInventory: () => workspace()?.openInventory(),
   openSampleSection: (section: string) => workspace()?.openSampleSection(section),

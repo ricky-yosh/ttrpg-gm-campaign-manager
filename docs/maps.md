@@ -2,11 +2,11 @@
 
 Working design for a sandbox atlas that helps the GM track where the party is, what is nearby, and what to show players. See [UI/UX](ui-ux.md) for the app workspace and [Campaign Data Model](data-model.md) for related records.
 
-For the current first-pass visual requirements, see [Maps — designer requirements](maps-designer-requirements.md): retain the existing map UI, expand the right-hand location preview with child-location navigation and map thumbnails, and omit a mini-map.
+The current visual direction retains the map canvas and comprehensive right-hand location preview, with child-location navigation and map thumbnails. There is no mini-map. Maps are added and opened through their own sidebar section; a visual library is deferred.
 
 ## Implemented atlas
 
-Maps now persist as campaign records. Open the **Map library** from Maps, or find a saved map through campaign search. Import PNG, JPEG, or WebP artwork in the desktop app; the shared importer converts it to WebP and retains the existing 10 MiB upload limit. Map details include a name, kind, and optional attachments to locations. Artwork previews identify maps in the library and location dossiers.
+Maps now persist as campaign records. Choose **Maps** in the sidebar to see all saved maps, then click a name to open its canvas. The heading’s **Add map** button opens the shared import dialog; a collapsed sidebar exposes the same action. Campaign search also opens individual saved maps or runs Add map. Import PNG, JPEG, or WebP artwork in the desktop app; the shared importer converts it to WebP and retains the existing 10 MiB upload limit. Map details include a name, kind, and optional attachments to locations. Artwork previews identify maps in location dossiers. Location pages attach existing maps and place location pins; new maps are added from the Maps sidebar. Edit details on the canvas renames or deletes a map and updates its sidebar entry.
 
 Location cards distinguish **Maps of this place** (Open) from **Appears on** (Locate a pin). Attaching a map does not change location parentage. A location can have several maps and placements. Removing a pin preserves its location; deleting a map clears incoming map shortcuts and removes attachments while keeping location pages.
 
@@ -14,7 +14,7 @@ The Konva canvas retains Space-drag panning, trackpad panning, pointer-centered 
 
 The resizable, collapsible right preview shows the selected location's artwork, details, public description, child places, maps, and associated records. Browsing children retains canvas framing and works without pins. Open location opens its full dossier beside the map and collapses the preview so the map stays usable. Narrow map panes use an overlay preview. There is no mini-map.
 
-Each saved map opens in its own Dockview tab. Back/Forward returns to linked maps; Locate selects and centers a placement. Camera centers are stored in map coordinates, so restoring a view or resizing a pane preserves framing. Camera, preview selection, and inspector settings are saved with the workspace. Legacy prototype tabs are removed on restoration because their local content was never saved.
+Each saved map opens in its own Dockview tab. Back/Forward returns to linked maps; Locate selects and centers a placement. Camera centers are stored in map coordinates, so restoring a view or resizing a pane preserves framing. Camera, preview selection, and inspector settings are saved with the workspace. Legacy prototype and map-library tabs are removed on restoration. Old library history entries become Maps sidebar routes. A temporary empty component and backend layout recognition allow older campaigns to restore before these obsolete tabs are removed; saved map records are retained.
 
 SQLite version 5 adds `map_record`; versions 1–4 load with an empty map collection when the table is absent and upgrade on save. Map images use the campaign's hashed assets directory. Older app builds reject version 5 packages. Party knowledge and player output do not change when browsing or moving a marker. Fog, tactical tools, session visits, and map presentation remain future features described below.
 

@@ -1,3 +1,4 @@
+import { MapEditor } from "./map-editor";
 import { useShallow } from "zustand/react/shallow";
 import { isTauri } from "@tauri-apps/api/core";
 import { appCommands } from "@/lib/app-commands";
@@ -15,6 +16,8 @@ export function CampaignControls() {
   const { campaignName, status, error, path, isLeaving } = useCampaign(useShallow((state) => ({
     campaignName: state.campaign.name, status: state.status, error: state.error, path: state.path, isLeaving: state.isLeaving,
   })));
+  const generation = useCampaign((state) => state.generation);
+  const mapOpen = useSessionStore((state) => state.mapDialogOpen);
   const campaignOpen = useSessionStore((state) => state.campaignDialogOpen);
   const setCampaignOpen = useSessionStore((state) => state.setCampaignDialogOpen);
   const npcOpen = useSessionStore((state) => state.npcDialogOpen);
@@ -30,6 +33,7 @@ export function CampaignControls() {
   useEffect(() => { if (npcOpen) setNpcName(""); }, [npcOpen]);
   return (
     <>
+      {mapOpen && <MapEditor key={generation} onClose={() => useSessionStore.setState({ mapDialogOpen: false })} onSaved={(id) => appCommands.openMap(id)} />}
       {!isTauri() && <DropdownMenu>
         <DropdownMenuTrigger render={
           <Button data-tauri-drag-region="false" variant="ghost" size="sm" aria-label="File commands" title="File commands">

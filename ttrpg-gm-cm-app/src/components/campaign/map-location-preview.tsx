@@ -1,6 +1,7 @@
 import { ChevronRightIcon, ExternalLinkIcon, LocateFixedIcon } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
+import { Empty, EmptyDescription, EmptyHeader, EmptyTitle } from "@/components/ui/empty";
 import { Separator } from "@/components/ui/separator";
 import { LocationMaps } from "./location-maps";
 import { appCommands } from "@/lib/app-commands";
@@ -44,7 +45,7 @@ export function MapLocationPreview({ map, locationId, onPreview, onCenter, onOpe
     <section className="flex flex-col gap-3"><Separator /><h3 className="font-serif text-lg font-semibold">Places within <Badge variant="secondary">{children.length}</Badge></h3>
       {children.length ? children.map((child) => <Button key={child.id} variant="ghost" className="h-auto w-full justify-start" onClick={() => onPreview(child.id)}>
         {(child.image ?? child.banner) && <img src={(child.image ?? child.banner)!.url} alt="" className="h-12 w-16 shrink-0 rounded-md object-cover" />}<span className="min-w-0 flex-1 text-left"><span className="block truncate">{child.name}</span><span className="block text-xs text-muted-foreground">{child.locationType || "Location"}</span></span><ChevronRightIcon data-icon="inline-end" />
-      </Button>) : <p className="text-sm text-muted-foreground">No child locations.</p>}
+      </Button>) : <Empty size="inline"><EmptyHeader><EmptyTitle>No child locations</EmptyTitle><EmptyDescription>Locations within this place will appear here.</EmptyDescription></EmptyHeader></Empty>}
     </section>
     <section className="flex flex-col gap-3"><Separator /><h3 className="font-serif text-lg font-semibold">Maps</h3><LocationMaps locationId={location.id} currentMapId={map.id} />
       {shortcut && <Button size="sm" variant="outline" onClick={() => appCommands.openMap(shortcut)}>Open linked map shortcut</Button>}

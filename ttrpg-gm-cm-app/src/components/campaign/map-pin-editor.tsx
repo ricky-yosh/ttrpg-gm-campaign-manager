@@ -1,6 +1,8 @@
 import { useId, useState } from "react";
+import { Autocomplete } from "@base-ui/react/autocomplete";
 import { Button } from "@/components/ui/button";
 import { Dialog, DialogDescription, DialogPopup, DialogTitle } from "@/components/ui/dialog";
+import { Empty, EmptyDescription, EmptyHeader, EmptyTitle } from "@/components/ui/empty";
 import { Field, FieldGroup, FieldLabel } from "@/components/ui/field";
 import { Input } from "@/components/ui/input";
 import { NativeSelect, NativeSelectOption } from "@/components/ui/native-select";
@@ -22,7 +24,8 @@ export function MapPinEditor({ mapId, pin, initialLocationId = "", onClose, onCh
   const [label, setLabel] = useState(pin?.label ?? "");
   const [destinationMapId, setDestinationMapId] = useState(pin?.destinationMapId ?? "");
   const [error, setError] = useState("");
-  const searchId = useId(); const locationSelectId = useId(); const nameId = useId(); const labelId = useId(); const destinationId = useId();
+  const searchId = useId(); const nameId = useId(); const labelId = useId(); const destinationId = useId();
+  const locationResults = locationSearchResults(locations, query);
   return <Dialog open onOpenChange={(open) => { if (!open) onClose(); }}><DialogPopup><div className="flex flex-col gap-4 overflow-y-auto p-5">
     <DialogTitle>{pin ? "Edit location pin" : "Add location pin"}</DialogTitle>
     <DialogDescription>{pin ? "Change this placement's link or label. The location dossier remains its source of details." : "Choose a place, then click its position on the map. New locations are created only when placed."}</DialogDescription>
@@ -31,8 +34,47 @@ export function MapPinEditor({ mapId, pin, initialLocationId = "", onClose, onCh
       if (locationId === "new" ? !newName.trim() : !locations.some((location) => location.id === locationId)) { setError("Choose an available location or enter a new location name."); return; }
       onChoose({ locationId: locationId === "new" ? "" : locationId, newName: locationId === "new" ? newName.trim() : "", parentId, label: label.trim(), destinationMapId: destinationMapId || null });
     }}><FieldGroup>
-      <Field><FieldLabel htmlFor={searchId}>Find location</FieldLabel><Input id={searchId} placeholder="Search places…" value={query} onChange={(event) => { setQuery(event.currentTarget.value); if (locationId !== "new") setLocationId(""); }} /></Field>
-      <Field><FieldLabel htmlFor={locationSelectId}>Linked location</FieldLabel><NativeSelect id={locationSelectId} value={locationId} onChange={(event) => setLocationId(event.currentTarget.value)}><NativeSelectOption value="">Choose a location…</NativeSelectOption><NativeSelectOption value="new">Create new location…</NativeSelectOption>{locationSearchResults(locations, query).map(({ location, path }) => <NativeSelectOption key={location.id} value={location.id}>{[path, location.name].filter(Boolean).join(" / ")}</NativeSelectOption>)}</NativeSelect></Field>
+      <Field>
+        <FieldLabel htmlFor={searchId}>Linked location</FieldLabel>
+        <Autocomplete.Root
+          open
+          inline
+          items={locationResults}
+          value={query}
+          onValueChange={(value, details) => {
+            setQuery(value);
+            if (details.reason === "input-change" || details.reason === "input-clear") setLocationId("");
+          }}
+          itemToStringValue={({ location, path }) => [path, location.name].filter(Boolean).join(" / ")}
+          autoHighlight="always"
+        >
+          <Autocomplete.Input id={searchId} placeholder="Search places…" className="h-9 w-full rounded-md border border-input bg-transparent px-3 py-1 text-sm shadow-xs outline-none placeholder:text-muted-foreground focus-visible:border-ring focus-visible:ring-3 focus-visible:ring-ring/50" />
+          <Autocomplete.Empty className="text-sm text-muted-foreground">
+            <Empty size="inline">
+              <EmptyHeader>
+                <EmptyTitle>No matching locations</EmptyTitle>
+                <EmptyDescription>Try a different search or create a new location.</EmptyDescription>
+              </EmptyHeader>
+            </Empty>
+          </Autocomplete.Empty>
+          <Autocomplete.List className="max-h-40 overflow-y-auto rounded-md border bg-popover p-1 text-popover-foreground shadow-md">
+            {(result: (typeof locationResults)[number]) => (
+              <Autocomplete.Item
+                key={result.location.id}
+                value={result}
+                onClick={() => setLocationId(result.location.id)}
+                className="flex cursor-default items-center rounded-sm px-2 py-1.5 text-sm outline-none data-[highlighted]:bg-accent data-[highlighted]:text-accent-foreground"
+              >
+                {[result.path, result.location.name].filter(Boolean).join(" / ")}
+              </Autocomplete.Item>
+            )}
+          </Autocomplete.List>
+        </Autocomplete.Root>
+        <Button type="button" size="inline" variant={locationId === "new" ? "secondary" : "link"} className="w-fit" onClick={() => { setLocationId("new"); setQuery(""); }}>
+          Create new location
+        </Button>
+        {locationId && locationId !== "new" && <p className="text-sm text-muted-foreground">Selected: {locations.find((location) => location.id === locationId)?.name}</p>}
+      </Field>
       {locationId === "new" && <><Field><FieldLabel htmlFor={nameId}>New location name</FieldLabel><Input id={nameId} value={newName} required onChange={(event) => setNewName(event.currentTarget.value)} /></Field><LocationParentField locations={locations} parentId={parentId} onChange={setParentId} /></>}
       <Field><FieldLabel htmlFor={labelId}>Pin label override (optional)</FieldLabel><Input id={labelId} value={label} onChange={(event) => setLabel(event.currentTarget.value)} placeholder="Use location name" /></Field>
       <Field><FieldLabel htmlFor={destinationId}>Linked map shortcut (optional)</FieldLabel><NativeSelect id={destinationId} value={destinationMapId} onChange={(event) => setDestinationMapId(event.currentTarget.value)}><NativeSelectOption value="">None</NativeSelectOption>{maps.filter((map) => map.id !== mapId).map((map) => <NativeSelectOption key={map.id} value={map.id}>{map.name}</NativeSelectOption>)}</NativeSelect></Field>

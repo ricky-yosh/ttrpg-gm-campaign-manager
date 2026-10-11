@@ -64,7 +64,12 @@ export function MapPanel({ params, api }: IDockviewPanelProps) {
     return () => { historyContext?.delete(api); window.dispatchEvent(new Event("npc-history-change")); };
   }, [api, historyContext, map, canUndo, canRedo, undoEdit, redoEdit]);
   useEffect(() => {
-    if (params.camera) setCamera(readMapCamera(params.camera));
+    if (params.camera) {
+      const nextCamera = readMapCamera(params.camera);
+      setCamera((current) => current.x === nextCamera.x && current.y === nextCamera.y && current.zoom === nextCamera.zoom
+        ? current
+        : nextCamera);
+    }
     if (params.previewLocationId !== undefined) setPreviewId(params.previewLocationId);
     if (params.selectedPinId !== undefined) setSelectedPinId(params.selectedPinId);
     if (params.collapsed !== undefined) setCollapsed(params.collapsed);
@@ -101,7 +106,7 @@ export function MapPanel({ params, api }: IDockviewPanelProps) {
     window.addEventListener("keyup", release); window.addEventListener("blur", blur);
     return () => { window.removeEventListener("keyup", release); window.removeEventListener("blur", blur); };
   }, []);
-  if (!map) return <Empty><EmptyHeader><EmptyTitle>Map unavailable</EmptyTitle><EmptyDescription>This map may have been removed.</EmptyDescription></EmptyHeader><Button onClick={() => appCommands.openMap()}>Open map library</Button></Empty>;
+  if (!map) return <Empty><EmptyHeader><EmptyTitle>Map unavailable</EmptyTitle><EmptyDescription>This map may have been removed.</EmptyDescription></EmptyHeader><Button onClick={() => appCommands.selectSection("Maps")}>Browse maps</Button></Empty>;
   const transform = mapTransform(map.width, map.height, viewport, camera);
   const narrow = rootWidth < 700;
   const displayedPin = map.pins.find((pin) => pin.locationId === previewId);
@@ -226,7 +231,8 @@ export function MapPanel({ params, api }: IDockviewPanelProps) {
         <div className="flex shrink-0 items-center gap-2 border-b p-2"><Button variant="ghost" size="icon" aria-label={collapsed ? "Expand location preview" : "Collapse location preview"} onClick={() => setCollapsed(!collapsed)}>{collapsed ? <ChevronLeftIcon /> : <ChevronRightIcon />}</Button>{!collapsed && <span className="text-sm font-medium">{previewId ? "Location preview" : "Locations on this map"}</span>}</div>
         {!collapsed && <div ref={inspectorRef} className="min-h-0 flex-1 overflow-y-auto">
           {previewId ? <><MapLocationPreview map={map} locationId={previewId} onPreview={(id) => preview(id)} onCenter={center} onOpenLocation={(id) => { setCollapsed(true); remember({ collapsed: true }); appCommands.openLocationBesideMap(id); }} />
-            <div className="flex flex-wrap gap-2 border-t p-4"><Button size="sm" variant="outline" onClick={() => { setPreviewId(null); remember({ previewLocationId: null }); }}>All pins</Button>{selectedPin && selectedPin.locationId === previewId && <><Button size="sm" variant="outline" onClick={() => setPinEditor(selectedPin)}>Edit pin</Button><Button size="sm" variant="ghost" onClick={() => setPinToRemove(selectedPin.id)}>Remove pin…</Button></>}</div>
+            <Separator />
+            <div className="flex flex-wrap gap-2 p-4"><Button size="sm" variant="outline" onClick={() => { setPreviewId(null); remember({ previewLocationId: null }); }}>All pins</Button>{selectedPin && selectedPin.locationId === previewId && <><Button size="sm" variant="outline" onClick={() => setPinEditor(selectedPin)}>Edit pin</Button><Button size="sm" variant="ghost" onClick={() => setPinToRemove(selectedPin.id)}>Remove pin…</Button></>}</div>
           </> : <div className="flex flex-col gap-2 p-3">{map.pins.length ? map.pins.map((pin, index) => <Button key={pin.id} variant="ghost" className="h-auto justify-start" onClick={() => preview(pin.locationId, pin.id)}><MapPinIcon data-icon="inline-start" /><span className="truncate">{index + 1}. {pin.label || locations.find((place) => place.id === pin.locationId)?.name || "Unavailable location"}</span></Button>) : <Empty size="compact"><EmptyHeader><EmptyTitle>No locations pinned</EmptyTitle><EmptyDescription>Add a pin to link a place to this map.</EmptyDescription></EmptyHeader></Empty>}
             <Button variant="outline" size="sm" onClick={() => setPinEditor("new")}>Add location pin</Button>
             {map.party && <Button variant="ghost" size="sm" onClick={() => commit({ party: null }, "Remove party marker")}>Remove party marker</Button>}

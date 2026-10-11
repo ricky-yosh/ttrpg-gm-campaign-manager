@@ -1,6 +1,10 @@
 # Maps and Locations — discussion brief
 
-Status: proposed design direction for designer review, not an approved implementation plan.
+Status: historical designer discussion. The sidebar proposal below is superseded by the current direction in [Maps](maps.md).
+
+## Current navigation requirements
+
+Locations and Maps have separate sidebar sections. Maps follows the NPC and Faction directory pattern: an Add map action in the heading and one row per saved map. Import happens through that action; location pages offer existing-map attachments, placement, Open, and Locate. Keep the comprehensive right preview and child-location navigation. Defer a visual map library.
 
 ## Goal
 

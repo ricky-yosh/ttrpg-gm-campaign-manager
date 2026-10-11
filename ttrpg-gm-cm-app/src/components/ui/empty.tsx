@@ -1,13 +1,13 @@
 import { cva, type VariantProps } from "class-variance-authority"
 import { cn } from "cn"
 
-function Empty({ className, size = "default", ...props }: React.ComponentProps<"div"> & { size?: "default" | "compact" }) {
+function Empty({ className, size = "default", ...props }: React.ComponentProps<"div"> & { size?: "default" | "compact" | "inline" }) {
   return (
     <div
       data-slot="empty"
       className={cn(
         "flex w-full min-w-0 flex-1 flex-col items-center justify-center gap-4 rounded-xl border-dashed text-center text-balance",
-        size === "compact" ? "p-2" : "p-6",
+        size === "compact" ? "p-2" : size === "inline" ? "flex-none items-start justify-start gap-2 border-0 p-0 text-left [&_[data-slot=empty-header]]:items-start" : "p-6",
         className
       )}
       {...props}

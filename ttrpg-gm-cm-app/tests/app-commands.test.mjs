@@ -39,9 +39,9 @@ test("workspace commands reject stale controllers and actions during campaign tr
   };
   const generation = campaignStore.getState().generation;
   const stopOld = registerWorkspaceCommands(generation, () => handle);
-  appCommands.openMap();
+  appCommands.openMap("map-a");
   campaignStore.setState({ isLeaving: true });
-  appCommands.openMap();
+  appCommands.openMap("map-a");
   appCommands.openSettings();
   appCommands.createNpc();
   assert.equal(useSessionStore.getState().section, null);
@@ -53,7 +53,7 @@ test("workspace commands reject stale controllers and actions during campaign tr
   appCommands.openCharacter("current");
   assert.deepEqual(called, ["map", "current"]);
   stopNew();
-  appCommands.openMap();
+  appCommands.openMap("map-a");
   assert.deepEqual(called, ["map", "current"]);
 });
 
@@ -82,4 +82,31 @@ test("shared commands show one dialog and closing Settings never closes a hidden
   assert.equal(hiddenCloses, 0);
   assert.equal(useSessionStore.getState().section, "Characters");
   stop();
+});
+
+
+test("Add map reveals its sidebar, uses one dialog, and resets on campaign replacement", () => {
+  replaceSnapshot();
+  useSessionStore.getState().setSidebar({ open: false });
+  appCommands.openCommandPalette();
+  appCommands.createMap();
+  let state = useSessionStore.getState();
+  assert.equal(state.section, "Maps");
+  assert.equal(state.sidebar.open, true);
+  assert.equal(state.mapDialogOpen, true);
+  assert.equal(state.commandPaletteOpen, false);
+  appCommands.createNpc();
+  assert.equal(useSessionStore.getState().mapDialogOpen, false);
+  appCommands.createMap();
+  appCommands.openSettings();
+  assert.equal(useSessionStore.getState().mapDialogOpen, false);
+  appCommands.createMap();
+  replaceSnapshot();
+  assert.equal(useSessionStore.getState().mapDialogOpen, false);
+  campaignStore.setState({ isLeaving: true });
+  appCommands.createMap();
+  state = useSessionStore.getState();
+  assert.equal(state.mapDialogOpen, false);
+  assert.equal(state.section, null);
+  campaignStore.setState({ isLeaving: false });
 });

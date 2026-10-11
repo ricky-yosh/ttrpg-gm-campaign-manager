@@ -1,3 +1,4 @@
+import { MapsDirectory } from "@/components/campaign/maps-directory";
 import { FactionsDirectory } from "@/components/campaign/factions-directory";
 import { LocationsDirectory } from "@/components/campaign/locations-directory";
 import { SidebarSectionHeading } from "@/components/campaign/sidebar-section-heading";
@@ -274,7 +275,7 @@ export function AppSidebar({ isPresenterView = false, presenterSection = "map", 
               </SidebarMenu>
               {section === "Characters" ? (
                 <SidebarSectionHeading title={section} actionLabel="New NPC" onCreate={appCommands.createNpc} className="px-2 pb-3 pt-4 group-data-[collapsible=icon]:hidden" />
-              ) : section !== "Locations" && section !== "Factions" && <div className="px-2 pb-2 pt-4 text-xs font-semibold text-muted-foreground group-data-[collapsible=icon]:hidden">{section}</div>}
+              ) : section !== "Locations" && section !== "Factions" && section !== "Maps" && <div className="px-2 pb-2 pt-4 text-xs font-semibold text-muted-foreground group-data-[collapsible=icon]:hidden">{section}</div>}
               <SidebarMenu>
                 {section === "Characters" ? ids.map((id, index) => (
                   <SidebarMenuItem key={id}>
@@ -288,7 +289,7 @@ export function AppSidebar({ isPresenterView = false, presenterSection = "map", 
                 ) : section === "Locations" ? (
                   <LocationsDirectory key={generation} />
                 ) : section === "Maps" ? (
-                  <SidebarMenuItem><SidebarMenuButton tooltip="Map library" onClick={() => appCommands.openMap()}><MapIcon /><span>Map library</span></SidebarMenuButton></SidebarMenuItem>
+                  <MapsDirectory key={generation} />
                 ) : section === "Inventory" ? (
                   <SidebarMenuItem><SidebarMenuButton tooltip="Party Inventory" onClick={appCommands.openInventory}><BackpackIcon /><span>Party Inventory</span></SidebarMenuButton></SidebarMenuItem>
                 ) : sampleSidebarEntries[section] ? (
