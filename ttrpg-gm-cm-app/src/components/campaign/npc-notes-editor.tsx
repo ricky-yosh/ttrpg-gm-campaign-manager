@@ -316,9 +316,13 @@ type NpcNotesEditorProps = {
   npcName: string;
   editable: boolean;
   onChange: (value: Value) => void;
+  title?: string;
+  description?: string;
+  placeholder?: string;
+  ariaLabel?: string;
 };
 
-export function NpcNotesEditor({ editor, npcName, editable, onChange }: NpcNotesEditorProps) {
+export function NpcNotesEditor({ editor, npcName, editable, onChange, title = "GM Notes", description = "Private reference notes", placeholder = "Add private notes about this NPC…", ariaLabel = `${npcName} private notes` }: NpcNotesEditorProps) {
   const root = useRef<HTMLElement>(null);
   useEffect(() => {
     if (!editable || !root.current) return;
@@ -369,16 +373,16 @@ export function NpcNotesEditor({ editor, npcName, editable, onChange }: NpcNotes
   };
 
   return (
-    <section ref={root} aria-label={`${npcName} GM notes`} className="overflow-hidden rounded-xl border bg-card">
+    <section ref={root} aria-label={title} className="overflow-hidden rounded-xl border bg-card">
       <div className="border-b px-4 py-3">
-        <h2 className="font-semibold">GM Notes</h2>
-        <p className="text-xs text-muted-foreground">Private reference notes</p>
+        <h2 className="font-semibold">{title}</h2>
+        <p className="text-xs text-muted-foreground">{description}</p>
       </div>
       <Plate editor={editor} onValueChange={({ value }) => { onChange(value); queueMicrotask(refreshHistory); }}>
         {editable && <FormattingToolbar />}
         <PlateContent
-          aria-label={`${npcName} private notes`}
-          placeholder="Add private notes about this NPC…"
+          aria-label={ariaLabel}
+          placeholder={placeholder}
           readOnly={!editable}
           onKeyDown={editable ? handleEditorKeyDown : undefined}
           className="min-h-40 px-4 py-3 text-sm leading-6 outline-none [&_p]:mb-3 [&_p:last-child]:mb-0 [&_h1]:mb-3 [&_h1]:mt-5 [&_h1]:text-xl [&_h1]:font-semibold [&_h1]:leading-tight [&_h1:first-child]:mt-0 [&_h2]:mb-2 [&_h2]:mt-4 [&_h2]:text-lg [&_h2]:font-semibold [&_h2]:leading-tight [&_h2:first-child]:mt-0 [&_h3]:mb-2 [&_h3]:mt-3 [&_h3]:text-base [&_h3]:font-semibold [&_h3]:leading-tight [&_h3:first-child]:mt-0 [&_blockquote]:my-4 [&_blockquote]:border-l-2 [&_blockquote]:border-border [&_blockquote]:pl-4 [&_blockquote]:italic [&_ul]:my-3 [&_ul]:list-disc [&_ul]:pl-6 [&_ol]:my-3 [&_ol]:list-decimal [&_ol]:pl-6 [&_li]:pl-1"

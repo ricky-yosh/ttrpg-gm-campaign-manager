@@ -1,3 +1,4 @@
+import { useSessionNotesStore } from "@/stores/session-notes-store";
 import { MapsDirectory } from "@/components/campaign/maps-directory";
 import { FactionsDirectory } from "@/components/campaign/factions-directory";
 import { LocationsDirectory } from "@/components/campaign/locations-directory";
@@ -71,11 +72,22 @@ const destinationGroups = [
 ];
 
 const sampleSidebarEntries: Record<string, string[]> = {
-  Sessions: ["The Low Tide · Upcoming", "Ashes at the Quay", "A Debt in Salt"],
   "Story Threads": ["The Lantern Below", "The Missing Morrow", "A Favor for the Guild", "Mossgate Watch"],
   Items: ["Tideglass Compass", "Morrow’s Wax Seal", "Lantern of the Deep"],
   Puzzles: ["The Three Harbor Bells", "The Salt-Written Chart", "The Lighthouse Ledger"],
 };
+
+function SessionsSidebar() {
+  const sessions = useSessionNotesStore((state) => state.sessions);
+  return <>
+    <SidebarMenuItem><SidebarMenuButton onClick={appCommands.openSessions}><BookOpenIcon /><span>All sessions</span></SidebarMenuButton></SidebarMenuItem>
+    {sessions.map((session) => <SidebarMenuItem key={session.id}>
+      <SidebarMenuButton onClick={() => appCommands.openSession(session.id)} tooltip={session.title}>
+        <BookOpenIcon /><span>{session.number} · {session.title}</span>
+      </SidebarMenuButton>
+    </SidebarMenuItem>)}
+  </>;
+}
 
 function PresenterSidebarContent({ navigationSection, activeSection, selectedNpcId, onSelectMap, onSelectInventory, onShowNpcs, onShowAllSections, onSelectNpc }: {
   navigationSection: PresenterSidebarSection;
@@ -284,7 +296,9 @@ export function AppSidebar({ isPresenterView = false, presenterSection = "map", 
                       <span>{names[index]}</span>
                     </SidebarMenuButton>
                   </SidebarMenuItem>
-                )) : section === "Factions" ? (
+                )) : section === "Sessions" ? (
+                  <SessionsSidebar />
+                ) : section === "Factions" ? (
                   <FactionsDirectory key={generation} />
                 ) : section === "Locations" ? (
                   <LocationsDirectory key={generation} />

@@ -1,10 +1,9 @@
-import { BookOpenIcon, PackageIcon, PuzzleIcon, ScrollTextIcon, SwordsIcon } from "lucide-react";
+import { PackageIcon, PuzzleIcon, ScrollTextIcon, SwordsIcon } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import sampleArtwork from "@/assets/sample-campaign/artwork.json";
 
 const sectionArtwork: Record<string, { banner: string; entries: string[] }> = {
-  Sessions: { banner: "harbor", entries: ["eastern-seawall", "harbor", "lantern-inn"] },
   "Story Threads": { banner: "eastern-seawall", entries: ["eastern-seawall", "harbor", "dockworkers-guild", "greyhaven"] },
   Items: { banner: "harbor-relics", entries: ["harbor-relics", "harbor-relics", "harbor-relics", "harbor-relics"] },
   Puzzles: { banner: "salt-written-chart", entries: ["eastern-seawall", "salt-written-chart", "salt-written-chart"] },
@@ -15,14 +14,6 @@ function artworkUrl(name: string) {
 }
 
 const sections = {
-  Sessions: {
-    eyebrow: "Campaign journal", title: "Sessions", description: "A running record of the party’s adventures and the choices that changed Greyhaven.",
-    entries: [
-      ["Session 08 · The Low Tide", "Planned · Tomorrow, 6:30 PM", "The harbor bells rang at low tide. The party follows a lantern beneath the old seawall.", "Upcoming"],
-      ["Session 07 · Ashes at the Quay", "Played · 12 Mar", "The smugglers’ warehouse burned. A soaked manifest survived in the cellar.", "Played"],
-      ["Session 06 · A Debt in Salt", "Played · 05 Mar", "Niya arranged passage aboard the Morrow. Captain Venn recognized the party’s sigil.", "Played"],
-    ],
-  },
   "Story Threads": {
     eyebrow: "Campaign journal", title: "Story Threads", description: "Open questions, looming trouble, and the leads the party can follow next.",
     entries: [
@@ -51,7 +42,7 @@ const sections = {
   },
 } as const;
 
-const icons: Record<string, typeof BookOpenIcon> = { Sessions: BookOpenIcon, "Story Threads": ScrollTextIcon, Items: PackageIcon, Puzzles: PuzzleIcon };
+const icons: Record<string, typeof ScrollTextIcon> = { "Story Threads": ScrollTextIcon, Items: PackageIcon, Puzzles: PuzzleIcon };
 
 export function SampleSectionPage({ section }: { section: string }) {
   const data = sections[section as keyof typeof sections];

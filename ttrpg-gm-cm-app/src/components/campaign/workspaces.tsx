@@ -1,3 +1,5 @@
+import { SessionsPanel } from "@/components/campaign/sessions-panel";
+import { useSessionNotesStore } from "@/stores/session-notes-store";
 import { InventoryPanel } from "@/components/campaign/inventory-panel";
 import { NpcHistoryContext, type NpcHistoryHandler } from "@/components/campaign/npc-history-context";
 import { FactionPanel } from "@/components/campaign/faction-panel";
@@ -26,6 +28,8 @@ export type WorkspaceHandle = {
   openFaction: (id: string) => void;
   openMap: (id: string, pinId?: string, placeLocationId?: string) => void;
   openLocationBesideMap: (id: string) => void;
+  openSession: (id: string) => void;
+  openSessions: () => void;
   openInventory: () => void;
   openSampleSection: (section: string) => void;
   closeActiveTab: () => void;
@@ -54,7 +58,7 @@ function SampleSectionPanel({ params }: IDockviewPanelProps) {
 // Old saved layouts briefly mount this placeholder before obsolete library tabs are removed.
 function LegacyMapLibrary() { return null; }
 
-const characterComponents = { character: CharacterPanel, map: MapPanel, mapLibrary: LegacyMapLibrary, location: LocationPanel, faction: FactionPanel, inventory: InventoryPanel, sample: SampleSectionPanel };
+const characterComponents = { character: CharacterPanel, map: MapPanel, mapLibrary: LegacyMapLibrary, location: LocationPanel, faction: FactionPanel, inventory: InventoryPanel, sessions: SessionsPanel, sample: SampleSectionPanel };
 
 function WorkspacePanel({ api }: IDockviewPanelProps) {
   const { isDark, panels, onPanelReady } = useWorkspaceContext();
@@ -191,6 +195,15 @@ export function Workspaces({ ref, isDark, onSearch, historyEnabled }: {
     return campaignStore.subscribe((state, previous) => { if (state.campaign.maps !== previous.campaign.maps) syncMaps(); });
   }, []);
 
+  useEffect(() => useSessionNotesStore.subscribe((state, previous) => {
+    if (state.sessions === previous.sessions) return;
+    for (const workspace of panels.current.values()) for (const panel of workspace.panels) {
+      if (typeof panel.params?.sessionId !== "string") continue;
+      const session = state.sessions.find((item) => item.id === panel.params?.sessionId);
+      if (session) panel.api.setTitle(`Session ${session.number} · ${session.title}`);
+    }
+  }), []);
+
   const captureWorkspace = () => {
     const container = api.current;
     if (getCampaign().generation !== generation || !initialized.current || !container || container.panels.some((panel) => !panels.current.has(panel.id))) return;
@@ -200,7 +213,12 @@ export function Workspaces({ ref, isDark, onSearch, historyEnabled }: {
       layout: container.toJSON(),
       panels: Object.fromEntries(container.panels.map((panel) => [panel.id, panels.current.get(panel.id)!.toJSON()])),
       nextId: nextId.current, sidebarWidth: session.workspaceSidebarWidth, collapsed: session.workspaceCollapsed,
-      history: structuredClone(session.navigation),
+      history: {
+        ...structuredClone(session.navigation),
+        // Session records are a memory-only prototype; never save their transient IDs as destinations.
+        entries: session.navigation.entries.map((entry) => entry.kind === "sample" && (entry.sampleSection === "Sessions" || entry.sampleSection.startsWith("Sessions:"))
+          ? { kind: "section" as const, section: "Sessions" } : entry),
+      },
     };
     const campaign = getCampaign().campaign;
     const workspaceJson = JSON.stringify(workspace);
@@ -250,7 +268,8 @@ export function Workspaces({ ref, isDark, onSearch, historyEnabled }: {
     if (section === "Settings" && record) return;
     const visibleSection = section === "Settings" ? null : section;
     let destination: NavigationDestination;
-    if (panel.id === "inventory:party") destination = { kind: "inventory", workspaceId, section: visibleSection };
+    if (panel.view.contentComponent === "sessions") destination = { kind: "sample", workspaceId, sampleSection: typeof panel.params?.sessionId === "string" ? `Sessions:${panel.params.sessionId}` : "Sessions", section: visibleSection };
+    else if (panel.id === "inventory:party") destination = { kind: "inventory", workspaceId, section: visibleSection };
     else if (typeof panel.params?.mapId === "string") destination = { kind: "map", mapId: panel.params.mapId, workspaceId, section: visibleSection };
     else if (typeof panel.params?.sampleSection === "string") destination = { kind: "sample", workspaceId, sampleSection: panel.params.sampleSection, section: visibleSection };
     else if (typeof panel.params?.factionId === "string") destination = { kind: "faction", workspaceId, factionId: panel.params.factionId, section: visibleSection };
@@ -314,7 +333,18 @@ export function Workspaces({ ref, isDark, onSearch, historyEnabled }: {
     else workspace.addPanel({ id: "inventory:party", title: "Party Inventory", component: "inventory" });
   };
 
+  const openSessionInWorkspace = (workspace: DockviewApi, sessionId?: string) => {
+    const session = useSessionNotesStore.getState().sessions.find((item) => item.id === sessionId);
+    if (sessionId && !session) return false;
+    const id = sessionId ? `session:${sessionId}` : "sessions:directory";
+    const existing = workspace.getPanel(id);
+    if (existing) existing.api.setActive();
+    else workspace.addPanel({ id, title: session ? `Session ${session.number} · ${session.title}` : "Sessions", component: "sessions", params: sessionId ? { sessionId } : {} });
+    return true;
+  };
+
   const openSampleSectionInWorkspace = (workspace: DockviewApi, section: string) => {
+    if (section === "Sessions" || section.startsWith("Sessions:")) return openSessionInWorkspace(workspace, section === "Sessions" ? undefined : section.slice("Sessions:".length));
     if (section === "Overview") return;
     const id = `sample:${section.toLowerCase().replace(/ /g, "-")}`;
     const existing = workspace.getPanel(id);
@@ -339,7 +369,10 @@ export function Workspaces({ ref, isDark, onSearch, historyEnabled }: {
         if (destination.kind === "character") return openCharacterInWorkspace(workspace, destination.characterId);
         if (destination.kind === "map") return !!destination.mapId && openMapInWorkspace(workspace, destination.mapId);
         if (destination.kind === "inventory") openInventoryInWorkspace(workspace);
-        if (destination.kind === "sample") openSampleSectionInWorkspace(workspace, destination.sampleSection);
+        if (destination.kind === "sample") {
+          if (destination.sampleSection.startsWith("Sessions:") && !useSessionNotesStore.getState().sessions.some((item) => item.id === destination.sampleSection.slice("Sessions:".length))) return false;
+          openSampleSectionInWorkspace(workspace, destination.sampleSection);
+        }
         return true;
       });
     } finally {
@@ -354,6 +387,14 @@ export function Workspaces({ ref, isDark, onSearch, historyEnabled }: {
       workspace.fromJSON(saved);
       for (const panel of workspace.panels) {
         if (panel.id === "sample:overview" || panel.params?.sampleSection === "Overview" || panel.id === "map:prototype" || panel.id === "map:library" || panel.view.contentComponent === "mapLibrary") workspace.removePanel(panel);
+        else if (panel.view.contentComponent === "sessions" && typeof panel.params?.sessionId === "string" && !useSessionNotesStore.getState().sessions.some((item) => item.id === panel.params?.sessionId)) {
+          workspace.removePanel(panel);
+          openSessionInWorkspace(workspace);
+        }
+        else if (panel.params?.sampleSection === "Sessions") {
+          workspace.removePanel(panel);
+          openSessionInWorkspace(workspace);
+        }
         else if (typeof panel.params?.mapId === "string" && !getCampaign().campaign.maps?.some((map) => map.id === panel.params?.mapId)) workspace.removePanel(panel);
       }
     }
@@ -468,6 +509,21 @@ export function Workspaces({ ref, isDark, onSearch, historyEnabled }: {
       if (!workspace || !getCampaign().campaign.factions?.some((faction) => faction.id === id)) return;
       useSessionStore.getState().leaveSettings();
       openFactionInWorkspace(workspace, id);
+      recordVisit();
+    },
+    openSession: (id) => {
+      const active = api.current?.activePanel;
+      const workspace = active && panels.current.get(active.id);
+      if (!workspace) return;
+      useSessionStore.getState().leaveSettings();
+      if (openSessionInWorkspace(workspace, id)) recordVisit();
+    },
+    openSessions: () => {
+      const active = api.current?.activePanel;
+      const workspace = active && panels.current.get(active.id);
+      if (!workspace) return;
+      useSessionStore.getState().leaveSettings();
+      openSessionInWorkspace(workspace);
       recordVisit();
     },
     openInventory: () => {
