@@ -6,9 +6,10 @@ import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Input } from "@/components/ui/input";
 import { AutoSizeTextarea } from "@/components/ui/auto-size-textarea";
-import { Field, FieldGroup, FieldLabel } from "@/components/ui/field";
+import { Field, FieldError, FieldGroup, FieldLabel } from "@/components/ui/field";
 import { NativeSelect, NativeSelectOption } from "@/components/ui/native-select";
 import { Empty, EmptyDescription, EmptyHeader, EmptyTitle } from "@/components/ui/empty";
+import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
 import { Card, CardAction, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { NpcNotesEditor, useNpcNotesEditor } from "@/components/campaign/npc-notes-editor";
 import { appCommands } from "@/lib/app-commands";
@@ -16,15 +17,28 @@ import { useCampaign } from "@/lib/campaign-data";
 import { useSessionNotesStore, type SessionNote, type SessionBeat, type SessionRecordLink } from "@/stores/session-notes-store";
 
 const recordKinds = { npc: "NPCs", location: "Locations", faction: "Factions", thread: "Story threads", puzzle: "Puzzles" };
-const threadSamples = [{ id: "sample-thread-shipment", name: "The Missing Shipment" }, { id: "sample-thread-lantern", name: "The Lantern Below" }];
-const puzzleSamples = [{ id: "sample-puzzle-vault", name: "The Lighthouse Vault" }, { id: "sample-puzzle-bells", name: "The Three Harbor Bells" }];
 const emptyNotes = (): Value => [{ type: "p", children: [{ text: "" }] }];
 
 function NotesField({ id, title, value, editable, onChange, publicSummary = false }: {
   id: string; title: string; value: Value; editable: boolean; onChange: (value: Value) => void; publicSummary?: boolean;
 }) {
-  // Read views remount for committed updates; entering/leaving edit mode starts fresh editor history.
-  return <SessionNotesDocument key={editable ? `${id}:edit` : `${id}:read:${JSON.stringify(value)}`} id={id} title={title} value={value} editable={editable} onChange={onChange} publicSummary={publicSummary} />;
+  const editorId = useId();
+  const serialized = JSON.stringify(value);
+  const observed = useRef(serialized);
+  const emitted = useRef(serialized);
+  const [externalVersion, setExternalVersion] = useState(0);
+  useEffect(() => {
+    if (observed.current === serialized) return;
+    observed.current = serialized;
+    // Another pane can edit the same shared draft. Recreate its editor only for external changes.
+    if (editable && emitted.current !== serialized) setExternalVersion((version) => version + 1);
+  }, [editable, serialized]);
+  const handleChange = (nextValue: Value) => {
+    emitted.current = JSON.stringify(nextValue);
+    onChange(nextValue);
+  };
+  // Read views refresh committed content; mode changes start fresh editor history.
+  return <SessionNotesDocument key={editable ? `${id}:edit:${externalVersion}` : `${id}:read:${serialized}`} id={editorId} title={title} value={value} editable={editable} onChange={handleChange} publicSummary={publicSummary} />;
 }
 
 function SessionNotesDocument({ id, title, value, editable, onChange, publicSummary }: {
@@ -42,7 +56,7 @@ function SessionDirectory() {
   const [query, setQuery] = useState("");
   const searchId = useId();
   const matching = sessions.filter((session) => `${session.number} ${session.title}`.toLowerCase().includes(query.toLowerCase()));
-  return <div className="mx-auto flex max-w-4xl flex-col gap-6 p-6 sm:p-8">
+  return <div className="mx-auto flex max-w-4xl flex-col gap-6 p-4 @lg/session:p-8">
     <header className="flex flex-wrap items-start justify-between gap-4"><div className="flex flex-col gap-1">
       <h1 className="font-serif text-3xl font-semibold">Sessions</h1><p className="text-sm text-muted-foreground">Plan, run, and record your game sessions.</p>
     </div><Button onClick={() => appCommands.openSession(useSessionNotesStore.getState().createSession())}><PlusIcon data-icon="inline-start" />New session</Button></header>
@@ -63,6 +77,7 @@ function SessionDirectory() {
 }
 
 function SessionLinks({ links, editable, onChange }: { links: SessionRecordLink[]; editable: boolean; onChange: (links: SessionRecordLink[]) => void }) {
+  const referenceOptions = useSessionNotesStore((state) => state.referenceOptions);
   const npcs = useCampaign((state) => state.campaign.npcs);
   const locations = useCampaign((state) => state.campaign.locations);
   const factions = useCampaign((state) => state.campaign.factions);
@@ -70,7 +85,7 @@ function SessionLinks({ links, editable, onChange }: { links: SessionRecordLink[
   const [targetId, setTargetId] = useState("");
   const [label, setLabel] = useState("");
   const fieldId = useId();
-  const records = { npc: npcs, location: locations, faction: factions, thread: threadSamples, puzzle: puzzleSamples };
+  const records = { npc: npcs, location: locations, faction: factions, thread: referenceOptions.thread, puzzle: referenceOptions.puzzle };
   const options = records[kind].filter((record) => !links.some((link) => link.kind === kind && link.targetId === record.id));
   const open = (link: SessionRecordLink) => {
     if (link.kind === "npc") appCommands.openCharacter(link.targetId);
@@ -100,7 +115,7 @@ function SessionLinks({ links, editable, onChange }: { links: SessionRecordLink[
       <Field><FieldLabel htmlFor={`${fieldId}-kind`}>Record type</FieldLabel><NativeSelect id={`${fieldId}-kind`} className="w-full" value={kind} onChange={(event) => { setKind(event.currentTarget.value as SessionRecordLink["kind"]); setTargetId(""); }}>
         {(Object.keys(recordKinds) as SessionRecordLink["kind"][]).map((recordKind) => <NativeSelectOption key={recordKind} value={recordKind}>{recordKinds[recordKind]}</NativeSelectOption>)}
       </NativeSelect></Field>
-      {(kind === "thread" || kind === "puzzle") && <p className="text-xs text-muted-foreground">Sample options until these record types are available.</p>}
+      {(kind === "thread" || kind === "puzzle") && <p className="text-xs text-muted-foreground">{records[kind].length ? "Sample options until these record types are available." : "This record type is not available yet."}</p>}
       <Field><FieldLabel htmlFor={`${fieldId}-target`}>Choose record</FieldLabel><NativeSelect id={`${fieldId}-target`} className="w-full" value={targetId} onChange={(event) => setTargetId(event.currentTarget.value)}><NativeSelectOption value="">Choose a record…</NativeSelectOption>{options.map((record) => <NativeSelectOption key={record.id} value={record.id}>{record.name}</NativeSelectOption>)}</NativeSelect></Field>
       <Field><FieldLabel htmlFor={`${fieldId}-label`}>Association note (optional)</FieldLabel><Input id={`${fieldId}-label`} value={label} placeholder="Why it matters this session…" onChange={(event) => setLabel(event.currentTarget.value)} /></Field>
       <Button variant="outline" disabled={!options.some((record) => record.id === targetId)} onClick={() => { onChange([...links, { kind, targetId, label: label.trim() }]); setTargetId(""); setLabel(""); }}><PlusIcon data-icon="inline-start" />Add to session</Button>
@@ -113,15 +128,16 @@ function BeatCard({ beat, index, total, editable, sessionId, onChange, onMove, o
   onChange: (beat: SessionBeat) => void; onMove: (direction: number) => void; onRemove: () => void;
 }) {
   const [expanded, setExpanded] = useState(false);
-  return <Card><CardHeader><CardTitle><Button variant="ghost" className="h-auto max-w-full justify-start whitespace-normal text-left" aria-expanded={expanded} aria-controls={`beat-${beat.id}`} onClick={() => setExpanded(!expanded)}>{index + 1}. {beat.title || "Untitled beat"}</Button></CardTitle>
+  const fieldId = useId();
+  return <Collapsible open={editable || expanded} onOpenChange={setExpanded} render={<Card />}><CardHeader><CardTitle><CollapsibleTrigger disabled={editable} render={<Button variant="ghost" className="h-auto max-w-full justify-start whitespace-normal text-left" />}>{index + 1}. {beat.title || "Untitled beat"}</CollapsibleTrigger></CardTitle>
     <CardAction><Badge variant="secondary">{beat.status === "happened" ? "Happened" : beat.status === "skipped" ? "Skipped" : "Planned"}</Badge></CardAction>
-  </CardHeader>{(expanded || editable) && <CardContent id={`beat-${beat.id}`}><div className="flex flex-col gap-3">
-    {editable && <FieldGroup><Field><FieldLabel htmlFor={`${beat.id}-title`}>Beat title</FieldLabel><Input id={`${beat.id}-title`} value={beat.title} onChange={(event) => onChange({ ...beat, title: event.currentTarget.value })} /></Field>
-      <Field><FieldLabel htmlFor={`${beat.id}-status`}>Status</FieldLabel><NativeSelect id={`${beat.id}-status`} value={beat.status} onChange={(event) => onChange({ ...beat, status: event.currentTarget.value as SessionBeat["status"] })}><NativeSelectOption value="planned">Planned</NativeSelectOption><NativeSelectOption value="happened">Happened</NativeSelectOption><NativeSelectOption value="skipped">Skipped</NativeSelectOption></NativeSelect></Field>
+  </CardHeader><CollapsibleContent><CardContent><div className="flex flex-col gap-3">
+    {editable && <FieldGroup><Field><FieldLabel htmlFor={`${fieldId}-title`}>Beat title</FieldLabel><Input id={`${fieldId}-title`} value={beat.title} onChange={(event) => onChange({ ...beat, title: event.currentTarget.value })} /></Field>
+      <Field><FieldLabel htmlFor={`${fieldId}-status`}>Status</FieldLabel><NativeSelect id={`${fieldId}-status`} value={beat.status} onChange={(event) => onChange({ ...beat, status: event.currentTarget.value as SessionBeat["status"] })}><NativeSelectOption value="planned">Planned</NativeSelectOption><NativeSelectOption value="happened">Happened</NativeSelectOption><NativeSelectOption value="skipped">Skipped</NativeSelectOption></NativeSelect></Field>
     </FieldGroup>}
     <NotesField id={`${sessionId}:${beat.id}`} title="Beat notes" value={beat.notes} editable={editable} onChange={(notes) => onChange({ ...beat, notes })} />
     {editable && <div className="flex flex-wrap gap-2"><Button variant="outline" size="sm" disabled={index === 0} onClick={() => onMove(-1)}><ArrowUpIcon data-icon="inline-start" />Move up</Button><Button variant="outline" size="sm" disabled={index === total - 1} onClick={() => onMove(1)}><ArrowDownIcon data-icon="inline-start" />Move down</Button><Button variant="ghost" size="sm" onClick={onRemove}><Trash2Icon data-icon="inline-start" />Remove</Button></div>}
-  </div></CardContent>}</Card>;
+  </div></CardContent></CollapsibleContent></Collapsible>;
 }
 
 function SessionPage({ id, api }: { id: string; api: IDockviewPanelProps["api"] }) {
@@ -131,7 +147,8 @@ function SessionPage({ id, api }: { id: string; api: IDockviewPanelProps["api"] 
   const record = draft ?? session;
   const editing = !!draft;
   const [captured, setCaptured] = useState(false);
-  useEffect(() => { if (session) api.setTitle(`Session ${session.number} — ${session.title}`); }, [api, session]);
+  const fieldId = useId();
+  useEffect(() => { if (session) api.setTitle(`Session ${session.number} · ${session.title}`); }, [api, session]);
   if (!session || !record) return <Empty><EmptyHeader><EmptyTitle>Session unavailable</EmptyTitle><EmptyDescription>This prototype session is no longer in memory.</EmptyDescription></EmptyHeader><Button variant="outline" onClick={appCommands.openSessions}>All sessions</Button></Empty>;
   const update = (changes: Partial<SessionNote>) => {
     const state = useSessionNotesStore.getState();
@@ -147,20 +164,20 @@ function SessionPage({ id, api }: { id: string; api: IDockviewPanelProps["api"] 
     [beats[index], beats[index + direction]] = [beats[index + direction], beats[index]];
     update({ beats });
   };
-  return <div className="@container mx-auto flex max-w-7xl flex-col gap-5 p-6 sm:p-8">
+  return <div className="mx-auto flex max-w-7xl flex-col gap-5 p-4 @lg/session:p-8">
     <header className="flex flex-wrap items-start justify-between gap-3"><div className="flex min-w-0 flex-1 flex-col gap-2">
       <Button variant="ghost" size="sm" className="self-start" onClick={appCommands.openSessions}><ArrowLeftIcon data-icon="inline-start" />Sessions</Button>
       <h1 className="break-words font-serif text-3xl font-semibold">Session {record.number} — {record.title}</h1><p className="flex items-center gap-2 text-sm text-muted-foreground"><CalendarIcon aria-hidden="true" className="size-4" />{record.date || "No date set"}<Badge variant="outline">{record.previous ? "Previous" : "Upcoming"}</Badge></p>
     </div><div className="flex flex-wrap items-center gap-2">{editing ? <><span className="text-xs text-muted-foreground">{JSON.stringify(session) !== JSON.stringify(draft) ? "Unsaved changes" : "Editing"}</span><Button variant="outline" onClick={() => useSessionNotesStore.getState().discardDraft(id)}>Cancel</Button><Button disabled={!record.title.trim()} onClick={() => useSessionNotesStore.getState().saveDraft(id)}>Save changes</Button></> : <Button variant="outline" onClick={() => useSessionNotesStore.getState().setDraft(id, structuredClone(session))}><PencilIcon data-icon="inline-start" />Edit</Button>}</div></header>
     <p className="text-xs text-muted-foreground">Frontend prototype · Notes and drafts reset when you reload or switch campaigns.</p>
     {editing && <Card><CardHeader><CardTitle>Session details</CardTitle></CardHeader><CardContent><FieldGroup>
-      <Field><FieldLabel htmlFor={`${id}-title`}>Title</FieldLabel><Input id={`${id}-title`} value={record.title} onChange={(event) => update({ title: event.currentTarget.value })} /></Field>
-      <Field><FieldLabel htmlFor={`${id}-number`}>Session number</FieldLabel><Input id={`${id}-number`} type="number" min={1} value={record.number} onChange={(event) => { const number = Number(event.currentTarget.value); if (Number.isInteger(number) && number > 0) update({ number }); }} /></Field>
-      <Field><FieldLabel htmlFor={`${id}-date`}>Date (optional)</FieldLabel><Input id={`${id}-date`} type="date" value={record.date} onChange={(event) => update({ date: event.currentTarget.value })} /></Field>
-      <Field><FieldLabel htmlFor={`${id}-group`}>Directory group</FieldLabel><NativeSelect id={`${id}-group`} value={record.previous ? "previous" : "upcoming"} onChange={(event) => update({ previous: event.currentTarget.value === "previous" })}><NativeSelectOption value="upcoming">Upcoming</NativeSelectOption><NativeSelectOption value="previous">Previous</NativeSelectOption></NativeSelect></Field>
+      <Field data-invalid={!record.title.trim() || undefined}><FieldLabel htmlFor={`${fieldId}-title`}>Title</FieldLabel><Input id={`${fieldId}-title`} aria-invalid={!record.title.trim() || undefined} aria-describedby={!record.title.trim() ? `${fieldId}-title-error` : undefined} value={record.title} onChange={(event) => update({ title: event.currentTarget.value })} />{!record.title.trim() && <FieldError id={`${fieldId}-title-error`}>Enter a session title.</FieldError>}</Field>
+      <Field><FieldLabel htmlFor={`${fieldId}-number`}>Session number</FieldLabel><Input id={`${fieldId}-number`} type="number" min={1} value={record.number} onChange={(event) => { const number = Number(event.currentTarget.value); if (Number.isInteger(number) && number > 0) update({ number }); }} /></Field>
+      <Field><FieldLabel htmlFor={`${fieldId}-date`}>Date (optional)</FieldLabel><Input id={`${fieldId}-date`} type="date" value={record.date} onChange={(event) => update({ date: event.currentTarget.value })} /></Field>
+      <Field><FieldLabel htmlFor={`${fieldId}-group`}>Directory group</FieldLabel><NativeSelect id={`${fieldId}-group`} value={record.previous ? "previous" : "upcoming"} onChange={(event) => update({ previous: event.currentTarget.value === "previous" })}><NativeSelectOption value="upcoming">Upcoming</NativeSelectOption><NativeSelectOption value="previous">Previous</NativeSelectOption></NativeSelect></Field>
     </FieldGroup></CardContent></Card>}
-    <div className="flex min-w-0 flex-col gap-5 @min-[850px]:grid @min-[850px]:grid-cols-[minmax(0,2fr)_minmax(15rem,1fr)] @min-[850px]:items-start">
-      <div className="flex min-w-0 flex-col gap-4">
+    <div className="flex min-w-0 flex-col gap-5 @4xl/session:grid @4xl/session:grid-cols-3 @4xl/session:items-start">
+      <div className="flex min-w-0 flex-col gap-4 @4xl/session:col-span-2">
         <NotesField id={`${id}:left-off`} title="Where we left off" value={record.whereLeftOff} editable={editing} onChange={(whereLeftOff) => update({ whereLeftOff })} />
         <NotesField id={`${id}:prep`} title="Prep notes" value={record.prep} editable={editing} onChange={(prep) => update({ prep })} />
         <section className="flex flex-col gap-3"><header className="flex flex-wrap items-center justify-between gap-2"><h2 className="flex items-center gap-2 font-semibold">Story beats<Badge variant="secondary">{record.beats.length}</Badge></h2>{editing && <Button variant="outline" size="sm" onClick={() => update({ beats: [...record.beats, { id: crypto.randomUUID(), title: "New story beat", notes: emptyNotes(), status: "planned" }] })}><PlusIcon data-icon="inline-start" />Add beat</Button>}</header>
@@ -168,10 +185,10 @@ function SessionPage({ id, api }: { id: string; api: IDockviewPanelProps["api"] 
           {record.beats.map((beat, index) => <BeatCard key={beat.id} beat={beat} sessionId={id} index={index} total={record.beats.length} editable={editing} onChange={changeBeat} onMove={(direction) => moveBeat(index, direction)} onRemove={() => update({ beats: record.beats.filter((item) => item.id !== beat.id) })} />)}
         </section>
         <NotesField id={`${id}:happened`} title="What happened" value={record.happened} editable={editing} onChange={(happened) => update({ happened })} />
-        {!editing && <Card><CardHeader><CardTitle>Quick capture</CardTitle><CardDescription>Append a private note to What happened without editing your prep.</CardDescription></CardHeader><CardContent><div className="flex flex-col gap-3"><Field><FieldLabel htmlFor={`${id}-capture`}>During-play note</FieldLabel><AutoSizeTextarea id={`${id}-capture`} value={capture} placeholder="Decisions, surprises, consequences…" onChange={(event) => { setCaptured(false); useSessionNotesStore.getState().setCapture(id, event.currentTarget.value); }} /></Field><div className="flex flex-wrap items-center justify-between gap-2"><p className="text-xs text-muted-foreground" role="status">{captured ? "Added to What happened." : "Draft stays here while you open other records."}</p><Button disabled={!capture.trim()} onClick={() => { useSessionNotesStore.getState().appendCapture(id); setCaptured(true); }}>Save note</Button></div></div></CardContent></Card>}
+        {!editing && <Card><CardHeader><CardTitle>Quick capture</CardTitle><CardDescription>Append a private note to What happened without editing your prep.</CardDescription></CardHeader><CardContent><div className="flex flex-col gap-3"><Field><FieldLabel htmlFor={`${fieldId}-capture`}>During-play note</FieldLabel><AutoSizeTextarea id={`${fieldId}-capture`} value={capture} placeholder="Decisions, surprises, consequences…" onChange={(event) => { setCaptured(false); useSessionNotesStore.getState().setCapture(id, event.currentTarget.value); }} /></Field><div className="flex flex-wrap items-center justify-between gap-2"><p className="text-xs text-muted-foreground" role="status">{captured ? "Added to What happened." : "Draft stays here while you open other records."}</p><Button disabled={!capture.trim()} onClick={() => { useSessionNotesStore.getState().appendCapture(id); setCaptured(true); }}>Save note</Button></div></div></CardContent></Card>}
         <NotesField id={`${id}:summary`} title="Summary for Players" value={record.summary} editable={editing} publicSummary onChange={(summary) => update({ summary })} />
       </div>
-      <SessionLinks links={record.links} editable={editing} onChange={(links) => update({ links })} />
+      <SessionLinks key={editing ? "edit" : "read"} links={record.links} editable={editing} onChange={(links) => update({ links })} />
     </div>
   </div>;
 }
@@ -184,7 +201,7 @@ export function SessionsPanel({ params, api }: IDockviewPanelProps) {
     const frame = requestAnimationFrame(() => { if (scrollRef.current) scrollRef.current.scrollTop = initialScroll.current; });
     return () => cancelAnimationFrame(frame);
   }, []);
-  return <article ref={scrollRef} className="h-full overflow-auto" onScroll={(event) => { api.updateParameters({ scrollTop: event.currentTarget.scrollTop }); window.dispatchEvent(new Event("campaign-workspace-change")); }}>
+  return <article ref={scrollRef} className="@container/session h-full overflow-auto" onScroll={(event) => { api.updateParameters({ scrollTop: event.currentTarget.scrollTop }); window.dispatchEvent(new Event("campaign-workspace-change")); }}>
     {id ? <SessionPage key={id} id={id} api={api} /> : <SessionDirectory />}
   </article>;
 }

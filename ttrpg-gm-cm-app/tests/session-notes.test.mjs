@@ -26,6 +26,19 @@ test("campaign reset clears notes, edit drafts, and unsubmitted quick captures",
   resetSessionNotes();
   const state = useSessionNotesStore.getState();
   assert.deepEqual(state.sessions, []);
+  assert.deepEqual(state.referenceOptions, { thread: [], puzzle: [] });
   assert.deepEqual(state.drafts, {});
   assert.deepEqual(state.captures, {});
+});
+
+
+test("sample references are isolated to the demo campaign and reset between campaigns", () => {
+  resetSessionNotes(true);
+  assert.ok(useSessionNotesStore.getState().referenceOptions.thread.length > 0);
+  assert.ok(useSessionNotesStore.getState().referenceOptions.puzzle.length > 0);
+  useSessionNotesStore.getState().referenceOptions.thread[0].name = "Edited sample";
+  resetSessionNotes(true);
+  assert.equal(useSessionNotesStore.getState().referenceOptions.thread[0].name, "The Missing Shipment");
+  resetSessionNotes(false);
+  assert.deepEqual(useSessionNotesStore.getState().referenceOptions, { thread: [], puzzle: [] });
 });

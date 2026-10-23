@@ -3,6 +3,11 @@ import type { SessionBeat, SessionNote, SessionRecordLink } from "../stores/sess
 
 type NamedRecord = { id: string; name: string };
 export type SessionSampleRecords = { npcs: NamedRecord[]; locations: NamedRecord[]; factions: NamedRecord[] };
+export const sampleSessionReferences = {
+  thread: [{ id: "sample-thread-shipment", name: "The Missing Shipment" }, { id: "sample-thread-lantern", name: "The Lantern Below" }],
+  puzzle: [{ id: "sample-puzzle-vault", name: "The Lighthouse Vault" }, { id: "sample-puzzle-bells", name: "The Three Harbor Bells" }],
+};
+
 const notes = (...paragraphs: string[]): Value => paragraphs.map((text) => ({ type: "p", children: [{ text }] }));
 const heading = (text: string): Value[number] => ({ type: "h3", children: [{ text }] });
 const beat = (id: string, title: string, text: string, status: SessionBeat["status"] = "planned"): SessionBeat => ({ id, title, notes: notes(text), status });

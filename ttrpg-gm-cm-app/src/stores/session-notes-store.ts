@@ -1,4 +1,4 @@
-import { sampleSessions, type SessionSampleRecords } from "../lib/sample-sessions.ts";
+import { sampleSessions, sampleSessionReferences, type SessionSampleRecords } from "../lib/sample-sessions.ts";
 import { create } from "zustand";
 import type { Value } from "platejs";
 
@@ -26,6 +26,7 @@ export const sessionText = (text = ""): Value => [{ type: "p", children: [{ text
 
 type SessionNotesState = {
   sessions: SessionNote[];
+  referenceOptions: typeof sampleSessionReferences;
   drafts: Record<string, SessionNote>;
   captures: Record<string, string>;
   createSession: () => string;
@@ -42,7 +43,7 @@ function blankSession(number: number): SessionNote {
 }
 
 export const useSessionNotesStore = create<SessionNotesState>()((set, get) => ({
-  sessions: [], drafts: {}, captures: {},
+  sessions: [], referenceOptions: { thread: [], puzzle: [] }, drafts: {}, captures: {},
   createSession: () => {
     const session = blankSession(Math.max(0, ...get().sessions.map((item) => item.number)) + 1);
     set((state) => ({ sessions: [...state.sessions, session], drafts: { ...state.drafts, [session.id]: structuredClone(session) } }));
@@ -70,5 +71,5 @@ export const useSessionNotesStore = create<SessionNotesState>()((set, get) => ({
 }));
 
 export function resetSessionNotes(sample = false, records: SessionSampleRecords = { npcs: [], locations: [], factions: [] }) {
-  useSessionNotesStore.setState({ sessions: sample ? sampleSessions(records) : [], drafts: {}, captures: {} });
+  useSessionNotesStore.setState({ sessions: sample ? sampleSessions(records) : [], referenceOptions: sample ? structuredClone(sampleSessionReferences) : { thread: [], puzzle: [] }, drafts: {}, captures: {} });
 }

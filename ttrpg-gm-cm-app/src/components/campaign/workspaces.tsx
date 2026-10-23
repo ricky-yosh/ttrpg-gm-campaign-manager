@@ -1,3 +1,4 @@
+import { withoutPrototypePanels } from "@/lib/session-workspace";
 import { SessionsPanel } from "@/components/campaign/sessions-panel";
 import { useSessionNotesStore } from "@/stores/session-notes-store";
 import { InventoryPanel } from "@/components/campaign/inventory-panel";
@@ -211,13 +212,13 @@ export function Workspaces({ ref, isDark, onSearch, historyEnabled }: {
     if (session.generation !== generation) return;
     const workspace = {
       layout: container.toJSON(),
-      panels: Object.fromEntries(container.panels.map((panel) => [panel.id, panels.current.get(panel.id)!.toJSON()])),
+      panels: Object.fromEntries(container.panels.map((panel) => [panel.id, withoutPrototypePanels(panels.current.get(panel.id)!.toJSON())])),
       nextId: nextId.current, sidebarWidth: session.workspaceSidebarWidth, collapsed: session.workspaceCollapsed,
       history: {
         ...structuredClone(session.navigation),
-        // Session records are a memory-only prototype; never save their transient IDs as destinations.
-        entries: session.navigation.entries.map((entry) => entry.kind === "sample" && (entry.sampleSection === "Sessions" || entry.sampleSection.startsWith("Sessions:"))
-          ? { kind: "section" as const, section: "Sessions" } : entry),
+        // Prototype records are memory-only; save their sidebar sections rather than transient destinations.
+        entries: session.navigation.entries.map((entry) => entry.kind === "sample"
+          ? { kind: "section" as const, section: entry.sampleSection === "Sessions" || entry.sampleSection.startsWith("Sessions:") ? "Sessions" : entry.sampleSection } : entry),
       },
     };
     const campaign = getCampaign().campaign;
