@@ -10,7 +10,7 @@ The selected target storage engine is **embedded Turso Database**, the Rust SQLi
 
 The current persistence description below remains an implementation reference. Later React/Tauri tooling choices and frontend state-ownership proposals describe the existing architecture or earlier plans, not constraints on the proposed Rune target. During migration, keep the existing app usable and preserve campaign compatibility; do not expand superseded UI-specific proposals without reviewing the new plan.
 
-See [Locations](locations.md), [Factions](factions.md), [Inventory](inventory.md), and [Maps](maps.md) for record editors and database migrations. The current database version is 5. Saved map artwork and placements use the same campaign transaction and asset directory; map gestures have bounded frontend undo history for the current campaign.
+See [Locations](locations.md), [Factions](factions.md), [Inventory](inventory.md), and [Maps](maps.md) for record editors and database migrations. See [Story threads](story-threads.md) for saved thread dossiers and contextual record links. See [Items](items.md) for the extensible catalog. The current database version is 7. Saved map artwork and placements use the same campaign transaction and asset directory; map gestures have bounded frontend undo history for the current campaign.
 
 ## Current persistence prototype
 

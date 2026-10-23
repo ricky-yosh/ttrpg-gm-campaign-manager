@@ -2,6 +2,10 @@ import { normalizeSection } from "../lib/navigation-sections.ts";
 import { create } from "zustand";
 
 export type NavigationDestination =
+  | { kind: "item"; workspaceId: string; itemId: string; section: string | null }
+  | { kind: "items"; workspaceId: string; section: string | null }
+  | { kind: "thread"; workspaceId: string; threadId: string; section: string | null }
+  | { kind: "threads"; workspaceId: string; section: string | null }
   | { kind: "faction"; workspaceId: string; factionId: string; section: string | null }
   | { kind: "location"; workspaceId: string; locationId: string; section: string | null }
   | { kind: "character"; workspaceId: string; characterId: string; section: string | null }
@@ -22,6 +26,8 @@ type CampaignSession = {
   npcs: { id: string }[];
   locations?: { id: string }[];
   factions?: { id: string }[];
+  threads?: { id: string }[];
+  items?: { id: string }[];
   maps?: { id: string }[];
   workspace: { history: StoredNavigationHistory; sidebarWidth: number; collapsed: boolean } | null;
 };
@@ -53,6 +59,8 @@ export type SessionState = {
   characterIds: string[];
   locationIds: string[];
   factionIds: string[];
+  threadIds: string[];
+  itemIds: string[];
   mapIds: string[];
   setSection: (section: string | null) => void;
   openSettings: () => void;
@@ -71,6 +79,8 @@ export type SessionState = {
   setWorkspaceSidebar: (change: { width?: number; collapsed?: boolean }) => void;
   setCharacterIds: (ids: string[]) => void;
   setLocationIds: (ids: string[]) => void;
+  setItemIds: (ids: string[]) => void;
+  setThreadIds: (ids: string[]) => void;
   setFactionIds: (ids: string[]) => void;
   setMapIds: (ids: string[]) => void;
   setWorkspaceDestination: (destination: Extract<NavigationDestination, { workspaceId: string }> | null) => void;
@@ -88,6 +98,8 @@ function isValidDestination(state: SessionState, destination: NavigationDestinat
   return state.validWorkspaceIds.includes(destination.workspaceId)
     && (destination.kind !== "character" || state.characterIds.includes(destination.characterId))
     && (destination.kind !== "location" || state.locationIds.includes(destination.locationId))
+    && (destination.kind !== "item" || state.itemIds.includes(destination.itemId))
+    && (destination.kind !== "thread" || state.threadIds.includes(destination.threadId))
     && (destination.kind !== "faction" || state.factionIds.includes(destination.factionId))
     && (destination.kind !== "map" || !!destination.mapId && state.mapIds.includes(destination.mapId));
 }
@@ -113,6 +125,7 @@ export function normalizeNavigationHistory(history?: StoredNavigationHistory): N
   history.entries.forEach((destination, position) => {
     if ("kind" in destination) {
       if (destination.kind === "sample" && destination.sampleSection === "Overview") return;
+      if (destination.kind === "sample" && destination.sampleSection === "Items") destination = { kind: "items", workspaceId: destination.workspaceId, section: "Items" };
       if (destination.kind === "section" && destination.section === "Overview") return;
       entries.push(destination.kind === "map" && !destination.mapId ? { kind: "section", section: "Maps" }
         : destination.kind === "settings" ? destination
@@ -151,6 +164,8 @@ export const useSessionStore = create<SessionState>()((set, get) => ({
   characterIds: [],
   locationIds: [],
   factionIds: [],
+  threadIds: [],
+  itemIds: [],
   mapIds: [],
   setSection: (section) => {
     const workspace = get().workspaceDestination;
@@ -192,6 +207,8 @@ export const useSessionStore = create<SessionState>()((set, get) => ({
     workspaceCollapsed: change.collapsed ?? state.workspaceCollapsed,
   })),
   setMapIds: (mapIds) => { if (JSON.stringify(get().mapIds) !== JSON.stringify(mapIds)) set({ mapIds }); },
+  setItemIds: (itemIds) => { if (JSON.stringify(get().itemIds) !== JSON.stringify(itemIds)) set({ itemIds }); },
+  setThreadIds: (threadIds) => { if (JSON.stringify(get().threadIds) !== JSON.stringify(threadIds)) set({ threadIds }); },
   setFactionIds: (factionIds) => { if (JSON.stringify(get().factionIds) !== JSON.stringify(factionIds)) set({ factionIds }); },
   setLocationIds: (locationIds) => { if (JSON.stringify(get().locationIds) !== JSON.stringify(locationIds)) set({ locationIds }); },
   setCharacterIds: (characterIds) => { if (JSON.stringify(get().characterIds) !== JSON.stringify(characterIds)) set({ characterIds }); },
@@ -205,6 +222,8 @@ export const useSessionStore = create<SessionState>()((set, get) => ({
       && (destination.kind !== "character" || (workspaceDestination.kind === "character" && destination.characterId === workspaceDestination.characterId))
       && (destination.kind !== "location" || (workspaceDestination.kind === "location" && destination.locationId === workspaceDestination.locationId))
       && (destination.kind !== "map" || (workspaceDestination.kind === "map" && destination.mapId === workspaceDestination.mapId))
+      && (destination.kind !== "item" || (workspaceDestination.kind === "item" && destination.itemId === workspaceDestination.itemId))
+      && (destination.kind !== "thread" || (workspaceDestination.kind === "thread" && destination.threadId === workspaceDestination.threadId))
       && (destination.kind !== "faction" || (workspaceDestination.kind === "faction" && destination.factionId === workspaceDestination.factionId));
     // Dockview selected a fallback after a close/move. Align the cursor with
     // that existing visit rather than recording a new user navigation.
@@ -266,6 +285,8 @@ export function hydrateSession(campaign: CampaignSession, generation: number) {
     validWorkspaceIds: [],
     characterIds: campaign.npcs.map((npc) => npc.id),
     locationIds: (campaign.locations ?? []).map((location) => location.id),
+    itemIds: (campaign.items ?? []).map((item) => item.id),
+    threadIds: (campaign.threads ?? []).map((thread) => thread.id),
     factionIds: (campaign.factions ?? []).map((faction) => faction.id),
     mapIds: (campaign.maps ?? []).map((map) => map.id),
   });

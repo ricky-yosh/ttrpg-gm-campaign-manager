@@ -1,11 +1,10 @@
-import { PackageIcon, PuzzleIcon, ScrollTextIcon, SwordsIcon } from "lucide-react";
+import { PuzzleIcon, ScrollTextIcon, SwordsIcon } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import sampleArtwork from "@/assets/sample-campaign/artwork.json";
 
 const sectionArtwork: Record<string, { banner: string; entries: string[] }> = {
   "Story Threads": { banner: "eastern-seawall", entries: ["eastern-seawall", "harbor", "dockworkers-guild", "greyhaven"] },
-  Items: { banner: "harbor-relics", entries: ["harbor-relics", "harbor-relics", "harbor-relics", "harbor-relics"] },
   Puzzles: { banner: "salt-written-chart", entries: ["eastern-seawall", "salt-written-chart", "salt-written-chart"] },
 };
 
@@ -23,15 +22,6 @@ const sections = {
       ["Mossgate Watch", "Long term · Harrow Glen", "Blue sparks have returned to the forest ruin, and Carlos refuses to go there alone.", "Waiting"],
     ],
   },
-  Items: {
-    eyebrow: "People & things", title: "Item Catalog", description: "Notable gear, curiosities, and rewards the party may encounter.",
-    entries: [
-      ["Tideglass Compass", "Wondrous item · Uncommon", "Its needle points toward the nearest body of salt water. At night, it trembles near old magic.", "Unidentified"],
-      ["Morrow’s Wax Seal", "Evidence · Quest item", "A black wax seal stamped with a split crescent. The matching ledger is missing.", "Party holds"],
-      ["Lantern of the Deep", "Wondrous item · Rare", "A brass hooded lantern that burns with cold blue light beneath the sea.", "Not found"],
-      ["Dock Ward Key", "Tool · Common", "A heavy iron key marked with the Dockworkers’ Guild tally.", "Niya carries"],
-    ],
-  },
   Puzzles: {
     eyebrow: "People & things", title: "Puzzles & Clues", description: "Mysteries prepared for play, with their current state and table-facing clues.",
     entries: [
@@ -42,7 +32,7 @@ const sections = {
   },
 } as const;
 
-const icons: Record<string, typeof ScrollTextIcon> = { "Story Threads": ScrollTextIcon, Items: PackageIcon, Puzzles: PuzzleIcon };
+const icons: Record<string, typeof ScrollTextIcon> = { "Story Threads": ScrollTextIcon, Puzzles: PuzzleIcon };
 
 export function SampleSectionPage({ section }: { section: string }) {
   const data = sections[section as keyof typeof sections];

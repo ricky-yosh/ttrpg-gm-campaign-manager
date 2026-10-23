@@ -1,3 +1,5 @@
+import { useItemDrafts } from "../stores/item-drafts.ts";
+import { useThreadDrafts } from "../stores/story-thread-drafts.ts";
 import { resetSessionNotes } from "../stores/session-notes-store.ts";
 import { campaignStore, sampleCampaignId } from "./campaign-data.ts";
 import { hydrateSession, useSessionStore } from "../stores/session-store.ts";
@@ -8,9 +10,13 @@ resetSessionNotes(initial.campaign.id === sampleCampaignId, initial.campaign);
 hydrateSession(initial.campaign, initial.generation);
 const unsubscribe = campaignStore.subscribe((state, previous) => {
   if (state.generation !== previous.generation) {
+    useItemDrafts.setState({ drafts: {} });
+    useThreadDrafts.setState({ drafts: {} });
     resetSessionNotes(state.campaign.id === sampleCampaignId, state.campaign);
     hydrateSession(state.campaign, state.generation);
   } else {
+    if (state.campaign.items !== previous.campaign.items) useSessionStore.getState().setItemIds((state.campaign.items ?? []).map((item) => item.id));
+    if (state.campaign.threads !== previous.campaign.threads) useSessionStore.getState().setThreadIds((state.campaign.threads ?? []).map((thread) => thread.id));
     if (state.campaign.maps !== previous.campaign.maps) useSessionStore.getState().setMapIds((state.campaign.maps ?? []).map((map) => map.id));
     if (state.campaign.factions !== previous.campaign.factions) useSessionStore.getState().setFactionIds((state.campaign.factions ?? []).map((faction) => faction.id));
     if (state.campaign.locations !== previous.campaign.locations) useSessionStore.getState().setLocationIds((state.campaign.locations ?? []).map((location) => location.id));

@@ -75,3 +75,19 @@ test("removes other prototype tabs without retaining their group or panel data",
   assert.equal(saved.activeGroup, "records");
   assert.deepEqual(saved.grid.root.data[0].data.views, ["location"]);
 });
+
+test("saved story thread tabs remain while transient session panels are removed", () => {
+  const layout = {
+    grid: { root: { type: "branch", data: [{ type: "leaf", data: { id: "group", views: ["session", "thread", "directory"], activeView: "thread" } }] }, width: 1000, height: 700, orientation: "HORIZONTAL" },
+    panels: {
+      session: { id: "session", contentComponent: "sessions" },
+      thread: { id: "thread", contentComponent: "thread", params: { threadId: "thread-1", scrollTop: 180 } },
+      directory: { id: "directory", contentComponent: "threads" },
+    },
+    activeGroup: "group",
+  };
+  const saved = withoutPrototypePanels(layout);
+  assert.deepEqual(Object.keys(saved.panels), ["thread", "directory"]);
+  assert.equal(saved.panels.thread.params.scrollTop, 180);
+  assert.equal(saved.grid.root.data[0].data.activeView, "thread");
+});

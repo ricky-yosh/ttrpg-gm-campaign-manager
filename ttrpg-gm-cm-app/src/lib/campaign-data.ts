@@ -1,3 +1,5 @@
+import { itemError, itemFieldsError, newItem, type CampaignItem, type ItemFieldDefinition } from "./item-data.ts";
+import { newStoryThread, threadError, threadNotes, type StoryThread } from "./story-thread-data.ts";
 import { emptyInventory, inventoryError, type PartyInventory } from "./inventory-data.ts";
 import sampleArtwork from "../assets/sample-campaign/artwork.json" with { type: "json" };
 import { useStore } from "zustand";
@@ -125,6 +127,9 @@ export type Campaign = {
   locations: Location[];
   maps?: CampaignMap[];
   factions: Faction[];
+  threads?: StoryThread[];
+  items?: CampaignItem[];
+  itemFields?: ItemFieldDefinition[];
   inventory?: PartyInventory;
   statblockFieldSet: { id: string; version: number };
   workspace: WorkspaceState | null;
@@ -140,7 +145,7 @@ export function statblockFieldSetLabel(fieldSet: { id: string; version: number }
 export function emptyCampaign(name: string): Campaign {
   const now = new Date().toISOString();
   return { format: "ttrpg-campaign", schemaVersion: 1, id: crypto.randomUUID(), name,
-    createdAt: now, updatedAt: now, npcs: [], locations: [], maps: [], factions: [], inventory: emptyInventory(), statblockFieldSet: { id: "dnd-5.5e", version: 1 },
+    createdAt: now, updatedAt: now, npcs: [], locations: [], maps: [], factions: [], threads: [], items: [], itemFields: [], inventory: emptyInventory(), statblockFieldSet: { id: "dnd-5.5e", version: 1 },
     workspace: null, section: null, sidebar: { width: 256, open: true } };
 }
 
@@ -397,6 +402,14 @@ demo.factions = [
   { id: crypto.randomUUID(), name: "Dockworkers’ Guild", image: { type: "img", url: sampleArtwork["dockworkers-guild"] }, description: "The union of stevedores, chandlers, and harbor crews that keeps Greyhaven’s trade moving.", gmNotes: "Guildmaster Orla suspects someone is replacing cargo tallies." },
   { id: crypto.randomUUID(), name: "The Saltglass Circle", image: { type: "img", url: sampleArtwork["saltglass-circle"] }, description: "A discreet society of navigators and scholars who collect stories of impossible lights at sea.", gmNotes: "They know the drowned shrine is real and want its door kept shut." },
 ];
+demo.itemFields = [
+  { id: "sample-item-category", label: "Category", kind: "text", options: [] },
+];
+demo.items = [
+  { ...newItem("Tideglass Compass"), id: "sample-item-compass", image: { type: "img", url: sampleArtwork["harbor-relics"] }, description: "Its needle points toward the nearest body of salt water.", gmNotes: "The compass once belonged to the lighthouse keeper.", values: { "sample-item-category": "Wondrous" } },
+  { ...newItem("Morrow’s Wax Seal"), id: "sample-item-seal", description: "Black wax stamped with a split crescent.", values: { "sample-item-category": "Evidence" } },
+  { ...newItem("Lantern of the Deep"), id: "sample-item-lantern", description: "A brass lantern that burns with cold blue light beneath the sea.", values: { "sample-item-category": "Wondrous" } },
+];
 demo.inventory = { gold: 248, entries: [
   { id: crypto.randomUUID(), name: "Healing Potion", kind: "item", quantity: 3, note: "One is marked with the apothecary’s blue wax." },
   { id: crypto.randomUUID(), name: "Tideglass Compass", kind: "item", quantity: 1, note: "Needle shivers near the eastern seawall." },
@@ -409,6 +422,16 @@ demo.maps = [{ id: "greyhaven-city-map", name: "Greyhaven city", kind: "City", i
     { id: "inn-pin", x: 0.76, y: 0.79, locationId: demoLocations.inn, label: "", destinationMapId: null },
     { id: "seawall-pin", x: 0.31, y: 0.55, locationId: demoLocations.seawall, label: "", destinationMapId: null },
   ] }];
+
+demo.threads = [{ ...newStoryThread("The Missing Morrow"), id: "sample-thread-morrow", status: "active",
+  playerReminder: "The Morrow vanished with a guild shipment. You recovered a ledger, but the altered cargo tallies still need explaining.",
+  origin: "A request from the Dockworkers’ Guild after a shipment failed to reach Greyhaven.", sourceLabel: "Missing shipment",
+  currentSituation: threadNotes("The recovered ledger points toward the harbor. Who changed the tallies, and where did the crew go?"),
+  gmPossibilities: threadNotes("The guild wants a quiet recovery. Niya could bring an interested buyer; a frightened crew member might ask for protection."),
+  people: [{ targetId: demo.npcs[1].id, label: "Niya has found a buyer for the ledger, but has not revealed who is paying." }],
+  locations: [{ targetId: demoLocations.harbor, label: "The shipment’s last known destination; dock crews may have seen the diversion." }],
+  factions: [{ targetId: demo.factions[0].id, label: "Wants its cargo back and suspects someone altered the tallies." }],
+}];
 
 export const campaignStore = createCampaignStore({ campaign: demo, path: null, revision: 0, savedRevision: 0,
   status: "Choose Save to keep this campaign", error: "", generation: 0, isLeaving: false,
@@ -439,6 +462,53 @@ export function saveLocation(id: string, changes: Omit<Location, "id">) {
   updateCampaign({ locations: campaign.locations.map((location) => location.id === id ? withLocationDefaults({ ...structuredClone(changes), id, name: changes.name.trim() }) : location) });
   return true;
 }
+export function createItem(name: string) {
+  if (getCampaign().isLeaving || !name.trim()) return null;
+  const item = newItem(name);
+  updateCampaign({ items: [...(getCampaign().campaign.items ?? []), item] });
+  return item.id;
+}
+
+export function saveItem(item: CampaignItem, newFields: ItemFieldDefinition[]): string | null {
+  const { campaign, isLeaving } = getCampaign();
+  if (isLeaving) return "The campaign is closing. Try again when it is ready.";
+  const fields = [...(campaign.itemFields ?? []), ...newFields];
+  const error = itemFieldsError(fields) ?? itemError(item, fields);
+  if (error) return error;
+  const saved = campaign.items?.find((record) => record.id === item.id);
+  if (!saved) return "This item is no longer available.";
+  const accepted = { ...structuredClone(item), name: item.name.trim() };
+  if (newFields.length || JSON.stringify(saved) !== JSON.stringify(accepted)) {
+    updateCampaign({ items: campaign.items!.map((record) => record.id === item.id ? accepted : record), itemFields: structuredClone(fields) });
+  }
+  return null;
+}
+
+export function removeItem(id: string) {
+  const { campaign, isLeaving } = getCampaign();
+  if (isLeaving || !campaign.items?.some((item) => item.id === id)) return false;
+  updateCampaign({ items: campaign.items.filter((item) => item.id !== id) });
+  return true;
+}
+
+export function createThread(title: string) {
+  if (getCampaign().isLeaving || !title.trim()) return null;
+  const thread = newStoryThread(title);
+  updateCampaign({ threads: [...(getCampaign().campaign.threads ?? []), thread] });
+  return thread.id;
+}
+export function saveThread(thread: StoryThread): string | null {
+  if (getCampaign().isLeaving) return "The campaign is closing. Try again when it is ready.";
+  const { campaign } = getCampaign();
+  const error = threadError(thread);
+  if (error) return error;
+  const saved = campaign.threads?.find((item) => item.id === thread.id);
+  if (!saved) return "This thread is no longer available.";
+  const accepted = { ...structuredClone(thread), title: thread.title.trim() };
+  if (JSON.stringify(saved) !== JSON.stringify(accepted)) updateCampaign({ threads: campaign.threads!.map((item) => item.id === thread.id ? accepted : item) });
+  return null;
+}
+
 export function createFaction(name: string) {
   const trimmed = name.trim();
   if (!trimmed) return null;

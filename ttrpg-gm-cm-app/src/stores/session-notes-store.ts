@@ -43,7 +43,7 @@ function blankSession(number: number): SessionNote {
 }
 
 export const useSessionNotesStore = create<SessionNotesState>()((set, get) => ({
-  sessions: [], referenceOptions: { thread: [], puzzle: [] }, drafts: {}, captures: {},
+  sessions: [], referenceOptions: { puzzle: [] }, drafts: {}, captures: {},
   createSession: () => {
     const session = blankSession(Math.max(0, ...get().sessions.map((item) => item.number)) + 1);
     set((state) => ({ sessions: [...state.sessions, session], drafts: { ...state.drafts, [session.id]: structuredClone(session) } }));
@@ -71,5 +71,5 @@ export const useSessionNotesStore = create<SessionNotesState>()((set, get) => ({
 }));
 
 export function resetSessionNotes(sample = false, records: SessionSampleRecords = { npcs: [], locations: [], factions: [] }) {
-  useSessionNotesStore.setState({ sessions: sample ? sampleSessions(records) : [], referenceOptions: sample ? structuredClone(sampleSessionReferences) : { thread: [], puzzle: [] }, drafts: {}, captures: {} });
+  useSessionNotesStore.setState({ sessions: sample ? sampleSessions(records) : [], referenceOptions: sample ? structuredClone(sampleSessionReferences) : { puzzle: [] }, drafts: {}, captures: {} });
 }

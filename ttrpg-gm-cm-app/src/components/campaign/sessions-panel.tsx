@@ -11,45 +11,13 @@ import { NativeSelect, NativeSelectOption } from "@/components/ui/native-select"
 import { Empty, EmptyDescription, EmptyHeader, EmptyTitle } from "@/components/ui/empty";
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
 import { Card, CardAction, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
-import { NpcNotesEditor, useNpcNotesEditor } from "@/components/campaign/npc-notes-editor";
+import { NotesField } from "@/components/campaign/notes-field";
 import { appCommands } from "@/lib/app-commands";
 import { useCampaign } from "@/lib/campaign-data";
 import { useSessionNotesStore, type SessionNote, type SessionBeat, type SessionRecordLink } from "@/stores/session-notes-store";
 
 const recordKinds = { npc: "NPCs", location: "Locations", faction: "Factions", thread: "Story threads", puzzle: "Puzzles" };
 const emptyNotes = (): Value => [{ type: "p", children: [{ text: "" }] }];
-
-function NotesField({ id, title, value, editable, onChange, publicSummary = false }: {
-  id: string; title: string; value: Value; editable: boolean; onChange: (value: Value) => void; publicSummary?: boolean;
-}) {
-  const editorId = useId();
-  const serialized = JSON.stringify(value);
-  const observed = useRef(serialized);
-  const emitted = useRef(serialized);
-  const [externalVersion, setExternalVersion] = useState(0);
-  useEffect(() => {
-    if (observed.current === serialized) return;
-    observed.current = serialized;
-    // Another pane can edit the same shared draft. Recreate its editor only for external changes.
-    if (editable && emitted.current !== serialized) setExternalVersion((version) => version + 1);
-  }, [editable, serialized]);
-  const handleChange = (nextValue: Value) => {
-    emitted.current = JSON.stringify(nextValue);
-    onChange(nextValue);
-  };
-  // Read views refresh committed content; mode changes start fresh editor history.
-  return <SessionNotesDocument key={editable ? `${id}:edit:${externalVersion}` : `${id}:read:${serialized}`} id={editorId} title={title} value={value} editable={editable} onChange={handleChange} publicSummary={publicSummary} />;
-}
-
-function SessionNotesDocument({ id, title, value, editable, onChange, publicSummary }: {
-  id: string; title: string; value: Value; editable: boolean; onChange: (value: Value) => void; publicSummary: boolean;
-}) {
-  const editor = useNpcNotesEditor(id, value);
-  return <NpcNotesEditor editor={editor} npcName={title} title={title} editable={editable}
-    onChange={(nextValue) => { if (editable && JSON.stringify(nextValue) !== JSON.stringify(value)) onChange(nextValue); }}
-    description={publicSummary ? "Player-facing recap · separate from private notes" : "Private session notes"}
-    ariaLabel={title} placeholder={publicSummary ? "Write a recap for the players…" : `Add ${title.toLowerCase()}…`} />;
-}
 
 function SessionDirectory() {
   const sessions = useSessionNotesStore((state) => state.sessions);
@@ -77,6 +45,7 @@ function SessionDirectory() {
 }
 
 function SessionLinks({ links, editable, onChange }: { links: SessionRecordLink[]; editable: boolean; onChange: (links: SessionRecordLink[]) => void }) {
+  const threads = useCampaign((state) => state.campaign.threads);
   const referenceOptions = useSessionNotesStore((state) => state.referenceOptions);
   const npcs = useCampaign((state) => state.campaign.npcs);
   const locations = useCampaign((state) => state.campaign.locations);
@@ -85,11 +54,12 @@ function SessionLinks({ links, editable, onChange }: { links: SessionRecordLink[
   const [targetId, setTargetId] = useState("");
   const [label, setLabel] = useState("");
   const fieldId = useId();
-  const records = { npc: npcs, location: locations, faction: factions, thread: referenceOptions.thread, puzzle: referenceOptions.puzzle };
+  const records = { npc: npcs, location: locations, faction: factions, thread: (threads ?? []).map((thread) => ({ id: thread.id, name: thread.title })), puzzle: referenceOptions.puzzle };
   const options = records[kind].filter((record) => !links.some((link) => link.kind === kind && link.targetId === record.id));
   const open = (link: SessionRecordLink) => {
     if (link.kind === "npc") appCommands.openCharacter(link.targetId);
     if (link.kind === "location") appCommands.openLocation(link.targetId);
+    if (link.kind === "thread") appCommands.openThread(link.targetId);
     if (link.kind === "faction") appCommands.openFaction(link.targetId);
   };
   return <Card><CardHeader><CardTitle variant="dossier">Related records</CardTitle><CardDescription>Relevant to this session; linking does not mark an encounter or visit.</CardDescription></CardHeader><CardContent><div className="flex flex-col gap-5">
@@ -100,7 +70,7 @@ function SessionLinks({ links, editable, onChange }: { links: SessionRecordLink[
         {!group.length && <p className="text-xs text-muted-foreground">None linked.</p>}
         <ul className="flex flex-col gap-2">{group.map((link) => {
           const target = records[recordKind].find((record) => record.id === link.targetId);
-          const sample = recordKind === "thread" || recordKind === "puzzle";
+          const sample = recordKind === "puzzle";
           return <li key={link.targetId} className="flex min-w-0 flex-col gap-2 rounded-lg border p-2"><div className="flex min-w-0 items-center gap-1">
             {sample ? <span className="min-w-0 flex-1 break-words text-sm">{target?.name ?? "Unavailable record"} <Badge variant="outline">Sample</Badge></span>
               : <Button variant="link" size="sm" disabled={!target} className="min-w-0 flex-1 justify-start" onClick={() => open(link)}><span className="truncate">{target?.name ?? "Unavailable record"}</span></Button>}
@@ -115,7 +85,7 @@ function SessionLinks({ links, editable, onChange }: { links: SessionRecordLink[
       <Field><FieldLabel htmlFor={`${fieldId}-kind`}>Record type</FieldLabel><NativeSelect id={`${fieldId}-kind`} className="w-full" value={kind} onChange={(event) => { setKind(event.currentTarget.value as SessionRecordLink["kind"]); setTargetId(""); }}>
         {(Object.keys(recordKinds) as SessionRecordLink["kind"][]).map((recordKind) => <NativeSelectOption key={recordKind} value={recordKind}>{recordKinds[recordKind]}</NativeSelectOption>)}
       </NativeSelect></Field>
-      {(kind === "thread" || kind === "puzzle") && <p className="text-xs text-muted-foreground">{records[kind].length ? "Sample options until these record types are available." : "This record type is not available yet."}</p>}
+      {kind === "puzzle" && <p className="text-xs text-muted-foreground">{records[kind].length ? "Sample options until these record types are available." : "This record type is not available yet."}</p>}
       <Field><FieldLabel htmlFor={`${fieldId}-target`}>Choose record</FieldLabel><NativeSelect id={`${fieldId}-target`} className="w-full" value={targetId} onChange={(event) => setTargetId(event.currentTarget.value)}><NativeSelectOption value="">Choose a record…</NativeSelectOption>{options.map((record) => <NativeSelectOption key={record.id} value={record.id}>{record.name}</NativeSelectOption>)}</NativeSelect></Field>
       <Field><FieldLabel htmlFor={`${fieldId}-label`}>Association note (optional)</FieldLabel><Input id={`${fieldId}-label`} value={label} placeholder="Why it matters this session…" onChange={(event) => setLabel(event.currentTarget.value)} /></Field>
       <Button variant="outline" disabled={!options.some((record) => record.id === targetId)} onClick={() => { onChange([...links, { kind, targetId, label: label.trim() }]); setTargetId(""); setLabel(""); }}><PlusIcon data-icon="inline-start" />Add to session</Button>

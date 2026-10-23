@@ -1,3 +1,4 @@
+import { StoryThreadsSidebar } from "@/components/campaign/story-threads-panel";
 import { useSessionNotesStore } from "@/stores/session-notes-store";
 import { MapsDirectory } from "@/components/campaign/maps-directory";
 import { FactionsDirectory } from "@/components/campaign/factions-directory";
@@ -72,8 +73,6 @@ const destinationGroups = [
 ];
 
 const sampleSidebarEntries: Record<string, string[]> = {
-  "Story Threads": ["The Lantern Below", "The Missing Morrow", "A Favor for the Guild", "Mossgate Watch"],
-  Items: ["Tideglass Compass", "Morrow’s Wax Seal", "Lantern of the Deep"],
   Puzzles: ["The Three Harbor Bells", "The Salt-Written Chart", "The Lighthouse Ledger"],
 };
 
@@ -200,6 +199,7 @@ export function AppSidebar({ isPresenterView = false, presenterSection = "map", 
   const isMacOS = typeof navigator !== "undefined" && /Mac|iPhone|iPad/.test(navigator.platform);
   const selectSection = (nextSection: string) => {
     appCommands.selectSection(nextSection);
+    if (nextSection === "Items") appCommands.openItems();
   };
 
   useEffect(() => {
@@ -287,7 +287,7 @@ export function AppSidebar({ isPresenterView = false, presenterSection = "map", 
               </SidebarMenu>
               {section === "Characters" ? (
                 <SidebarSectionHeading title={section} actionLabel="New NPC" onCreate={appCommands.createNpc} className="px-2 pb-3 pt-4 group-data-[collapsible=icon]:hidden" />
-              ) : section !== "Locations" && section !== "Factions" && section !== "Maps" && <div className="px-2 pb-2 pt-4 text-xs font-semibold text-muted-foreground group-data-[collapsible=icon]:hidden">{section}</div>}
+              ) : section !== "Locations" && section !== "Factions" && section !== "Maps" && section !== "Story Threads" && <div className="px-2 pb-2 pt-4 text-xs font-semibold text-muted-foreground group-data-[collapsible=icon]:hidden">{section}</div>}
               <SidebarMenu>
                 {section === "Characters" ? ids.map((id, index) => (
                   <SidebarMenuItem key={id}>
@@ -298,16 +298,20 @@ export function AppSidebar({ isPresenterView = false, presenterSection = "map", 
                   </SidebarMenuItem>
                 )) : section === "Sessions" ? (
                   <SessionsSidebar />
+                ) : section === "Story Threads" ? (
+                  <StoryThreadsSidebar key={generation} />
                 ) : section === "Factions" ? (
                   <FactionsDirectory key={generation} />
                 ) : section === "Locations" ? (
                   <LocationsDirectory key={generation} />
                 ) : section === "Maps" ? (
                   <MapsDirectory key={generation} />
+                ) : section === "Items" ? (
+                  <SidebarMenuItem><SidebarMenuButton tooltip="Item catalog" onClick={appCommands.openItems}><PackageIcon /><span>Item catalog</span></SidebarMenuButton></SidebarMenuItem>
                 ) : section === "Inventory" ? (
                   <SidebarMenuItem><SidebarMenuButton tooltip="Party Inventory" onClick={appCommands.openInventory}><BackpackIcon /><span>Party Inventory</span></SidebarMenuButton></SidebarMenuItem>
                 ) : sampleSidebarEntries[section] ? (
-                  sampleSidebarEntries[section].map((entry) => ["Sessions", "Story Threads", "Items", "Puzzles"].includes(section) ? (
+                  sampleSidebarEntries[section].map((entry) => ["Sessions", "Story Threads", "Puzzles"].includes(section) ? (
                     <SidebarMenuItem key={entry}>
                       <SidebarMenuButton tooltip={entry} onClick={() => appCommands.openSampleSection(section)}>
                         <BookOpenIcon aria-hidden="true" /><span>{entry}</span>

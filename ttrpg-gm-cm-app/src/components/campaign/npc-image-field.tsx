@@ -12,6 +12,7 @@ export type NpcImageFieldProps = {
   aspectRatio?: string;
   fit?: "cover" | "contain";
   className?: string;
+  onPendingChange?: (pending: boolean) => void;
 };
 
 export function NpcImageField({
@@ -22,6 +23,7 @@ export function NpcImageField({
   aspectRatio = "4 / 3",
   fit = "cover",
   className,
+  onPendingChange,
 }: NpcImageFieldProps) {
   const inputId = useId();
   const labelId = useId();
@@ -29,6 +31,7 @@ export function NpcImageField({
   const fileInputRef = useRef<HTMLInputElement>(null);
   const uploadVersion = useRef(0);
   const [pending, setPending] = useState(false);
+  useEffect(() => { onPendingChange?.(pending); }, [pending, onPendingChange]);
   useEffect(() => {
     if (!editable) setPending(false);
     return () => { uploadVersion.current++; };

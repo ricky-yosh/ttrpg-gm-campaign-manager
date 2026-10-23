@@ -1,3 +1,6 @@
+import { ItemPanel } from "@/components/campaign/item-panel";
+import { ItemsCatalog } from "@/components/campaign/items-catalog";
+import { StoryThreadsPanel } from "@/components/campaign/story-threads-panel";
 import { withoutPrototypePanels } from "@/lib/session-workspace";
 import { SessionsPanel } from "@/components/campaign/sessions-panel";
 import { useSessionNotesStore } from "@/stores/session-notes-store";
@@ -26,6 +29,10 @@ export type WorkspaceHandle = {
   createWorkspace: () => void;
   openCharacter: (name: string) => void;
   openLocation: (id: string) => void;
+  openThread: (id: string) => void;
+  openItem: (id: string) => void;
+  openItems: () => void;
+  openThreads: () => void;
   openFaction: (id: string) => void;
   openMap: (id: string, pinId?: string, placeLocationId?: string) => void;
   openLocationBesideMap: (id: string) => void;
@@ -59,7 +66,7 @@ function SampleSectionPanel({ params }: IDockviewPanelProps) {
 // Old saved layouts briefly mount this placeholder before obsolete library tabs are removed.
 function LegacyMapLibrary() { return null; }
 
-const characterComponents = { character: CharacterPanel, map: MapPanel, mapLibrary: LegacyMapLibrary, location: LocationPanel, faction: FactionPanel, inventory: InventoryPanel, sessions: SessionsPanel, sample: SampleSectionPanel };
+const characterComponents = { item: ItemPanel, items: ItemsCatalog, thread: StoryThreadsPanel, threads: StoryThreadsPanel, character: CharacterPanel, map: MapPanel, mapLibrary: LegacyMapLibrary, location: LocationPanel, faction: FactionPanel, inventory: InventoryPanel, sessions: SessionsPanel, sample: SampleSectionPanel };
 
 function WorkspacePanel({ api }: IDockviewPanelProps) {
   const { isDark, panels, onPanelReady } = useWorkspaceContext();
@@ -205,6 +212,16 @@ export function Workspaces({ ref, isDark, onSearch, historyEnabled }: {
     }
   }), []);
 
+  useEffect(() => campaignStore.subscribe((state, previous) => {
+    if (state.campaign.items === previous.campaign.items) return;
+    for (const workspace of panels.current.values()) for (const panel of workspace.panels) {
+      if (typeof panel.params?.itemId !== "string") continue;
+      const item = state.campaign.items?.find((item) => item.id === panel.params?.itemId);
+      if (!item) workspace.removePanel(panel);
+      else if (panel.title !== item.name) panel.api.setTitle(item.name);
+    }
+  }), []);
+
   const captureWorkspace = () => {
     const container = api.current;
     if (getCampaign().generation !== generation || !initialized.current || !container || container.panels.some((panel) => !panels.current.has(panel.id))) return;
@@ -270,6 +287,10 @@ export function Workspaces({ ref, isDark, onSearch, historyEnabled }: {
     const visibleSection = section === "Settings" ? null : section;
     let destination: NavigationDestination;
     if (panel.view.contentComponent === "sessions") destination = { kind: "sample", workspaceId, sampleSection: typeof panel.params?.sessionId === "string" ? `Sessions:${panel.params.sessionId}` : "Sessions", section: visibleSection };
+    else if (panel.view.contentComponent === "items") destination = { kind: "items", workspaceId, section: visibleSection };
+    else if (typeof panel.params?.itemId === "string") destination = { kind: "item", workspaceId, itemId: panel.params.itemId, section: visibleSection };
+    else if (panel.view.contentComponent === "threads") destination = { kind: "threads", workspaceId, section: visibleSection };
+    else if (typeof panel.params?.threadId === "string") destination = { kind: "thread", workspaceId, threadId: panel.params.threadId, section: visibleSection };
     else if (panel.id === "inventory:party") destination = { kind: "inventory", workspaceId, section: visibleSection };
     else if (typeof panel.params?.mapId === "string") destination = { kind: "map", mapId: panel.params.mapId, workspaceId, section: visibleSection };
     else if (typeof panel.params?.sampleSection === "string") destination = { kind: "sample", workspaceId, sampleSection: panel.params.sampleSection, section: visibleSection };
@@ -299,6 +320,31 @@ export function Workspaces({ ref, isDark, onSearch, historyEnabled }: {
     const existing = workspace.getPanel(id);
     if (existing) existing.api.setActive();
     else workspace.addPanel({ id, title: location.name, component: "location", params: { locationId } });
+    return true;
+  };
+
+  const openItemsInWorkspace = (workspace: DockviewApi, itemId?: string, beside = false) => {
+    const item = getCampaign().campaign.items?.find((item) => item.id === itemId);
+    if (itemId && !item) return false;
+    const id = itemId ? `item:${itemId}` : "items:catalog";
+    const existing = workspace.getPanel(id);
+    if (existing) existing.api.setActive();
+    else {
+      const catalog = workspace.getPanel("items:catalog");
+      const detail = workspace.panels.find((panel) => panel.view.contentComponent === "item" && panel.group !== catalog?.group);
+      workspace.addPanel({ id, title: item?.name ?? "Items", component: itemId ? "item" : "items", params: itemId ? { itemId } : {},
+        ...(beside && catalog ? { position: { referencePanel: detail?.id ?? catalog.id, direction: detail ? "within" as const : "right" as const } } : {}) });
+    }
+    return true;
+  };
+
+  const openThreadInWorkspace = (workspace: DockviewApi, threadId?: string) => {
+    const thread = getCampaign().campaign.threads?.find((item) => item.id === threadId);
+    if (threadId && !thread) return false;
+    const id = threadId ? `thread:${threadId}` : "threads:directory";
+    const existing = workspace.getPanel(id);
+    if (existing) existing.api.setActive();
+    else workspace.addPanel({ id, title: thread?.title ?? "Story Threads", component: threadId ? "thread" : "threads", params: threadId ? { threadId } : {} });
     return true;
   };
 
@@ -346,6 +392,8 @@ export function Workspaces({ ref, isDark, onSearch, historyEnabled }: {
 
   const openSampleSectionInWorkspace = (workspace: DockviewApi, section: string) => {
     if (section === "Sessions" || section.startsWith("Sessions:")) return openSessionInWorkspace(workspace, section === "Sessions" ? undefined : section.slice("Sessions:".length));
+    if (section === "Items") return openItemsInWorkspace(workspace);
+    if (section === "Story Threads") return openThreadInWorkspace(workspace);
     if (section === "Overview") return;
     const id = `sample:${section.toLowerCase().replace(/ /g, "-")}`;
     const existing = workspace.getPanel(id);
@@ -365,6 +413,10 @@ export function Workspaces({ ref, isDark, onSearch, historyEnabled }: {
         if (destination.kind === "faction" && !getCampaign().campaign.factions?.some((faction) => faction.id === destination.factionId)) return false;
         if (destination.kind === "location" && !getCampaign().campaign.locations?.some((location) => location.id === destination.locationId)) return false;
         panel.api.setActive();
+        if (destination.kind === "item") return openItemsInWorkspace(workspace, destination.itemId);
+        if (destination.kind === "items") return openItemsInWorkspace(workspace);
+        if (destination.kind === "thread") return openThreadInWorkspace(workspace, destination.threadId);
+        if (destination.kind === "threads") return openThreadInWorkspace(workspace);
         if (destination.kind === "faction") return openFactionInWorkspace(workspace, destination.factionId);
         if (destination.kind === "location") return openLocationInWorkspace(workspace, destination.locationId);
         if (destination.kind === "character") return openCharacterInWorkspace(workspace, destination.characterId);
@@ -391,6 +443,15 @@ export function Workspaces({ ref, isDark, onSearch, historyEnabled }: {
         else if (panel.view.contentComponent === "sessions" && typeof panel.params?.sessionId === "string" && !useSessionNotesStore.getState().sessions.some((item) => item.id === panel.params?.sessionId)) {
           workspace.removePanel(panel);
           openSessionInWorkspace(workspace);
+        }
+        else if (panel.params?.sampleSection === "Items") {
+          workspace.removePanel(panel);
+          openItemsInWorkspace(workspace);
+        }
+        else if (typeof panel.params?.itemId === "string" && !getCampaign().campaign.items?.some((item) => item.id === panel.params?.itemId)) workspace.removePanel(panel);
+        else if (panel.params?.sampleSection === "Story Threads") {
+          workspace.removePanel(panel);
+          openThreadInWorkspace(workspace);
         }
         else if (panel.params?.sampleSection === "Sessions") {
           workspace.removePanel(panel);
@@ -502,6 +563,36 @@ export function Workspaces({ ref, isDark, onSearch, historyEnabled }: {
       if (existing) existing.api.setActive();
       else workspace.addPanel({ id: `location:${id}`, title: location.name, component: "location", params: { locationId: id },
         ...(workspace.activePanel ? { position: { referencePanel: workspace.activePanel.id, direction: "right" as const } } : {}) });
+      recordVisit();
+    },
+    openItem: (id) => {
+      const active = api.current?.activePanel;
+      const workspace = active && panels.current.get(active.id);
+      if (!workspace) return;
+      useSessionStore.getState().leaveSettings();
+      if (openItemsInWorkspace(workspace, id, true)) recordVisit();
+    },
+    openItems: () => {
+      const active = api.current?.activePanel;
+      const workspace = active && panels.current.get(active.id);
+      if (!workspace) return;
+      useSessionStore.getState().leaveSettings();
+      openItemsInWorkspace(workspace);
+      recordVisit();
+    },
+    openThread: (id) => {
+      const active = api.current?.activePanel;
+      const workspace = active && panels.current.get(active.id);
+      if (!workspace) return;
+      useSessionStore.getState().leaveSettings();
+      if (openThreadInWorkspace(workspace, id)) recordVisit();
+    },
+    openThreads: () => {
+      const active = api.current?.activePanel;
+      const workspace = active && panels.current.get(active.id);
+      if (!workspace) return;
+      useSessionStore.getState().leaveSettings();
+      openThreadInWorkspace(workspace);
       recordVisit();
     },
     openFaction: (id) => {

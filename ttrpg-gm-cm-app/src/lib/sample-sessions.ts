@@ -4,7 +4,6 @@ import type { SessionBeat, SessionNote, SessionRecordLink } from "../stores/sess
 type NamedRecord = { id: string; name: string };
 export type SessionSampleRecords = { npcs: NamedRecord[]; locations: NamedRecord[]; factions: NamedRecord[] };
 export const sampleSessionReferences = {
-  thread: [{ id: "sample-thread-shipment", name: "The Missing Shipment" }, { id: "sample-thread-lantern", name: "The Lantern Below" }],
   puzzle: [{ id: "sample-puzzle-vault", name: "The Lighthouse Vault" }, { id: "sample-puzzle-bells", name: "The Three Harbor Bells" }],
 };
 
@@ -18,7 +17,7 @@ export function sampleSessions(records: SessionSampleRecords): SessionNote[] {
     const record = source.find((item) => item.name === name);
     return record ? [{ kind, targetId: record.id, label }] : [];
   };
-  const thread: SessionRecordLink = { kind: "thread", targetId: "sample-thread-shipment", label: "Follow the diverted cargo" };
+  const thread: SessionRecordLink = { kind: "thread", targetId: "sample-thread-morrow", label: "Follow the diverted cargo" };
   const puzzle: SessionRecordLink = { kind: "puzzle", targetId: "sample-puzzle-bells", label: "Listen before choosing the order" };
   return [
     {

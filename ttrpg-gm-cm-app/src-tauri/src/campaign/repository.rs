@@ -37,6 +37,18 @@ pub(super) fn write_campaign(folder: &Path, mut campaign: Campaign) -> Result<()
         transform_faction_image(faction, folder, true)?;
     }
 
+    for item in &mut campaign.items {
+        items::transform_item_image(item, folder, true)?;
+    }
+    for thread in &mut campaign.threads {
+        for node in thread
+            .current_situation
+            .iter_mut()
+            .chain(thread.gm_possibilities.iter_mut())
+        {
+            transform_images(node, folder, true)?;
+        }
+    }
     for map in &mut campaign.maps {
         let mut image = serde_json::to_value(&map.image).map_err(|e| e.to_string())?;
         transform_images(&mut image, folder, true)?;
@@ -98,6 +110,12 @@ fn write_transaction(transaction: &Transaction<'_>, campaign: &Campaign) -> Resu
             ],
         )
         .map_err(|e| e.to_string())?;
+    transaction.execute(
+        "INSERT INTO item_catalog (campaign_id,items_json,fields_json) VALUES (?1,?2,?3)
+         ON CONFLICT(campaign_id) DO UPDATE SET items_json=excluded.items_json,fields_json=excluded.fields_json",
+        params![campaign.id, serde_json::to_string(&campaign.items).map_err(|e| e.to_string())?,
+            serde_json::to_string(&campaign.item_fields).map_err(|e| e.to_string())?],
+    ).map_err(|e| e.to_string())?;
     transaction
         .execute("DELETE FROM npc WHERE campaign_id = ?1", [&campaign.id])
         .map_err(|e| e.to_string())?;
@@ -142,6 +160,18 @@ fn write_transaction(transaction: &Transaction<'_>, campaign: &Campaign) -> Resu
                 ],
             )
             .map_err(|e| e.to_string())?;
+    }
+    transaction
+        .execute(
+            "DELETE FROM story_thread WHERE campaign_id=?1",
+            [&campaign.id],
+        )
+        .map_err(|e| e.to_string())?;
+    for (index, thread) in campaign.threads.iter().enumerate() {
+        transaction.execute(
+            "INSERT INTO story_thread (id,campaign_id,sort_order,record_json) VALUES (?1,?2,?3,?4)",
+            params![thread.id, campaign.id, index as i64, serde_json::to_string(thread).map_err(|e| e.to_string())?],
+        ).map_err(|e| e.to_string())?;
     }
     transaction
         .execute("DELETE FROM faction WHERE campaign_id=?1", [&campaign.id])
@@ -196,7 +226,7 @@ pub(super) fn read_campaign(folder: &Path) -> Result<Campaign, String> {
     let version: i32 = connection
         .pragma_query_value(None, "user_version", |row| row.get(0))
         .map_err(|e| e.to_string())?;
-    if !(1..=5).contains(&version) {
+    if !(1..=7).contains(&version) {
         return Err(format!("Unsupported campaign database version {version}."));
     }
     let mut statement = connection.prepare("SELECT id,name,schema_version,created_at,updated_at,section,sidebar_width,sidebar_open FROM campaign").map_err(|e| e.to_string())?;
@@ -366,6 +396,38 @@ pub(super) fn read_campaign(folder: &Path) -> Result<Campaign, String> {
             maps.push(map);
         }
     }
+    let mut threads = Vec::new();
+    if table_exists(&connection, "story_thread")? {
+        let mut statement = connection
+            .prepare(
+                "SELECT id,record_json FROM story_thread WHERE campaign_id=?1 ORDER BY sort_order",
+            )
+            .map_err(|e| e.to_string())?;
+        let rows = statement
+            .query_map([&id], |row| {
+                Ok((row.get::<_, String>(0)?, row.get::<_, String>(1)?))
+            })
+            .map_err(|e| e.to_string())?;
+        for row in rows {
+            let (record_id, json) = row.map_err(|e| e.to_string())?;
+            let thread: StoryThread = serde_json::from_str(&json).map_err(|e| e.to_string())?;
+            if thread.id != record_id {
+                return Err("Story thread ID does not match its stored ID.".into());
+            }
+            threads.push(thread);
+        }
+    }
+    let (items, item_fields) = if table_exists(&connection, "item_catalog")? {
+        let row: Option<(String, String)> = connection.query_row(
+            "SELECT items_json,fields_json FROM item_catalog WHERE campaign_id=?1", [&id],
+            |row| Ok((row.get(0)?, row.get(1)?)),
+        ).optional().map_err(|e| e.to_string())?;
+        match row {
+            Some((items, fields)) => (serde_json::from_str(&items).map_err(|e| e.to_string())?,
+                serde_json::from_str(&fields).map_err(|e| e.to_string())?),
+            None => (Vec::new(), Vec::new()),
+        }
+    } else { (Vec::new(), Vec::new()) };
     let mut campaign = Campaign {
         format: "ttrpg-campaign".into(),
         schema_version,
@@ -378,12 +440,18 @@ pub(super) fn read_campaign(folder: &Path) -> Result<Campaign, String> {
         locations,
         maps,
         factions,
+        threads,
         inventory,
+        items,
+        item_fields,
         workspace,
         section,
         sidebar: Sidebar { width, open },
     };
     campaign.validate()?;
+    for item in &mut campaign.items {
+        items::transform_item_image(item, folder, false)?;
+    }
     for npc in &mut campaign.npcs {
         for node in &mut npc.notes {
             transform_images(node, folder, false)?;
@@ -395,6 +463,15 @@ pub(super) fn read_campaign(folder: &Path) -> Result<Campaign, String> {
     }
     for faction in &mut campaign.factions {
         transform_faction_image(faction, folder, false)?;
+    }
+    for thread in &mut campaign.threads {
+        for node in thread
+            .current_situation
+            .iter_mut()
+            .chain(thread.gm_possibilities.iter_mut())
+        {
+            transform_images(node, folder, false)?;
+        }
     }
     for map in &mut campaign.maps {
         let mut image = serde_json::to_value(&map.image).map_err(|e| e.to_string())?;

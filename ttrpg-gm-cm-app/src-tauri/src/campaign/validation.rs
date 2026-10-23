@@ -88,11 +88,16 @@ impl Campaign {
                         "mapLibrary",
                         "location",
                         "faction",
+                        "thread",
+                        "threads",
+                        "item",
+                        "items",
                         "inventory",
                     ],
                 )?;
             }
         }
+        items::validate_items(&self.items, &self.item_fields)?;
         const MAX_SAFE_INTEGER: u64 = 9_007_199_254_740_991;
         if self.inventory.gold > MAX_SAFE_INTEGER {
             return Err("Gold exceeds the supported amount.".into());
@@ -196,6 +201,34 @@ impl Campaign {
                 .is_some_and(|point| !valid_point(point.x, point.y))
             {
                 return Err("Invalid party marker position.".into());
+            }
+        }
+        let mut thread_ids = HashSet::new();
+        for thread in &self.threads {
+            if thread.id.trim().is_empty()
+                || thread.title.trim().is_empty()
+                || !thread_ids.insert(&thread.id)
+            {
+                return Err("Story threads need unique IDs and nonempty titles.".into());
+            }
+            if !["idea", "active", "onHold", "resolved"].contains(&thread.status.as_str()) {
+                return Err("Invalid story thread status.".into());
+            }
+            for links in [&thread.people, &thread.locations, &thread.factions] {
+                let mut targets = HashSet::new();
+                for link in links {
+                    if link.target_id.trim().is_empty() || !targets.insert(&link.target_id) {
+                        return Err("Thread links need unique, nonempty target IDs.".into());
+                    }
+                }
+            }
+            for document in [&thread.current_situation, &thread.gm_possibilities] {
+                if document.is_empty() {
+                    return Err("Thread notes need at least one block.".into());
+                }
+                for node in document {
+                    validate_node(node)?;
+                }
             }
         }
         let mut faction_ids = HashSet::new();

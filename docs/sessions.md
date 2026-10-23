@@ -6,7 +6,7 @@ Open **Sessions** in the Campaign sidebar, then **All sessions** to browse or cr
 
 Each session opens in a workspace tab. Use **Edit / Save changes / Cancel** for its title, number, optional date, Where we left off, Prep notes, What happened, and separate Summary for Players. Optional story beats have rich-text notes, a Planned / Happened / Skipped status, and Move up / Move down controls.
 
-Related records group NPCs, locations, factions, story threads, and puzzles. NPC/location/faction links open existing campaign records; threads and puzzles have labeled sample options only in the demo campaign. Other campaigns show these record types as unavailable until their implementations exist. Links describe relevance and do not record visits, encounters, or player knowledge.
+Related records group NPCs, locations, factions, story threads, and puzzles. NPC/location/faction/thread links open existing campaign records; puzzles have labeled sample options only in the demo campaign. Other campaigns show puzzles as unavailable until their implementation exists. Links describe relevance and do not record visits, encounters, or player knowledge.
 
 **Quick capture** appends a private note to What happened from read mode. Edit drafts and unsubmitted captures remain available while navigating to other records. Cancel discards the edit draft; navigation does not save it.
 

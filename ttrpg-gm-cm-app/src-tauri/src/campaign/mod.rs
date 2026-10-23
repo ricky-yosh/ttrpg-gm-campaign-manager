@@ -3,8 +3,10 @@ use serde_json::Value;
 use std::collections::HashMap;
 
 mod assets;
+mod commands;
 pub mod history;
-#[cfg(feature = "legacy-sqlite")]
+mod items;
+use items::{CampaignItem, ItemFieldDefinition};
 mod migrations;
 #[cfg(feature = "legacy-sqlite")]
 mod repository;
@@ -46,7 +48,13 @@ pub struct Campaign {
     #[serde(default)]
     factions: Vec<Faction>,
     #[serde(default)]
+    threads: Vec<StoryThread>,
+    #[serde(default)]
     inventory: PartyInventory,
+    #[serde(default)]
+    items: Vec<CampaignItem>,
+    #[serde(default)]
+    item_fields: Vec<ItemFieldDefinition>,
     workspace: Option<Workspace>,
     section: Option<String>,
     sidebar: Sidebar,
@@ -232,6 +240,22 @@ struct Faction {
     gm_notes: String,
 }
 
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+struct StoryThread {
+    id: String,
+    title: String,
+    status: String,
+    player_reminder: String,
+    origin: String,
+    source_label: String,
+    current_situation: Vec<Value>,
+    gm_possibilities: Vec<Value>,
+    people: Vec<NpcRelationship>,
+    locations: Vec<NpcRelationship>,
+    factions: Vec<NpcRelationship>,
+}
+
 #[derive(Debug, Clone, Default, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase", deny_unknown_fields)]
 struct PartyInventory {
@@ -280,6 +304,24 @@ enum Destination {
     Character {
         workspace_id: String,
         character_id: String,
+        section: Option<String>,
+    },
+    Item {
+        workspace_id: String,
+        item_id: String,
+        section: Option<String>,
+    },
+    Items {
+        workspace_id: String,
+        section: Option<String>,
+    },
+    Thread {
+        workspace_id: String,
+        thread_id: String,
+        section: Option<String>,
+    },
+    Threads {
+        workspace_id: String,
         section: Option<String>,
     },
     Faction {
@@ -363,6 +405,192 @@ mod tests {
                     "caption": [{"text": "Forest trail"}], "children": [{"text": ""}]}
             ]}]
         })).unwrap()
+    }
+
+    fn item_example() -> Value {
+        json!({"id":"item-1","name":"Compass","image":{"type":"img","url":"data:image/png;base64,aGVsbG8="},
+            "description":"Points north","gmNotes":"A secret", "values":{"tier":"c","weight":0,"attune":false}})
+    }
+
+    fn item_fields_example() -> Value {
+        json!([
+            {"id":"tier","label":"Tier","kind":"choice","options":[{"id":"c","label":"C"},{"id":"b","label":"B"}]},
+            {"id":"weight","label":"Weight","kind":"number","options":[]},
+            {"id":"attune","label":"Attunement","kind":"checkbox","options":[]}
+        ])
+    }
+
+    #[test]
+    fn item_catalog_fields_assets_and_navigation_survive_moving_package() {
+        let folder = tempfile::tempdir().unwrap();
+        let path = folder.path().join("items.campaign");
+        let mut value = serde_json::to_value(example()).unwrap();
+        value["items"] = json!([item_example()]);
+        value["itemFields"] = item_fields_example();
+        value["workspace"]["panels"]["workspace:1"]["panels"] = json!({
+            "item:item-1":{"id":"item:item-1","contentComponent":"item","params":{"itemId":"item-1"}},
+            "items:catalog":{"id":"items:catalog","contentComponent":"items","params":{"columnIds":["tier"],"query":"compass","sortKey":"tier"}}
+        });
+        value["workspace"]["history"] = json!({"entries":[
+            {"kind":"items","workspaceId":"workspace:1","section":"Items"},
+            {"kind":"item","itemId":"item-1","workspaceId":"workspace:1","section":"Items"}
+        ],"index":1});
+        write_campaign(&path, serde_json::from_value(value.clone()).unwrap()).unwrap();
+        let db = Connection::open(path.join("campaign.sqlite")).unwrap();
+        let stored: String = db.query_row("SELECT items_json FROM item_catalog", [], |row| row.get(0)).unwrap();
+        assert!(stored.contains("assets/"));
+        assert!(!stored.contains("data:image"));
+        drop(db);
+        let moved = folder.path().join("moved.campaign");
+        fs::rename(&path, &moved).unwrap();
+        let loaded = serde_json::to_value(read_campaign(&moved).unwrap()).unwrap();
+        assert_eq!(loaded["items"], value["items"]);
+        assert_eq!(loaded["itemFields"], value["itemFields"]);
+        assert_eq!(loaded["workspace"], value["workspace"]);
+    }
+
+    #[test]
+    fn invalid_item_fields_and_values_preserve_existing_campaign() {
+        let folder = tempfile::tempdir().unwrap();
+        let path = folder.path().join("items.campaign");
+        let mut value = serde_json::to_value(example()).unwrap();
+        value["items"] = json!([item_example()]);
+        value["itemFields"] = item_fields_example();
+        write_campaign(&path, serde_json::from_value(value.clone()).unwrap()).unwrap();
+        let original = fs::read(path.join("campaign.sqlite")).unwrap();
+        for (key, invalid_value) in [("tier",json!("unknown")),("weight",json!("heavy")),("attune",json!(1)),("unknown",json!(true))] {
+            let mut invalid = value.clone();
+            invalid["items"][0]["values"][key] = invalid_value;
+            assert!(write_campaign(&path, serde_json::from_value(invalid).unwrap()).is_err());
+            assert_eq!(fs::read(path.join("campaign.sqlite")).unwrap(), original);
+        }
+        let mut invalid = value.clone();
+        invalid["items"][0]["name"] = json!(" ");
+        assert!(write_campaign(&path, serde_json::from_value(invalid).unwrap()).is_err());
+        let mut invalid = value.clone();
+        invalid["itemFields"].as_array_mut().unwrap().push(item_fields_example()[0].clone());
+        assert!(write_campaign(&path, serde_json::from_value(invalid).unwrap()).is_err());
+        let mut invalid = value.clone();
+        invalid["items"].as_array_mut().unwrap().push(item_example());
+        assert!(write_campaign(&path, serde_json::from_value(invalid).unwrap()).is_err());
+        let mut invalid = value.clone();
+        invalid["itemFields"][0]["options"][1]["label"] = json!("c");
+        assert!(write_campaign(&path, serde_json::from_value(invalid).unwrap()).is_err());
+        assert_eq!(fs::read(path.join("campaign.sqlite")).unwrap(), original);
+    }
+
+    #[test]
+    fn version_six_defaults_items_and_upgrades_on_save() {
+        let folder = tempfile::tempdir().unwrap();
+        let path = folder.path().join("legacy-items.campaign");
+        write_campaign(&path, example()).unwrap();
+        let db = Connection::open(path.join("campaign.sqlite")).unwrap();
+        db.execute_batch("DROP TABLE item_catalog; PRAGMA user_version=6;").unwrap();
+        drop(db);
+        let loaded = read_campaign(&path).unwrap();
+        assert!(loaded.items.is_empty() && loaded.item_fields.is_empty());
+        write_campaign(&path, loaded).unwrap();
+        let db = Connection::open(path.join("campaign.sqlite")).unwrap();
+        assert_eq!(db.pragma_query_value(None, "user_version", |row| row.get::<_,i32>(0)).unwrap(), 7);
+        assert!(table_exists(&db, "item_catalog").unwrap());
+    }
+
+    fn thread_example() -> Value {
+        json!({"id":"thread-1","title":"Missing cargo","status":"active",
+            "playerReminder":"You accepted a job.","origin":"A rumor at the inn.","sourceLabel":"Rumor",
+            "currentSituation":[{"type":"p","children":[{"text":"The crew is missing."}]},
+                {"type":"img","url":"data:image/png;base64,aW1hZ2U=","caption":[{"text":"A clue"}],"children":[{"text":""}]}],
+            "gmPossibilities":[{"type":"p","children":[{"text":"The guild sends a negotiator."}]}],
+            "people":[{"targetId":"npc-1","label":"Witness"}],
+            "locations":[{"targetId":"missing-place","label":"Keep context even if removed"}],
+            "factions":[]})
+    }
+
+    #[test]
+    fn threads_notes_assets_tabs_and_history_survive_moving_package() {
+        let folder = tempfile::tempdir().unwrap();
+        let path = folder.path().join("threads.campaign");
+        let mut value = serde_json::to_value(example()).unwrap();
+        value["threads"] = json!([thread_example()]);
+        value["workspace"]["panels"]["workspace:1"]["panels"] = json!({
+            "thread:thread-1":{"id":"thread:thread-1","contentComponent":"thread","params":{"threadId":"thread-1","scrollTop":220}},
+            "threads:directory":{"id":"threads:directory","contentComponent":"threads"}
+        });
+        value["workspace"]["history"] = json!({"entries":[
+            {"kind":"threads","workspaceId":"workspace:1","section":"Story Threads"},
+            {"kind":"thread","workspaceId":"workspace:1","threadId":"thread-1","section":"Story Threads"}
+        ],"index":1});
+        write_campaign(&path, serde_json::from_value(value.clone()).unwrap()).unwrap();
+        let database = Connection::open(path.join("campaign.sqlite")).unwrap();
+        let stored: String = database
+            .query_row("SELECT record_json FROM story_thread", [], |row| row.get(0))
+            .unwrap();
+        assert!(stored.contains("assets/"));
+        assert!(!stored.contains("data:image"));
+        drop(database);
+        let moved = folder.path().join("moved.campaign");
+        std::fs::rename(path, &moved).unwrap();
+        assert_eq!(
+            serde_json::to_value(read_campaign(&moved).unwrap()).unwrap(),
+            value
+        );
+    }
+
+    #[test]
+    fn invalid_threads_preserve_saved_campaign_and_missing_targets_are_allowed() {
+        let folder = tempfile::tempdir().unwrap();
+        let path = folder.path().join("threads.campaign");
+        let mut value = serde_json::to_value(example()).unwrap();
+        value["threads"] = json!([thread_example()]);
+        write_campaign(&path, serde_json::from_value(value.clone()).unwrap()).unwrap();
+        for patch in [
+            json!({"id":" "}),
+            json!({"title":" "}),
+            json!({"status":"unknown"}),
+            json!({"currentSituation":[]}),
+            json!({"gmPossibilities":[{"invalid":true}]}),
+            json!({"people":[{"targetId":"npc-1","label":"A"},{"targetId":"npc-1","label":"B"}]}),
+            json!({"factions":[{"targetId":" ","label":"Missing ID"}]}),
+        ] {
+            let mut invalid = value.clone();
+            for (key, replacement) in patch.as_object().unwrap() {
+                invalid["threads"][0][key] = replacement.clone();
+            }
+            assert!(write_campaign(&path, serde_json::from_value(invalid).unwrap()).is_err());
+            assert_eq!(
+                serde_json::to_value(read_campaign(&path).unwrap()).unwrap(),
+                value
+            );
+        }
+        let mut duplicate = value.clone();
+        duplicate["threads"]
+            .as_array_mut()
+            .unwrap()
+            .push(thread_example());
+        assert!(write_campaign(&path, serde_json::from_value(duplicate).unwrap()).is_err());
+    }
+
+    #[test]
+    fn version_five_defaults_threads_and_upgrades_on_save() {
+        let folder = tempfile::tempdir().unwrap();
+        let path = folder.path().join("legacy.campaign");
+        write_campaign(&path, example()).unwrap();
+        let database = Connection::open(path.join("campaign.sqlite")).unwrap();
+        database
+            .execute_batch("DROP TABLE story_thread; PRAGMA user_version=5;")
+            .unwrap();
+        drop(database);
+        let campaign = read_campaign(&path).unwrap();
+        assert!(campaign.threads.is_empty());
+        write_campaign(&path, campaign).unwrap();
+        let database = Connection::open(path.join("campaign.sqlite")).unwrap();
+        assert!(table_exists(&database, "story_thread").unwrap());
+        assert_eq!(
+            database
+                .pragma_query_value(None, "user_version", |row| row.get::<_, i32>(0))
+                .unwrap(),
+            7
+        );
     }
 
     #[test]
@@ -458,7 +686,7 @@ mod tests {
         assert_eq!(
             db.pragma_query_value(None, "user_version", |row| row.get::<_, i32>(0))
                 .unwrap(),
-            5
+            7
         );
     }
 
@@ -693,7 +921,7 @@ mod tests {
         assert_eq!(
             db.pragma_query_value(None, "user_version", |row| row.get::<_, i32>(0))
                 .unwrap(),
-            5
+            7
         );
         assert!(table_exists(&db, "location").unwrap());
     }
@@ -870,7 +1098,7 @@ mod tests {
         assert_eq!(
             db.pragma_query_value(None, "user_version", |row| row.get::<_, i32>(0))
                 .unwrap(),
-            5
+            7
         );
         assert!(table_exists(&db, "faction").unwrap());
     }
@@ -1011,7 +1239,7 @@ mod tests {
         assert_eq!(
             db.pragma_query_value(None, "user_version", |row| row.get::<_, i32>(0))
                 .unwrap(),
-            5
+            7
         );
     }
 }

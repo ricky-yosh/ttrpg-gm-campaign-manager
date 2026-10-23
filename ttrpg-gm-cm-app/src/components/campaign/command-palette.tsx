@@ -4,8 +4,8 @@ import { selectCanGoBack, selectCanGoForward, useSessionStore } from "@/stores/s
 import { useEffect, useState } from "react";
 import { Autocomplete } from "@base-ui/react/autocomplete";
 import {
-  ArrowLeftIcon, ArrowRightIcon, CircleHelpIcon, FilePlus2Icon, FolderOpenIcon, LayoutTemplateIcon,
-  BackpackIcon, FlagIcon, MapPinIcon, MapIcon, MonitorIcon, PanelLeftCloseIcon, PanelLeftIcon, PanelTopCloseIcon, SaveIcon, SearchIcon, SettingsIcon, UserPlusIcon, UserRoundIcon,
+  BookOpenIcon, ArrowLeftIcon, ArrowRightIcon, CircleHelpIcon, FilePlus2Icon, FolderOpenIcon, LayoutTemplateIcon,
+  PackageIcon, BackpackIcon, FlagIcon, MapPinIcon, MapIcon, MonitorIcon, PanelLeftCloseIcon, PanelLeftIcon, PanelTopCloseIcon, SaveIcon, SearchIcon, SettingsIcon, UserPlusIcon, UserRoundIcon,
   type LucideIcon,
 } from "lucide-react";
 import { Dialog, DialogDescription, DialogPopup, DialogTitle } from "@/components/ui/dialog";
@@ -42,6 +42,8 @@ export function CommandPalette({ isPresenterView, onTogglePresenterView, onClose
   const names = useCampaign(useShallow((state) => state.campaign.npcs.map((npc) => npc.name)));
   const locations = useCampaign(useShallow((state) => state.campaign.locations ?? []));
   const maps = useCampaign((state) => state.campaign.maps);
+  const items = useCampaign((state) => state.campaign.items);
+  const threads = useCampaign(useShallow((state) => state.campaign.threads ?? []));
   const factions = useCampaign(useShallow((state) => state.campaign.factions ?? []));
   const paletteGroups: PaletteGroup[] = [
     {
@@ -211,6 +213,21 @@ export function CommandPalette({ isPresenterView, onTogglePresenterView, onClose
           },
         };
       }),
+    }] : []),
+    ...(!isPresenterView ? [{
+      value: "Items",
+      items: [{ id: "items:catalog", label: "Item catalog", description: "Browse or create items", keywords: ["items", "equipment"], icon: PackageIcon,
+        onSelect: () => { appCommands.selectSection("Items"); appCommands.openItems(); } },
+        ...(items ?? []).map((item) => ({ id: `item:${item.id}`, label: item.name, description: "Open item", keywords: ["item", "equipment"], icon: PackageIcon,
+          onSelect: () => { appCommands.selectSection("Items"); appCommands.openItem(item.id); } })),
+      ],
+    }] : []),
+    ...(!isPresenterView ? [{
+      value: "Story Threads",
+      items: [{ id: "threads:directory", label: "All story threads", description: "Browse or create a story thread", keywords: ["thread", "story"], icon: BookOpenIcon, onSelect: () => { appCommands.selectSection("Story Threads"); appCommands.openThreads(); } },
+        ...threads.map((thread) => ({ id: `thread:${thread.id}`, label: thread.title, description: thread.origin || "Open story thread", keywords: ["thread", "story", thread.origin], icon: BookOpenIcon,
+          onSelect: () => { appCommands.selectSection("Story Threads"); appCommands.openThread(thread.id); } })),
+      ],
     }] : []),
     ...(!isPresenterView ? [{
       value: "Factions",

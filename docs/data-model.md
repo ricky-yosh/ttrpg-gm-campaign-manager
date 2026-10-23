@@ -25,7 +25,7 @@ These are starting attributes to discuss, not a complete schema. Every saved obj
 | Map | Name, kind (world, region, city, exploration, dungeon, battle), image, grid and display settings | Has pins, fog state, tokens, and linked locations or records; a pin may open another map |
 | Map pin | Map position, discovery state, player visibility, label/icon overrides | Links to a campaign record and optionally a more detailed map |
 | Token placement | Map position, linked character/enemy or party | Tracks where a participant or party appears without duplicating its record |
-| Item | Name, image, description, private notes, optional rarity | May appear in sessions, rewards, or party holdings |
+| Item | Name (required), optional image, description, private notes, and custom property values; see [Items](items.md) | May appear in sessions, rewards, or party holdings |
 | Party inventory entry | Item ID, quantity, player-visible details, optional party note | Links an item to the party's projected Inventory view without exposing private item information |
 | Crafting project | Target item or result, materials collected, progress, status, player-visible details | Links party inventory and crafting activity to the projected Crafting Progress view |
 | Story thread | Title, status, private notes | Links to sessions, story beats, NPCs, factions, and locations |
