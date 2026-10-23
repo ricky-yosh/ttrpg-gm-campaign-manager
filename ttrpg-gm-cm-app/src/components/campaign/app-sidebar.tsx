@@ -185,6 +185,7 @@ export function AppSidebar({ isPresenterView = false, presenterSection = "map", 
   })));
   const ids = useCampaign(useShallow((state) => state.campaign.npcs.map((npc) => npc.id)));
   const names = useCampaign(useShallow((state) => state.campaign.npcs.map((npc) => npc.name)));
+  const items = useCampaign(useShallow((state) => state.campaign.items ?? []));
   const generation = useCampaign((state) => state.generation);
   const section = useSessionStore((state) => state.section);
   const sidebarWidth = useSessionStore((state) => isPresenterView ? state.presenterSidebar.width : state.sidebar.width);
@@ -307,7 +308,14 @@ export function AppSidebar({ isPresenterView = false, presenterSection = "map", 
                 ) : section === "Maps" ? (
                   <MapsDirectory key={generation} />
                 ) : section === "Items" ? (
-                  <SidebarMenuItem><SidebarMenuButton tooltip="Item catalog" onClick={appCommands.openItems}><PackageIcon /><span>Item catalog</span></SidebarMenuButton></SidebarMenuItem>
+                  <>
+                    <SidebarMenuItem><SidebarMenuButton tooltip="Item catalog" onClick={appCommands.openItems}><PackageIcon /><span>Item catalog</span></SidebarMenuButton></SidebarMenuItem>
+                    {items.map((item) => <SidebarMenuItem key={item.id}>
+                      <SidebarMenuButton tooltip={item.name} onClick={() => appCommands.openItem(item.id)}>
+                        <PackageIcon /><span>{item.name}</span>
+                      </SidebarMenuButton>
+                    </SidebarMenuItem>)}
+                  </>
                 ) : section === "Inventory" ? (
                   <SidebarMenuItem><SidebarMenuButton tooltip="Party Inventory" onClick={appCommands.openInventory}><BackpackIcon /><span>Party Inventory</span></SidebarMenuButton></SidebarMenuItem>
                 ) : sampleSidebarEntries[section] ? (
