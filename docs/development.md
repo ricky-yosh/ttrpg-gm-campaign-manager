@@ -1,5 +1,7 @@
 # Development commands
 
+For the new Rust core, JSON-RPC host, CLI, and embedded Turso workflow, see [Headless development](headless-development.md). That workspace builds from the repository root independently of the desktop app. Shared persistence regression tests now run with `cargo test --workspace --all-features` from the root; the desktop crate's tests cover its remaining host-specific code.
+
 Run the commands in this guide from the app directory:
 
 ```sh
@@ -68,7 +70,7 @@ Click **New NPC**, enter a name, then edit its notes. Insert an image with the n
 
 Storage regression checks:
 
-- `cargo test --manifest-path src-tauri/Cargo.toml` checks portable image/note round trips, missing/corrupt assets, and preservation of the previous document on failed saves.
+- From the repository root, `cargo test --workspace --all-features` checks portable image/note round trips, missing/corrupt assets, failed-save preservation, the Turso adapter, and the legacy persistence adapter. `cargo test --manifest-path src-tauri/Cargo.toml` from the app directory checks desktop-specific image conversion.
 - `node --test tests/campaign-store.test.mjs` (Node 22.18+ with native TypeScript stripping, or newer) checks concurrent save requests, edits during a write, duplicate NPC names, canceled/failed opens, campaign isolation, discarded drafts, close cancellation, and autosave suspension through mocked Tauri IPC.
 
 Frontend builds and browser UI checks do not exercise native file dialogs. For desktop verification, create two `.campaign` packages, add/edit NPCs and a local image, split their tabs, close/restart the app, reopen each campaign, and repeat after moving one folder. Check normal window close and canceling the first-save dialog as well.

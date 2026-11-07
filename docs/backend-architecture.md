@@ -2,6 +2,14 @@
 
 Working outline for the technical design. See [Brainstorm](brainstorm-doc.md) for feature ideas, [UI/UX](ui-ux.md) for interface decisions, [Campaign Data Model](data-model.md) for candidate objects and attributes, and [Maps and Exploration](maps.md) for the linked-map workflow.
 
+## Proposed architecture transition
+
+The new direction is a **JSON-RPC headless Rust core, CLI, and lightweight Rune frontend**. See [Headless core, CLI, and Rune](headless-core-plan.md) for the proposed boundaries, migration gates, and decisions still to make. An initial core/CLI/Turso slice is implemented; see [Headless development](headless-development.md) for its actual capabilities and limitations. Rune is not yet implemented.
+
+The selected target storage engine is **embedded Turso Database**, the Rust SQLite-compatible engine. The new headless host uses it; the desktop still uses a temporary `rusqlite` adapter, with shared types, validation, assets, history, and schema. Build the headless CLI/core/storage workflow before the Rune frontend. Existing SQLite-specific implementation details below describe the desktop backend; comprehensive target backup and historic-package compatibility remain to be verified.
+
+The current persistence description below remains an implementation reference. Later React/Tauri tooling choices and frontend state-ownership proposals describe the existing architecture or earlier plans, not constraints on the proposed Rune target. During migration, keep the existing app usable and preserve campaign compatibility; do not expand superseded UI-specific proposals without reviewing the new plan.
+
 See [Locations](locations.md), [Factions](factions.md), [Inventory](inventory.md), and [Maps](maps.md) for record editors and database migrations. The current database version is 5. Saved map artwork and placements use the same campaign transaction and asset directory; map gestures have bounded frontend undo history for the current campaign.
 
 ## Current persistence prototype
