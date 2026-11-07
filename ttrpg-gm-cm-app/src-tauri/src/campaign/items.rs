@@ -1,23 +1,24 @@
-use super::{transform_images, NpcImage};
+#[cfg(feature = "legacy-sqlite")]
+use super::transform_images;
+use super::NpcImage;
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
-use std::{
-    collections::{HashMap, HashSet},
-    path::Path,
-};
+use std::collections::{HashMap, HashSet};
+#[cfg(feature = "legacy-sqlite")]
+use std::path::Path;
 
-#[derive(Debug, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, schemars::JsonSchema)]
 #[serde(rename_all = "camelCase", deny_unknown_fields)]
 pub(super) struct CampaignItem {
-    id: String,
-    name: String,
+    pub(super) id: String,
+    pub(super) name: String,
     image: Option<NpcImage>,
     description: String,
     gm_notes: String,
     values: HashMap<String, Value>,
 }
 
-#[derive(Debug, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, schemars::JsonSchema)]
 #[serde(deny_unknown_fields)]
 pub(super) struct ItemFieldDefinition {
     id: String,
@@ -26,11 +27,22 @@ pub(super) struct ItemFieldDefinition {
     options: Vec<ItemChoice>,
 }
 
-#[derive(Debug, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, schemars::JsonSchema)]
 #[serde(deny_unknown_fields)]
 struct ItemChoice {
     id: String,
     label: String,
+}
+
+pub(super) fn new_item(id: String, name: String) -> CampaignItem {
+    CampaignItem {
+        id,
+        name,
+        image: None,
+        description: String::new(),
+        gm_notes: String::new(),
+        values: HashMap::new(),
+    }
 }
 
 pub(super) fn validate_items(
@@ -97,6 +109,7 @@ pub(super) fn validate_items(
     Ok(())
 }
 
+#[cfg(feature = "legacy-sqlite")]
 pub(super) fn transform_item_image(
     item: &mut CampaignItem,
     folder: &Path,

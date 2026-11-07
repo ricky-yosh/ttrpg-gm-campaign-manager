@@ -418,16 +418,24 @@ pub(super) fn read_campaign(folder: &Path) -> Result<Campaign, String> {
         }
     }
     let (items, item_fields) = if table_exists(&connection, "item_catalog")? {
-        let row: Option<(String, String)> = connection.query_row(
-            "SELECT items_json,fields_json FROM item_catalog WHERE campaign_id=?1", [&id],
-            |row| Ok((row.get(0)?, row.get(1)?)),
-        ).optional().map_err(|e| e.to_string())?;
+        let row: Option<(String, String)> = connection
+            .query_row(
+                "SELECT items_json,fields_json FROM item_catalog WHERE campaign_id=?1",
+                [&id],
+                |row| Ok((row.get(0)?, row.get(1)?)),
+            )
+            .optional()
+            .map_err(|e| e.to_string())?;
         match row {
-            Some((items, fields)) => (serde_json::from_str(&items).map_err(|e| e.to_string())?,
-                serde_json::from_str(&fields).map_err(|e| e.to_string())?),
+            Some((items, fields)) => (
+                serde_json::from_str(&items).map_err(|e| e.to_string())?,
+                serde_json::from_str(&fields).map_err(|e| e.to_string())?,
+            ),
             None => (Vec::new(), Vec::new()),
         }
-    } else { (Vec::new(), Vec::new()) };
+    } else {
+        (Vec::new(), Vec::new())
+    };
     let mut campaign = Campaign {
         format: "ttrpg-campaign".into(),
         schema_version,

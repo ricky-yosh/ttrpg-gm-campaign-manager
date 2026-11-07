@@ -31,6 +31,5 @@ pub(super) fn ensure_schema(connection: &mut Connection) -> Result<(), String> {
     ",
         )
         .map_err(|e| e.to_string())?;
-        .map_err(|e| e.to_string())?;
     transaction.commit().map_err(|e| e.to_string())
 }

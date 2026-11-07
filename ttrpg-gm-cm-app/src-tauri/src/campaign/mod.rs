@@ -3,10 +3,10 @@ use serde_json::Value;
 use std::collections::HashMap;
 
 mod assets;
-mod commands;
 pub mod history;
 mod items;
 use items::{CampaignItem, ItemFieldDefinition};
+#[cfg(feature = "legacy-sqlite")]
 mod migrations;
 #[cfg(feature = "legacy-sqlite")]
 mod repository;
@@ -86,7 +86,7 @@ impl Default for StatblockFieldSet {
     }
 }
 
-#[derive(Debug, Clone, Default, Serialize, Deserialize)]
+#[derive(Debug, Clone, Default, Serialize, Deserialize, schemars::JsonSchema)]
 #[serde(rename_all = "camelCase", deny_unknown_fields)]
 struct NpcPresentation {
     #[serde(default)]
@@ -103,14 +103,14 @@ struct NpcPresentation {
     statblock: NpcStatblock,
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, schemars::JsonSchema)]
 #[serde(rename_all = "camelCase", deny_unknown_fields)]
 struct NpcRelationship {
     target_id: String,
     label: String,
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, schemars::JsonSchema)]
 #[serde(deny_unknown_fields)]
 struct NpcImage {
     #[serde(rename = "type")]
@@ -118,7 +118,7 @@ struct NpcImage {
     url: String,
 }
 
-#[derive(Debug, Clone, Default, Serialize, Deserialize)]
+#[derive(Debug, Clone, Default, Serialize, Deserialize, schemars::JsonSchema)]
 #[serde(rename_all = "camelCase", deny_unknown_fields)]
 struct NpcGmReference {
     background: String,
@@ -137,7 +137,7 @@ struct NpcGmReference {
     other: String,
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, schemars::JsonSchema)]
 #[serde(rename_all = "camelCase", deny_unknown_fields)]
 struct NpcStatblock {
     field_set_id: String,
@@ -157,7 +157,7 @@ impl Default for NpcStatblock {
     }
 }
 
-#[derive(Debug, Clone, Default, Serialize, Deserialize)]
+#[derive(Debug, Clone, Default, Serialize, Deserialize, schemars::JsonSchema)]
 #[serde(rename_all = "camelCase", deny_unknown_fields)]
 struct Location {
     #[serde(default)]
@@ -183,7 +183,7 @@ struct Location {
     gm_notes: String,
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, schemars::JsonSchema)]
 #[serde(rename_all = "camelCase", deny_unknown_fields)]
 struct CampaignMap {
     id: String,
@@ -196,13 +196,13 @@ struct CampaignMap {
     pins: Vec<MapPin>,
     party: Option<MapPoint>,
 }
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, schemars::JsonSchema)]
 #[serde(deny_unknown_fields)]
 struct MapPoint {
     x: f64,
     y: f64,
 }
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, schemars::JsonSchema)]
 #[serde(rename_all = "camelCase", deny_unknown_fields)]
 struct MapPin {
     id: String,
@@ -217,7 +217,7 @@ fn unknown_party_knowledge() -> String {
     "unknown".into()
 }
 
-#[derive(Debug, Clone, Default, Serialize, Deserialize)]
+#[derive(Debug, Clone, Default, Serialize, Deserialize, schemars::JsonSchema)]
 #[serde(rename_all = "camelCase", deny_unknown_fields)]
 struct LocationReference {
     #[serde(default)]
@@ -230,7 +230,7 @@ struct LocationReference {
     secrets: String,
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, schemars::JsonSchema)]
 #[serde(rename_all = "camelCase", deny_unknown_fields)]
 struct Faction {
     id: String,
@@ -240,7 +240,7 @@ struct Faction {
     gm_notes: String,
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, schemars::JsonSchema)]
 #[serde(rename_all = "camelCase", deny_unknown_fields)]
 struct StoryThread {
     id: String,
@@ -256,14 +256,14 @@ struct StoryThread {
     factions: Vec<NpcRelationship>,
 }
 
-#[derive(Debug, Clone, Default, Serialize, Deserialize)]
+#[derive(Debug, Clone, Default, Serialize, Deserialize, schemars::JsonSchema)]
 #[serde(rename_all = "camelCase", deny_unknown_fields)]
 struct PartyInventory {
     gold: u64,
     entries: Vec<InventoryEntry>,
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, schemars::JsonSchema)]
 #[serde(rename_all = "camelCase", deny_unknown_fields)]
 struct InventoryEntry {
     id: String,
@@ -274,12 +274,13 @@ struct InventoryEntry {
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
 struct Sidebar {
     width: f64,
     open: bool,
 }
 #[derive(Debug, Clone, Serialize, Deserialize)]
-#[serde(rename_all = "camelCase")]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
 struct Workspace {
     layout: Value,
     panels: HashMap<String, Value>,
@@ -289,6 +290,7 @@ struct Workspace {
     history: NavigationHistory,
 }
 #[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
 struct NavigationHistory {
     #[serde(deserialize_with = "deserialize_destinations")]
     entries: Vec<Destination>,
@@ -437,7 +439,9 @@ mod tests {
         ],"index":1});
         write_campaign(&path, serde_json::from_value(value.clone()).unwrap()).unwrap();
         let db = Connection::open(path.join("campaign.sqlite")).unwrap();
-        let stored: String = db.query_row("SELECT items_json FROM item_catalog", [], |row| row.get(0)).unwrap();
+        let stored: String = db
+            .query_row("SELECT items_json FROM item_catalog", [], |row| row.get(0))
+            .unwrap();
         assert!(stored.contains("assets/"));
         assert!(!stored.contains("data:image"));
         drop(db);
@@ -458,7 +462,12 @@ mod tests {
         value["itemFields"] = item_fields_example();
         write_campaign(&path, serde_json::from_value(value.clone()).unwrap()).unwrap();
         let original = fs::read(path.join("campaign.sqlite")).unwrap();
-        for (key, invalid_value) in [("tier",json!("unknown")),("weight",json!("heavy")),("attune",json!(1)),("unknown",json!(true))] {
+        for (key, invalid_value) in [
+            ("tier", json!("unknown")),
+            ("weight", json!("heavy")),
+            ("attune", json!(1)),
+            ("unknown", json!(true)),
+        ] {
             let mut invalid = value.clone();
             invalid["items"][0]["values"][key] = invalid_value;
             assert!(write_campaign(&path, serde_json::from_value(invalid).unwrap()).is_err());
@@ -468,10 +477,16 @@ mod tests {
         invalid["items"][0]["name"] = json!(" ");
         assert!(write_campaign(&path, serde_json::from_value(invalid).unwrap()).is_err());
         let mut invalid = value.clone();
-        invalid["itemFields"].as_array_mut().unwrap().push(item_fields_example()[0].clone());
+        invalid["itemFields"]
+            .as_array_mut()
+            .unwrap()
+            .push(item_fields_example()[0].clone());
         assert!(write_campaign(&path, serde_json::from_value(invalid).unwrap()).is_err());
         let mut invalid = value.clone();
-        invalid["items"].as_array_mut().unwrap().push(item_example());
+        invalid["items"]
+            .as_array_mut()
+            .unwrap()
+            .push(item_example());
         assert!(write_campaign(&path, serde_json::from_value(invalid).unwrap()).is_err());
         let mut invalid = value.clone();
         invalid["itemFields"][0]["options"][1]["label"] = json!("c");
@@ -485,13 +500,18 @@ mod tests {
         let path = folder.path().join("legacy-items.campaign");
         write_campaign(&path, example()).unwrap();
         let db = Connection::open(path.join("campaign.sqlite")).unwrap();
-        db.execute_batch("DROP TABLE item_catalog; PRAGMA user_version=6;").unwrap();
+        db.execute_batch("DROP TABLE item_catalog; PRAGMA user_version=6;")
+            .unwrap();
         drop(db);
         let loaded = read_campaign(&path).unwrap();
         assert!(loaded.items.is_empty() && loaded.item_fields.is_empty());
         write_campaign(&path, loaded).unwrap();
         let db = Connection::open(path.join("campaign.sqlite")).unwrap();
-        assert_eq!(db.pragma_query_value(None, "user_version", |row| row.get::<_,i32>(0)).unwrap(), 7);
+        assert_eq!(
+            db.pragma_query_value(None, "user_version", |row| row.get::<_, i32>(0))
+                .unwrap(),
+            7
+        );
         assert!(table_exists(&db, "item_catalog").unwrap());
     }
 
@@ -1241,5 +1261,33 @@ mod tests {
                 .unwrap(),
             7
         );
+    }
+}
+
+#[cfg(all(test, feature = "legacy-sqlite"))]
+mod workspace_compatibility_tests {
+    use super::*;
+    use serde_json::json;
+
+    #[test]
+    fn unknown_workspace_fields_are_rejected_instead_of_silently_dropped() {
+        let mut value = json!({
+            "format": "ttrpg-campaign", "schemaVersion": 1, "id": "workspace-test",
+            "name": "Workspace", "createdAt": "2026-01-01", "updatedAt": "2026-01-01",
+            "section": null, "sidebar": {"width": 256, "open": true}, "npcs": [],
+            "workspace": {
+                "layout": {"grid": {"root": {"type": "branch", "data": []},
+                    "height": 600, "width": 800, "orientation": "HORIZONTAL"}, "panels": {}},
+                "panels": {}, "nextId": 1, "sidebarWidth": 192, "collapsed": false,
+                "history": {"entries": [], "index": -1},
+                "futureField": true
+            }
+        });
+        assert!(serde_json::from_value::<Campaign>(value.clone()).is_err());
+        value["workspace"]
+            .as_object_mut()
+            .unwrap()
+            .remove("futureField");
+        assert!(serde_json::from_value::<Campaign>(value).is_ok());
     }
 }

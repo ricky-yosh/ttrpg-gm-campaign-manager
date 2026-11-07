@@ -68,7 +68,7 @@ impl Storage {
             folder,
         };
         let version = storage.version().await?;
-        if (create && version != 0) || (!create && !(1..=5).contains(&version)) {
+        if (create && version != 0) || (!create && !(1..=7).contains(&version)) {
             return Err(format!("Unsupported campaign database version {version}."));
         }
         // Existing packages are only migrated on explicit Save.
@@ -122,7 +122,7 @@ impl Storage {
         transform_images(&mut document, &self.folder, true)?;
         let campaign: Campaign = serde_json::from_value(document).map_err(|e| e.to_string())?;
         let version = self.version().await?;
-        if !(1..=5).contains(&version) {
+        if !(1..=7).contains(&version) {
             return Err(format!("Unsupported campaign database version {version}."));
         }
         let tx = self
@@ -158,6 +158,7 @@ impl Storage {
         }
         let row = &rows[0];
         let id = row.get::<String>(0).map_err(|e| e.to_string())?;
+        let (items, item_fields) = self.item_catalog(&id).await?;
         let mut campaign = Campaign {
             format: "ttrpg-campaign".into(),
             schema_version: row
@@ -182,6 +183,9 @@ impl Storage {
                 .json_row("party_inventory", "inventory_json", &id)
                 .await?
                 .unwrap_or_default(),
+            items,
+            item_fields,
+            threads: self.records("story_thread", &id).await?,
             npcs: Vec::new(),
             locations: self.records("location", &id).await?,
             factions: self.records("faction", &id).await?,
@@ -256,6 +260,25 @@ impl Storage {
         rows.first().map(|row| decode(row, 0)).transpose()
     }
 
+    async fn item_catalog(
+        &self,
+        id: &str,
+    ) -> Result<(Vec<CampaignItem>, Vec<ItemFieldDefinition>)> {
+        if !self.table_exists("item_catalog").await? {
+            return Ok((Vec::new(), Vec::new()));
+        }
+        let rows = self
+            .rows(
+                "SELECT items_json,fields_json FROM item_catalog WHERE campaign_id=?1",
+                [id],
+            )
+            .await?;
+        match rows.first() {
+            Some(row) => Ok((decode(row, 0)?, decode(row, 1)?)),
+            None => Ok((Vec::new(), Vec::new())),
+        }
+    }
+
     async fn records<T: serde::de::DeserializeOwned>(
         &self,
         table: &str,
@@ -328,6 +351,18 @@ async fn write(connection: &Connection, campaign: &Campaign) -> Result<()> {
         connection.execute(&format!("INSERT INTO {table} (campaign_id,{column}) VALUES (?1,?2) ON CONFLICT(campaign_id) DO UPDATE SET {column}=excluded.{column}"),
             params![campaign.id.clone(), value.map_err(|e| e.to_string())?.to_string()]).await.map_err(|e| e.to_string())?;
     }
+    connection
+        .execute(
+            "INSERT INTO item_catalog (campaign_id,items_json,fields_json) VALUES (?1,?2,?3)
+             ON CONFLICT(campaign_id) DO UPDATE SET items_json=excluded.items_json,fields_json=excluded.fields_json",
+            params![
+                campaign.id.clone(),
+                serde_json::to_string(&campaign.items).map_err(|e| e.to_string())?,
+                serde_json::to_string(&campaign.item_fields).map_err(|e| e.to_string())?
+            ],
+        )
+        .await
+        .map_err(|e| e.to_string())?;
     // Explicit child deletes also keep this safe if FK cascade behavior changes.
     for table in ["npc_notes", "npc_presentation"] {
         connection
@@ -388,6 +423,7 @@ async fn write(connection: &Connection, campaign: &Campaign) -> Result<()> {
         ("location", serde_json::to_value(&campaign.locations)),
         ("faction", serde_json::to_value(&campaign.factions)),
         ("map_record", serde_json::to_value(&campaign.maps)),
+        ("story_thread", serde_json::to_value(&campaign.threads)),
     ] {
         connection
             .execute(
@@ -531,6 +567,126 @@ mod tests {
             .contains("Missing or unreadable"));
     }
 
+    fn version_seven_campaign() -> Campaign {
+        serde_json::from_value(json!({
+            "format": "ttrpg-campaign", "schemaVersion": 1, "id": "v7-campaign",
+            "name": "Version seven", "createdAt": "2026-11-07", "updatedAt": "2026-11-07",
+            "section": null, "sidebar": {"width": 256, "open": true},
+            "npcs": [], "locations": [], "factions": [], "maps": [],
+            "threads": [{"id": "thread-1", "title": "A missing shipment", "status": "active",
+                "playerReminder": "A crate vanished.", "origin": "A dock rumor", "sourceLabel": "Rumor",
+                "currentSituation": [{"type": "p", "children": [{"text": "The crew is missing."}]},
+                    {"type": "img", "url": "data:image/png;base64,dGhyZWFk", "children": [{"text": ""}]}],
+                "gmPossibilities": [{"type": "p", "children": [{"text": "A guild negotiator arrives."}]}],
+                "people": [], "locations": [], "factions": []}],
+            "inventory": {"gold": 12, "entries": [{"id": "rope", "name": "Rope", "kind": "item", "quantity": 2, "note": ""}]},
+            "items": [{"id": "item-1", "name": "Compass", "image": {"type": "img", "url": "data:image/png;base64,aXRlbQ=="},
+                "description": "Points north", "gmNotes": "Private", "values": {}}],
+            "itemFields": [{"id": "tier", "label": "Tier", "kind": "choice",
+                "options": [{"id": "c", "label": "C"}, {"id": "b", "label": "B"}]}],
+            "workspace": null
+        }))
+        .unwrap()
+    }
+
+    #[tokio::test]
+    async fn version_seven_threads_items_and_assets_round_trip_through_turso() {
+        let temp = tempfile::tempdir().unwrap();
+        let path = temp.path().join("v7.campaign");
+        let original = version_seven_campaign();
+        let mut storage = Storage::open(&path, true).await.unwrap();
+        storage.save(&original).await.unwrap();
+        // The item/thread image bytes are installed as hashed assets.
+        assert_eq!(fs::read_dir(path.join("assets")).unwrap().count(), 2);
+        let stored: String = {
+            let mut rows = storage
+                .connection
+                .query("SELECT items_json FROM item_catalog", ())
+                .await
+                .unwrap();
+            rows.next().await.unwrap().unwrap().get(0).unwrap()
+        };
+        assert!(stored.contains("assets/"));
+        assert!(!stored.contains("data:image"));
+        let loaded = storage.load().await.unwrap();
+        assert_eq!(loaded.threads.len(), 1);
+        assert_eq!(loaded.threads[0].title, "A missing shipment");
+        assert_eq!(loaded.items.len(), 1);
+        assert_eq!(
+            serde_json::to_value(&loaded.items).unwrap(),
+            serde_json::to_value(&original.items).unwrap()
+        );
+        assert_eq!(
+            serde_json::to_value(&loaded.item_fields).unwrap(),
+            serde_json::to_value(&original.item_fields).unwrap()
+        );
+        assert_eq!(loaded.inventory.gold, 12);
+        drop(storage);
+        let moved = temp.path().join("moved.campaign");
+        fs::rename(&path, &moved).unwrap();
+        let mut reopened = Storage::open(&moved, false).await.unwrap();
+        let loaded = reopened.load().await.unwrap();
+        assert_eq!(
+            serde_json::to_value(&loaded).unwrap(),
+            serde_json::to_value(&original).unwrap()
+        );
+        // Saving a loaded package keeps the v7 catalog and threads.
+        reopened.save(&loaded).await.unwrap();
+        assert_eq!(
+            serde_json::to_value(&reopened.load().await.unwrap().items).unwrap(),
+            serde_json::to_value(&original.items).unwrap()
+        );
+    }
+
+    #[tokio::test]
+    async fn version_six_loads_without_items_and_upgrades_on_save() {
+        let temp = tempfile::tempdir().unwrap();
+        let path = temp.path().join("v6.campaign");
+        let original = version_seven_campaign();
+        let mut storage = Storage::open(&path, true).await.unwrap();
+        storage.save(&original).await.unwrap();
+        storage
+            .connection
+            .execute("DROP TABLE item_catalog", ())
+            .await
+            .unwrap();
+        storage
+            .connection
+            .execute("PRAGMA user_version=6", ())
+            .await
+            .unwrap();
+        drop(storage);
+        let mut storage = Storage::open(&path, false).await.unwrap();
+        let loaded = storage.load().await.unwrap();
+        assert!(loaded.items.is_empty() && loaded.item_fields.is_empty());
+        assert_eq!(loaded.threads.len(), 1);
+        storage.save(&loaded).await.unwrap();
+        assert_eq!(storage.version().await.unwrap(), 7);
+        assert!(storage.table_exists("item_catalog").await.unwrap());
+    }
+
+    #[tokio::test]
+    async fn version_five_loads_without_threads_and_upgrades_on_save() {
+        let temp = tempfile::tempdir().unwrap();
+        let path = temp.path().join("v5.campaign");
+        let mut storage = Storage::open(&path, true).await.unwrap();
+        storage.save(&version_seven_campaign()).await.unwrap();
+        for sql in [
+            "DROP TABLE story_thread",
+            "DROP TABLE item_catalog",
+            "PRAGMA user_version=5",
+        ] {
+            storage.connection.execute(sql, ()).await.unwrap();
+        }
+        drop(storage);
+        let mut storage = Storage::open(&path, false).await.unwrap();
+        let loaded = storage.load().await.unwrap();
+        assert!(loaded.threads.is_empty());
+        assert!(loaded.items.is_empty());
+        storage.save(&loaded).await.unwrap();
+        assert_eq!(storage.version().await.unwrap(), 7);
+    }
+
     #[cfg(feature = "legacy-sqlite")]
     #[tokio::test]
     async fn legacy_sqlite_and_turso_round_trip_same_package() {
@@ -554,5 +710,353 @@ mod tests {
             serde_json::to_value(legacy).unwrap(),
             serde_json::to_value(loaded).unwrap()
         );
+    }
+
+    #[cfg(feature = "legacy-sqlite")]
+    #[tokio::test]
+    async fn legacy_sqlite_v7_threads_items_and_workspace_round_trip_through_turso() {
+        let temp = tempfile::tempdir().unwrap();
+        let path = temp.path().join("v7-compatibility.campaign");
+        let original = version_seven_campaign();
+        CampaignRepository::save(&path, original.clone()).unwrap();
+        let mut storage = Storage::open(&path, false).await.unwrap();
+        let mut loaded = storage.load().await.unwrap();
+        assert_eq!(
+            serde_json::to_value(&loaded).unwrap(),
+            serde_json::to_value(&original).unwrap()
+        );
+        loaded.threads[0].status = "resolved".into();
+        storage.save(&loaded).await.unwrap();
+        drop(storage);
+        let legacy = CampaignRepository::load(&path).unwrap();
+        assert_eq!(
+            serde_json::to_value(&legacy).unwrap(),
+            serde_json::to_value(&loaded).unwrap()
+        );
+    }
+}
+
+#[cfg(all(test, feature = "legacy-sqlite"))]
+mod compatibility_fixture {
+    use super::*;
+    use serde_json::json;
+
+    fn complex_campaign() -> Campaign {
+        serde_json::from_value(json!({
+            "format": "ttrpg-campaign", "schemaVersion": 1, "id": "complex-campaign",
+            "name": "The Lanterns of Greyhaven", "createdAt": "2026-10-01T00:00:00Z",
+            "updatedAt": "2026-10-02T00:00:00Z", "section": "Characters",
+            "sidebar": {"width": 256, "open": true},
+            "workspace": {
+                "layout": {
+                    "grid": {"root": {"type": "branch", "data": []}, "height": 600,
+                        "width": 800, "orientation": "HORIZONTAL"},
+                    "panels": {}
+                },
+                "panels": {}, "nextId": 1, "sidebarWidth": 192, "collapsed": false,
+                "history": {"entries": [{"kind": "settings"}], "index": 0}
+            },
+            "statblockFieldSet": {"id": "dnd-5.5e", "version": 1},
+            "npcs": [{
+                "id": "npc-1", "name": "Carlos Tree",
+                "notes": [
+                    {"type": "p", "children": [{"text": "Private ", "bold": true},
+                        {"text": "notes", "italic": true}]},
+                    {"type": "img", "url": "data:image/png;base64,bm90ZS1pbWFnZQ==",
+                        "caption": [{"text": "Forest trail"}], "children": [{"text": ""}]},
+                    {"type": "custom-block", "value": {"keep": true},
+                        "children": [{"text": "Unknown node"}]}
+                ],
+                "presentation": {
+                    "banner": {"type": "img", "url": "data:image/png;base64,YmFubmVy"},
+                    "portrait": {"type": "img", "url": "data:image/jpeg;base64,cG9ydHJhaXQ="},
+                    "playerDescription": "A patient scout.",
+                    "relationships": [{"targetId": "npc-2", "label": "Ally"}],
+                    "locations": [{"targetId": "loc-2", "label": "Home"}],
+                    "factions": [{"targetId": "faction-1", "label": "Member"}],
+                    "gmReference": {
+                        "background": "A traveler.", "wants": "Safety", "ideals": "Truth",
+                        "bond": "The village", "flaw": "Distrustful", "secrets": "Knows the pass",
+                        "reaction": "Withdraws", "personality": "Patient",
+                        "mannerisms": "Studies tracks", "notableActions": "Leaves markers",
+                        "voice": "Soft", "allies": "Rangers", "enemies": "Bandits", "other": ""
+                    },
+                    "statblock": {
+                        "fieldSetId": "dnd-5.5e", "fieldSetVersion": 1,
+                        "tokenImage": {"type": "img", "url": "data:image/webp;base64,dG9rZW4="},
+                        "data": {"armorClass": 15,
+                            "actions": [{"name": "Track", "description": "Follow a trail."}]}
+                    }
+                }
+            }, {
+                "id": "npc-2", "name": "Guide",
+                "notes": [{"type": "p", "children": [{"text": ""}]}]
+            }],
+            "locations": [{
+                "id": "loc-1", "name": "Northern Reach", "image": null,
+                "publicDescription": "A rugged region.", "gmNotes": "Old prep.",
+                "parentId": null, "locationType": "Region", "tags": ["Forest"],
+                "partyKnowledge": "known", "banner": null,
+                "gmReference": {"atmosphere": "", "background": "", "currentSituation": "",
+                    "secrets": ""},
+                "associatedNpcs": [], "associatedFactions": []
+            }, {
+                "id": "loc-2", "name": "Greyhaven",
+                "image": {"type": "img", "url": "data:image/png;base64,bG9jYXRpb24="},
+                "banner": {"type": "img", "url": "data:image/png;base64,bG9jLWJhbm5lcg=="},
+                "publicDescription": "A harbor city.", "gmNotes": "A drowned shrine.",
+                "parentId": "loc-1", "locationType": "City", "tags": ["Harbor"],
+                "partyKnowledge": "visited",
+                "gmReference": {"atmosphere": "Salt", "background": "Old harbor",
+                    "currentSituation": "A festival", "secrets": "A drowned shrine"},
+                "associatedNpcs": [{"targetId": "npc-1", "label": "Resident"}],
+                "associatedFactions": [{"targetId": "faction-1", "label": "Patrols"}]
+            }],
+            "factions": [{
+                "id": "faction-1", "name": "Harbor Wardens",
+                "image": {"type": "img", "url": "data:image/png;base64,ZmFjdGlvbg=="},
+                "description": "Protectors.", "gmNotes": "A private suspicion."
+            }],
+            "maps": [{
+                "id": "map-1", "name": "City map", "kind": "City",
+                "image": {"type": "img", "url": "data:image/png;base64,bWFwLW9uZQ=="},
+                "width": 1400, "height": 900, "locationIds": ["loc-2"],
+                "pins": [{"id": "pin-1", "x": 0.5, "y": 0.5, "locationId": "loc-2",
+                    "label": "Harbor", "destinationMapId": "map-2"}],
+                "party": {"x": 0.2, "y": 0.8}
+            }, {
+                "id": "map-2", "name": "Inn map", "kind": "Building",
+                "image": {"type": "img", "url": "data:image/png;base64,bWFwLXR3bw=="},
+                "width": 800, "height": 600, "locationIds": ["loc-2"],
+                "pins": [], "party": null
+            }],
+            "threads": [{
+                "id": "thread-1", "title": "The Missing Morrow", "status": "active",
+                "playerReminder": "The Morrow vanished.", "origin": "A guild request.",
+                "sourceLabel": "Rumor",
+                "currentSituation": [
+                    {"type": "p", "children": [{"text": "The ledger points to the harbor."}]},
+                    {"type": "img", "url": "data:image/png;base64,dGhyZWFk",
+                        "caption": [{"text": "A clue"}], "children": [{"text": ""}]}
+                ],
+                "gmPossibilities": [{"type": "p", "children": [{"text": "A negotiator arrives."}]}],
+                "people": [{"targetId": "npc-1", "label": "Witness"}],
+                "locations": [{"targetId": "loc-2", "label": "Last seen"}],
+                "factions": [{"targetId": "faction-1", "label": "Involved"}]
+            }],
+            "inventory": {"gold": 248, "entries": [
+                {"id": "rope", "name": "Rope", "kind": "item", "quantity": 2, "note": "50 feet"},
+                {"id": "ore", "name": "Iron ore", "kind": "material", "quantity": 8, "note": ""}
+            ]},
+            "items": [{
+                "id": "item-1", "name": "Tideglass Compass",
+                "image": {"type": "img", "url": "data:image/png;base64,aXRlbQ=="},
+                "description": "Points toward salt water.", "gmNotes": "A keeper's relic.",
+                "values": {"tier": "c", "weight": 0.5, "attune": true,
+                    "inscription": "To the harbor"}
+            }],
+            "itemFields": [
+                {"id": "tier", "label": "Tier", "kind": "choice",
+                    "options": [{"id": "c", "label": "C"}, {"id": "b", "label": "B"}]},
+                {"id": "weight", "label": "Weight", "kind": "number", "options": []},
+                {"id": "attune", "label": "Attunement", "kind": "checkbox", "options": []},
+                {"id": "inscription", "label": "Inscription", "kind": "text", "options": []}
+            ]
+        }))
+        .unwrap()
+    }
+
+    #[tokio::test]
+    async fn complex_legacy_package_round_trips_through_turso_after_moving() {
+        let temp = tempfile::tempdir().unwrap();
+        let path = temp.path().join("complex.campaign");
+        let original = complex_campaign();
+        CampaignRepository::save(&path, original.clone()).unwrap();
+        assert_eq!(fs::read_dir(path.join("assets")).unwrap().count(), 11);
+        let storage = Storage::open(&path, false).await.unwrap();
+        let loaded = storage.load().await.unwrap();
+        assert_eq!(
+            serde_json::to_value(&loaded).unwrap(),
+            serde_json::to_value(&original).unwrap()
+        );
+        assert_eq!(loaded.threads[0].title, "The Missing Morrow");
+        assert_eq!(loaded.items.len(), 1);
+        assert_eq!(loaded.item_fields.len(), 4);
+        drop(storage);
+        let moved = temp.path().join("moved-complex.campaign");
+        fs::rename(&path, &moved).unwrap();
+        let mut storage = Storage::open(&moved, false).await.unwrap();
+        let mut loaded = storage.load().await.unwrap();
+        loaded.inventory.gold = 249;
+        storage.save(&loaded).await.unwrap();
+        drop(storage);
+        let legacy = CampaignRepository::load(&moved).unwrap();
+        assert_eq!(legacy.inventory.gold, 249);
+        assert_eq!(legacy.locations[1].parent_id.as_deref(), Some("loc-1"));
+        assert_eq!(
+            legacy.maps[0].pins[0].destination_map_id.as_deref(),
+            Some("map-2")
+        );
+        assert_eq!(legacy.threads[0].people[0].target_id, "npc-1");
+        assert_eq!(
+            legacy.npcs[0].presentation.relationships[0].target_id,
+            "npc-2"
+        );
+        assert_eq!(legacy.npcs[0].notes[2]["type"], "custom-block");
+        assert_eq!(legacy.workspace.as_ref().unwrap().history.index, 0);
+    }
+}
+
+#[cfg(test)]
+mod historical_versions {
+    use super::*;
+    use serde_json::json;
+
+    fn historical_campaign() -> Campaign {
+        serde_json::from_value(json!({
+            "format": "ttrpg-campaign", "schemaVersion": 1, "id": "historical",
+            "name": "Historical", "createdAt": "2026-01-01", "updatedAt": "2026-01-02",
+            "section": null, "sidebar": {"width": 256, "open": true}, "workspace": null,
+            "npcs": [{"id": "npc-1", "name": "Scout",
+                "notes": [{"type": "p", "children": [{"text": "Private"}]}],
+                "presentation": {
+                    "playerDescription": "A scout.",
+                    "gmReference": {"background": "", "wants": "", "ideals": "", "bond": "",
+                        "flaw": "", "secrets": "", "reaction": "", "personality": "",
+                        "mannerisms": "", "notableActions": "", "voice": "", "allies": "",
+                        "enemies": "", "other": ""},
+                    "statblock": {"fieldSetId": "dnd-5.5e", "fieldSetVersion": 1, "data": {}}
+                }}],
+            "locations": [{"id": "loc-1", "name": "Village", "image": null,
+                "publicDescription": "A village.", "gmNotes": "Private.", "partyKnowledge": "unknown"}],
+            "factions": [{"id": "faction-1", "name": "Wardens", "image": null,
+                "description": "Protectors.", "gmNotes": ""}],
+            "inventory": {"gold": 5, "entries": []},
+            "maps": [{"id": "map-1", "name": "Map", "kind": "City",
+                "image": {"type": "img", "url": "data:image/png;base64,bWFw"},
+                "width": 100, "height": 100, "locationIds": ["loc-1"],
+                "pins": [], "party": null}],
+            "threads": [{"id": "thread-1", "title": "Thread", "status": "idea",
+                "playerReminder": "", "origin": "", "sourceLabel": "",
+                "currentSituation": [{"type": "p", "children": [{"text": ""}]}],
+                "gmPossibilities": [{"type": "p", "children": [{"text": ""}]}],
+                "people": [], "locations": [], "factions": []}],
+            "items": [{"id": "item-1", "name": "Rope", "image": null,
+                "description": "", "gmNotes": "", "values": {}}],
+            "itemFields": []
+        }))
+        .unwrap()
+    }
+
+    async fn assert_version_round_trip(version: i64, drops: &[&str]) {
+        let temp = tempfile::tempdir().unwrap();
+        let path = temp.path().join(format!("v{version}.campaign"));
+        let original = historical_campaign();
+        let mut storage = Storage::open(&path, true).await.unwrap();
+        storage.save(&original).await.unwrap();
+        for table in drops {
+            storage
+                .connection
+                .execute(&format!("DROP TABLE {table}"), ())
+                .await
+                .unwrap();
+        }
+        storage
+            .connection
+            .execute(&format!("PRAGMA user_version={version}"), ())
+            .await
+            .unwrap();
+        drop(storage);
+
+        let mut storage = Storage::open(&path, false).await.unwrap();
+        let loaded = storage.load().await.unwrap();
+        assert_eq!(loaded.id, "historical");
+        assert_eq!(loaded.npcs.len(), 1);
+        if version == 1 {
+            assert_eq!(loaded.statblock_field_set.id, "dnd-5.5e");
+            assert_eq!(loaded.npcs[0].presentation.player_description, "");
+        } else {
+            assert_eq!(loaded.npcs[0].presentation.player_description, "A scout.");
+        }
+        if version >= 2 {
+            assert_eq!(loaded.locations.len(), 1);
+        } else {
+            assert!(loaded.locations.is_empty());
+        }
+        if version >= 3 {
+            assert_eq!(loaded.factions.len(), 1);
+        } else {
+            assert!(loaded.factions.is_empty());
+        }
+        if version >= 4 {
+            assert_eq!(loaded.inventory.gold, 5);
+        } else {
+            assert_eq!(loaded.inventory.gold, 0);
+        }
+        if version >= 5 {
+            assert_eq!(loaded.maps.len(), 1);
+        } else {
+            assert!(loaded.maps.is_empty());
+        }
+        if version >= 6 {
+            assert_eq!(loaded.threads.len(), 1);
+        } else {
+            assert!(loaded.threads.is_empty());
+        }
+        if version >= 7 {
+            assert_eq!(loaded.items.len(), 1);
+        } else {
+            assert!(loaded.items.is_empty());
+        }
+        storage.save(&loaded).await.unwrap();
+        assert_eq!(storage.version().await.unwrap(), 7);
+        assert!(storage.table_exists("item_catalog").await.unwrap());
+        assert!(storage.table_exists("story_thread").await.unwrap());
+        drop(storage);
+
+        let storage = Storage::open(&path, false).await.unwrap();
+        let upgraded = storage.load().await.unwrap();
+        assert_eq!(upgraded.npcs[0].name, "Scout");
+        assert_eq!(upgraded.inventory.gold, if version >= 4 { 5 } else { 0 });
+    }
+
+    #[tokio::test]
+    async fn turso_reads_and_upgrades_every_historical_version() {
+        assert_version_round_trip(
+            1,
+            &[
+                "location",
+                "faction",
+                "party_inventory",
+                "map_record",
+                "story_thread",
+                "item_catalog",
+                "npc_presentation",
+                "campaign_settings",
+            ],
+        )
+        .await;
+        assert_version_round_trip(
+            2,
+            &[
+                "faction",
+                "party_inventory",
+                "map_record",
+                "story_thread",
+                "item_catalog",
+            ],
+        )
+        .await;
+        assert_version_round_trip(
+            3,
+            &[
+                "party_inventory",
+                "map_record",
+                "story_thread",
+                "item_catalog",
+            ],
+        )
+        .await;
+        assert_version_round_trip(4, &["map_record", "story_thread", "item_catalog"]).await;
     }
 }

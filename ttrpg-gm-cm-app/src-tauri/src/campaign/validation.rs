@@ -1,6 +1,10 @@
 use super::*;
 use std::collections::HashSet;
 
+fn valid_image(image: &NpcImage) -> bool {
+    image.kind == "img" && !image.url.trim().is_empty()
+}
+
 pub(super) fn validate_layout(layout: &Value, components: &[&str]) -> Result<(), String> {
     let grid = layout.get("grid").ok_or("Workspace has no grid.")?;
     if !grid["width"].is_number()
@@ -131,9 +135,19 @@ impl Campaign {
             if [location.image.as_ref(), location.banner.as_ref()]
                 .into_iter()
                 .flatten()
-                .any(|image| image.kind != "img")
+                .any(|image| !valid_image(image))
             {
-                return Err("Location images must use type 'img'.".into());
+                return Err("Location images must use type 'img' and an imported URL.".into());
+            }
+            for links in [&location.associated_npcs, &location.associated_factions] {
+                let mut targets = HashSet::new();
+                for link in links {
+                    if link.target_id.trim().is_empty() || !targets.insert(&link.target_id) {
+                        return Err(
+                            "Location associations need unique, nonempty target IDs.".into()
+                        );
+                    }
+                }
             }
         }
         let locations: std::collections::HashMap<_, _> = self
@@ -169,7 +183,7 @@ impl Campaign {
                 || map.height == 0
                 || !["World", "Region", "City", "Building", "Dungeon", "Battle"]
                     .contains(&map.kind.as_str())
-                || map.image.kind != "img"
+                || !valid_image(&map.image)
             {
                 return Err("Invalid map identity, kind, dimensions, or image.".into());
             }
@@ -242,9 +256,9 @@ impl Campaign {
             if faction
                 .image
                 .as_ref()
-                .is_some_and(|image| image.kind != "img")
+                .is_some_and(|image| !valid_image(image))
             {
-                return Err("Faction images must use type 'img'.".into());
+                return Err("Faction images must use type 'img' and an imported URL.".into());
             }
         }
         for npc in &self.npcs {
@@ -292,8 +306,10 @@ impl Campaign {
             .into_iter()
             .flatten()
             {
-                if image.kind != "img" {
-                    return Err("NPC presentation images must use type 'img'.".into());
+                if !valid_image(image) {
+                    return Err(
+                        "NPC presentation images must use type 'img' and an imported URL.".into(),
+                    );
                 }
             }
         }
@@ -305,8 +321,15 @@ pub(super) fn validate_node(node: &Value) -> Result<(), String> {
     if node.get("text").and_then(Value::as_str).is_some() {
         return Ok(());
     }
-    if node.get("type").and_then(Value::as_str).is_none() {
-        return Err("Invalid note block.".into());
+    let kind = node
+        .get("type")
+        .and_then(Value::as_str)
+        .ok_or("Invalid note block.")?;
+    if kind == "img" {
+        let url = node.get("url").and_then(Value::as_str).unwrap_or("");
+        if url.trim().is_empty() {
+            return Err("Note images must have an imported URL.".into());
+        }
     }
     let children = node
         .get("children")

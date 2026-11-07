@@ -52,4 +52,15 @@ CREATE TABLE IF NOT EXISTS map_record (
     sort_order INTEGER NOT NULL,
     record_json TEXT NOT NULL
 );
-PRAGMA user_version = 5;
+CREATE TABLE IF NOT EXISTS story_thread (
+    id TEXT PRIMARY KEY NOT NULL,
+    campaign_id TEXT NOT NULL REFERENCES campaign(id) ON DELETE CASCADE,
+    sort_order INTEGER NOT NULL,
+    record_json TEXT NOT NULL
+);
+CREATE TABLE IF NOT EXISTS item_catalog (
+    campaign_id TEXT PRIMARY KEY NOT NULL REFERENCES campaign(id) ON DELETE CASCADE,
+    items_json TEXT NOT NULL,
+    fields_json TEXT NOT NULL
+);
+PRAGMA user_version = 7;
