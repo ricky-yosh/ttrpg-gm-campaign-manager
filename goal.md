@@ -1,251 +1,220 @@
-# Goal: Build the headless campaign-authoring foundation
+# Goal: Assess product readiness for the GM toolkit
 
-Build the headless campaign-authoring application for this repository:
+Investigate the documented product and current implementation, then write a
+source-linked readiness report in `docs/product-readiness/`.
 
-CLI → JSON-RPC over stdio → Rust core → embedded Turso Database
+This is a **documentation and discovery run only**. Do not implement features,
+fix application code, or continue the previous campaign-authoring goal.
+Finish the reports and stop for human review.
 
-The initial foundation already exists. Your job is to understand the documented product, establish an agreed scope, then extend and harden that foundation through complete, tested user workflows.
+## User outcome
 
-Do not treat “finish the migration” or “improve the architecture” as the goal. Work toward explicit acceptance criteria.
+The user wants a useful kit for preparing, running, and reviewing TTRPG sessions,
+not just a collection of independent record editors. A GM expects to create a
+session and connect relevant NPCs, factions, locations, story threads, and other
+campaign material without maintaining duplicate copies.
+
+The user does not yet have a clear picture of what is implemented. Your job is
+to explain what actually works, what is only a prototype, what is missing, and
+which product boundaries need a decision before another implementation goal.
+
+Do not preselect sessions or player-safe presentation as the next implementation
+task. Investigate the whole product first.
 
 ## Confirmed direction
 
-- Use a UI-independent Rust core.
-- Use embedded Turso Database, the Rust SQLite-compatible engine—not Turso Cloud or the older libSQL project.
-- Expose application behavior through JSON-RPC and a machine-readable CLI.
-- CLI sessions are independently headless. They do not need to attach to or control the running desktop app.
-- Build and verify core behavior before implementing Rune.
-- Rune will eventually be a lightweight client of the core.
-- The eventual Rune replacement must preserve rich-note editing and dockable workspace capabilities.
-- Keep the existing React/Tauri app during migration as a behavior reference and source of reusable code/tests.
-- Preserve campaign data. Do not perform lossy document conversion or silently change the campaign format.
+- One UI-independent Rust application core, embedded Turso Database, and
+  JSON-RPC with a machine-readable CLI.
+- CLI sessions run independently; desktop attachment is not required.
+- Rune is the eventual lightweight frontend, not part of this run.
+- Preserve rich-note editing, dockable workspaces, portable campaign packages,
+  existing records, assets, and private GM information.
+- Keep the React/Tauri app as a behavior reference during migration.
+- Brainstorm ideas and prototype UI are evidence to investigate, not blanket
+  approval to implement every proposed feature.
 
-## Phase A: Understand the product and propose the scope
+## Investigation scope
 
-Do not begin broad implementation before completing this phase.
+Read `AGENTS.md` and applicable nested instructions. Discover and read all
+top-level documents in `docs/`, including the product brainstorm, data model,
+feature documents, architecture, headless plan, capability ledger, and previous
+acceptance map. Then inspect the relevant implementation and tests.
 
-### Read the project documentation
+Cover at least:
 
-1. Read AGENTS.md and all applicable nested instructions.
-2. Discover and read all top-level documents in docs/.
-3. Pay particular attention to:
-   - docs/brainstorm-doc.md
-   - docs/headless-core-plan.md
-   - docs/headless-development.md
-   - docs/backend-architecture.md
-   - docs/data-model.md
-   - The feature documents for NPCs, locations, factions, inventory, maps, image import, and player presentation.
-4. Inspect the current headless implementation, relevant desktop behavior, and existing tests.
+- Campaign lifecycle, saving, reopening, portability, and recovery limitations.
+- Sessions, preparation notes, story beats, running notes, and recaps.
+- NPCs, factions, locations, story threads, items, and party inventory.
+- Maps, pins, record attachments, and documented encounter/exploration features.
+- Rich notes, images/assets, and references within or alongside documents.
+- Relationships across records and sessions, navigation to linked records,
+  backlinks, renames, and unavailable/deleted targets.
+- Editing/drafts, undo/redo, search, workspace/navigation, and restoration.
+- Player knowledge, public/private content, presentation, and multi-window use.
+- Other documented areas such as puzzles, bestiary, crafting, and media cues:
+  identify their status without assuming they belong in the next release.
 
-Read the documentation as a body of product requirements, not merely as background for extending the current prototype.
+Distinguish a **game session** (a GM's prepared or played session) from a
+**host/application session** (a running CLI/core process). Existing support for
+the latter does not establish support for the former.
 
-Distinguish:
-- Confirmed requirements and decisions.
-- Proposed behavior and unresolved questions.
-- Descriptions of the current implementation.
-- Superseded technology choices.
-- Explicitly future features.
+## Evidence rules
 
-The confirmed direction above takes precedence over older React/Tauri-specific architectural proposals. Do not interpret every brainstorm idea as approved implementation scope.
+Keep intended behavior and implementation status separate.
 
-### Produce a source-linked acceptance map
+For intended behavior, distinguish:
 
-For each relevant workflow, record:
-- Source document and section.
-- Intended user outcome and required behavior.
-- Requirement status: confirmed, proposed, unresolved, or superseded.
-- Current implementation and test evidence.
-- Missing work.
-- Classification:
-  - Headless behavior for this run.
-  - Frontend/platform work deferred to a later run.
-  - Future or unresolved work.
-- Proposed public-contract acceptance journey.
+- Confirmed requirement or decision.
+- Proposal or brainstorm idea.
+- Explicitly deferred feature.
+- Unresolved or conflicting requirement.
 
-Do not use the current implementation as the sole specification. It may be incomplete or differ from the documented intent.
+For current implementation, distinguish:
 
-Surface contradictions and consequential ambiguities. Recommend a resolution, but do not silently invent product behavior.
+- Working and persistent.
+- Working but transient/prototype-only.
+- Partially implemented.
+- Missing.
+- Unverified.
 
-### Propose the implementation plan
+Record desktop and CLI/core support separately. A desktop-only capability is
+not automatically a headless capability; a CLI method does not prove the full
+GM workflow is complete.
 
-Recommend a bounded campaign-authoring scope, ordered into complete vertical slices.
+Use document sections, code paths, and named tests as evidence. Include relative
+Markdown links where useful and exact file/line references for code claims.
+Record the inspected Git revision and any relevant uncommitted changes; a
+revision alone does not describe a dirty worktree.
 
-Identify:
-- Acceptance criteria.
-- Dependencies and highest-risk assumptions.
-- Turso compatibility checks.
-- Explicit non-goals.
-- Decisions that need the user's input.
-- A clear finish line.
+Distinguish source inspection, existing test coverage, tests you actually ran,
+and manual verification. Do not claim success from test names alone. Do not
+claim absence solely because a method name was not found: trace the applicable
+storage, action, and frontend paths.
 
-The default scope is campaign lifecycle, NPCs, locations, factions, inventory, map authoring data, supported relationships, notes/assets, and campaign-edit history, where supported by confirmed requirements.
+Existing acceptance maps describe previous scopes, not approval of every future
+feature. Do not silently reconcile contradictions by treating either current
+code or older documentation as the complete product specification.
 
-Presentation playback, complete workspace/navigation state, Rune rendering, and new brainstorm-only features are not automatically included. Identify core requirements they impose without expanding this run into building the entire product.
+## Investigation loop
 
-Present the acceptance map and proposed plan, then stop for approval. Do not interpret this prompt as approval of your eventual detailed scope.
+Repeat until the scope above has evidence or an explicitly recorded unknown:
 
-## Phase B: Execute the approved plan
+1. Select a GM workflow or an uncovered part of it.
+2. Read the relevant product requirements and identify their authority/status.
+3. Trace the desktop, core/CLI, relationships, and persistence paths.
+4. Inspect tests; run a focused non-destructive check when it materially
+   increases confidence.
+5. Record the outcome, supporting evidence, gaps, and unresolved product rules.
+6. Review related workflows for contradictions and update the three reports.
 
-After the user approves the scope and plan, proceed autonomously on routine implementation details.
+Use real public CLI journeys with temporary campaigns where practical. For
+persistence claims, prefer save, terminate, reopen in a fresh process, and
+inspect. Do not use raw database edits as proof of application behavior.
 
-### Execution loop
+Continue independent investigation when a product question is unresolved.
+Collect questions in `decisions.md` rather than stopping after each one.
+Ask during the run only if access or safety prevents useful progress.
 
-Repeat until the approved acceptance checklist is complete or a genuine blocker requires a decision:
+## Required deliverables
 
-1. Select the smallest missing user capability that advances an approved acceptance journey.
-2. Read its source requirements and inspect related implementation/tests.
-3. Define or extend a behavior test through the public CLI/JSON-RPC contract.
-4. Implement a complete vertical slice across:
-   - Discovery and typed input.
-   - Core application behavior and validation.
-   - State ownership and revision checks.
-   - History, where applicable.
-   - Turso persistence and assets, where applicable.
-5. Exercise success, rejection, and relevant operational failure paths.
-6. For persisted behavior, save, terminate the host, reopen in a fresh process, and verify the results.
-7. Run relevant regressions and review the diff.
-8. Update the acceptance map and capability ledger with evidence and limitations.
-9. Continue to the next incomplete slice.
+Create exactly these three report files. If they already exist, update them
+without discarding unrelated user content. Keep findings in these files rather
+than scattering new status documents throughout the repository.
 
-Prefer working workflows over broad scaffolding. Do not spend the run building abstractions without demonstrating the user capabilities they enable.
+### `docs/product-readiness/README.md`
 
-Do not stop after each routine slice to ask what to do next. Use the approved plan.
+A short entry point, approximately one page:
 
-## Engineering rules
+- What a GM can actually accomplish today.
+- The most consequential gaps in preparing, running, and reviewing a session.
+- Links to the inventory and decisions.
+- One recommended next bounded implementation goal, with a short rationale,
+  dependencies, and non-goals. Compare a plausible alternative if useful.
+- Which decisions, if any, block that recommendation.
+- Inspection baseline and a concise summary of verification and limitations.
 
-### One application core
+Make it readable without knowing the codebase or the agent's conversation.
+Do not describe the whole toolkit as finished because one foundation run passed.
 
-- The core owns authoritative application state and business rules.
-- The CLI and protocol adapter must not implement separate business rules or write directly to the database.
-- Reuse existing types, validation, asset handling, schema, and behavior where appropriate.
-- Fix shared rules rather than patching individual adapters.
-- Do not create a second permanent implementation of campaign behavior.
+### `docs/product-readiness/workflow-inventory.md`
 
-### State and failure safety
+Organize around **preparing**, **running**, and **reviewing** a session.
+Put shared campaign/reference capabilities in a supporting section; do not
+duplicate the same detailed finding under every stage.
 
-- Reject stale writes rather than overwriting newer state.
-- No-op actions should not create history entries or unnecessary revisions.
-- Rejected actions must not unintentionally change state, history, or persisted data.
-- Failed opens must preserve the active campaign.
-- Dirty campaign switches require explicit save/discard intent.
-- Keep compound changes atomic where their semantics require it.
-- Define when an action is applied in memory versus durably saved.
-- Never blindly retry a mutation after an ambiguous process/connection failure.
+For each workflow, record:
 
-### History
+1. A concrete GM outcome or short example journey.
+2. Source requirements and their status.
+3. Current desktop behavior and current CLI/core behavior.
+4. What persists across navigation, campaign replacement, and process restart,
+   as applicable; distinguish committed content from unsaved drafts.
+5. Connections to other records and their relevant lifecycle behavior.
+6. Implementation/test evidence and what you actually verified.
+7. Gaps, contradictions, and unresolved questions linked to `decisions.md`.
+8. A candidate public-contract acceptance journey for missing behavior,
+   clearly labeled as a proposed test, not an existing command.
 
-Follow confirmed product requirements and the approved history policy.
+Include a compact coverage index so a reviewer can locate every investigated
+feature. Explicitly identify future/proposed features rather than losing them
+or turning them into requirements.
 
-- Keep history bounded and meaningfully labeled.
-- Cover creation/deletion and compound edits where included in scope.
-- Separate campaign-edit history from local text typing, navigation, and presentation history.
-- Do not assume history survives restart unless that behavior has been approved.
+### `docs/product-readiness/decisions.md`
 
-### Data and Turso
+Include only unresolved **product** questions with meaningful consequences.
+Group overlapping questions and prioritize those blocking the recommended goal.
+Do not ask the user to choose Rust types, crate layouts, or routine API details.
 
-- Use a pinned, tested Turso version and committed lockfiles.
-- Test only temporary campaigns and copies of legacy fixtures.
-- Preserve existing rich-note documents, assets, and unrelated record fields.
-- Verify actual transaction, constraint, migration, locking, and journal behavior rather than assuming complete SQLite compatibility.
-- Keep database references consistent with installed assets.
-- Reject unsupported future formats instead of attempting a best-effort overwrite.
-- Do not enable cloud services, replication, or experimental database features without an approved need.
+For each question include:
 
-### Player safety
+- A stable ID and a plain-language question.
+- The relevant requirement or contradiction and its source.
+- A concrete GM example that makes the choice understandable.
+- Plausible options and their consequences.
+- Your recommended answer and rationale, explicitly marked **not approved**.
+- What it blocks and what can proceed independently.
 
-- GM inspection and player-safe projections are different contracts.
-- Never send private GM data to a player client and rely on visual hiding.
-- An ordinary authoring operation must not implicitly grant live publishing permission.
-- Do not claim player-safety requirements are fulfilled by a GM-only inspection endpoint.
+Do not pad this list with questions existing requirements already answer.
+Previously settled rules should be cited in the inventory, not reopened.
+If no blocking questions remain, say so.
 
-### Testing
+## Safety and scope limits
 
-- Use public-contract behavior journeys as the main integration evidence.
-- Use focused unit tests for primitives and rules that benefit from them.
-- Use real Turso and isolated filesystem storage for persistence tests.
-- Make fixtures deterministic through injected clocks, IDs, and external dependencies where needed.
-- Avoid arbitrary sleeps; use completion signals or bounded waits.
-- Deny unexpected network access in behavior tests when establishing that test infrastructure.
-- Make failures report the action/step, expected result, actual result, revision, and structured error without exposing secrets.
-- Keep tests readable and independent; do not couple them through persistent working directories.
+- Only write the three report files for this run. Do not modify application
+  code, tests, dependencies, schemas, other product docs, or this goal.
+- Existing uncommitted work may be present. Do not reset, overwrite, commit,
+  or otherwise clean it up.
+- Do not implement fixes discovered during investigation. Record defects and
+  their impact separately from missing or deferred functionality.
+- Do not introduce new product behavior, choose unresolved visibility rules,
+  or promote recommendations into approved requirements.
+- Do not convert documents, migrate original campaigns, or test on real user
+  data. Use temporary campaigns and disposable copies only.
+- No Rune work, external services, cloud setup, network listeners, publishing,
+  pushing, or merging.
+- If tools or dependencies are unavailable, record the limitation rather than
+  changing the environment to make the report look complete.
 
-## Acceptance criteria
+## Checks and completion
 
-Refine these during Phase A and obtain approval before executing broad implementation.
+Run relevant existing tests and CLI checks proportionate to the claims.
+Record exact commands, outcomes, and checks not run. Report blockers honestly;
+do not fix the application to make the checks pass.
 
-The run is complete when:
-- Every approved workflow is represented in the acceptance map.
-- Each implemented capability is discoverable through the headless contract.
-- Each capability has appropriate public-contract success, rejection, and persistence coverage.
-- Representative cross-record journeys work from campaign creation through save/reopen.
-- Existing notes, assets, relationships, and unrelated campaign data survive round trips.
-- Relevant historical campaign schemas and representative complex records have compatibility coverage.
-- The existing desktop app's relevant regression checks remain passing.
-- Documentation accurately distinguishes implemented capabilities, known limitations, and deferred work.
-- No acceptance item is marked complete solely because code exists or a unit test passes.
+Run `pnpm lint` from `ttrpg-gm-cm-app` as required by project instructions and
+`git diff --check`. Verify report links and citations against the inspected
+sources, and confirm the run changed only the three permitted files.
 
-## Required checks
+The goal is complete when:
 
-From the repository root:
+- Every investigation area is accounted for with evidence or a specific unknown.
+- The reports separate intended product behavior, current behavior, prototype
+  limitations, and future work.
+- Relationships and end-to-end GM journeys are covered, not just CRUD catalogs.
+- The user can understand what exists and what is missing without reading code.
+- Decision questions are concrete, prioritized, and include recommendations.
+- The next implementation goal is recommended, not silently authorized.
 
-cargo build --workspace --locked
-cargo test --workspace --locked
-cargo test --workspace --all-features --locked
-cargo clippy --workspace --all-targets --all-features --locked -- -D warnings
-cargo fmt --all -- --check
-cargo test --manifest-path ttrpg-gm-cm-app/src-tauri/Cargo.toml --locked
-
-From ttrpg-gm-cm-app:
-
-pnpm lint
-pnpm test
-pnpm build
-
-Run focused checks during iteration and the full applicable suite at completion. Exercise the actual CLI workflow as well as the tests.
-
-Report checks that were not run, environmental blockers, and anything still assumed. Passing checks do not establish UI parity or comprehensive data compatibility by themselves.
-
-## Out of scope unless separately approved
-
-- Rune implementation.
-- Replacing the rich-text editor or docking system.
-- Deleting the existing frontend.
-- Desktop attachment, remote control, or network listeners.
-- Turso Cloud, replication, or multiplayer editing.
-- New features found only in brainstorm documents.
-- Generic plugin/framework architecture without a concrete approved use.
-- Irreversible operations on real campaign packages.
-- Pushing, merging, or publishing.
-
-## Stop and ask when
-
-- A requirement conflict changes product behavior.
-- Progress requires an incompatible format change or lossy conversion.
-- A Turso limitation changes required durability or storage semantics.
-- A destructive or irreversible operation is necessary.
-- An architectural decision materially expands scope or creates a new platform/service dependency.
-
-Do not guess when the project context cannot resolve these issues.
-
-When blocked, report:
-1. The exact requirement and source.
-2. What you tried and the evidence.
-3. Plausible options and their consequences.
-4. Your recommended option.
-5. Which independent approved work can continue safely.
-
-## Durable progress and final handoff
-
-Maintain the approved acceptance map and update the existing capability ledger so another agent can resume without reading the entire conversation.
-
-Record:
-- Completed capabilities and test evidence.
-- Remaining acceptance items.
-- Decisions and their rationale.
-- Known limitations and blockers.
-- Exact commands needed to reproduce the current state.
-
-At completion, summarize outcomes against the approved acceptance criteria, checks actually run, remaining risks, and the recommended next bounded goal.
-
-Do not start a different goal merely because time or context remains.
-
+End with links to the three files, a brief summary, and the highest-priority
+decisions requiring review. **Stop there. Do not enter an implementation phase,
+rewrite the next goal, or start building the recommendation.**
