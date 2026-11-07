@@ -6,9 +6,9 @@ use serde_json::Value;
 #[serde(rename_all = "camelCase", deny_unknown_fields)]
 pub struct UpdateNpc {
     pub(super) npc_id: String,
-    name: String,
-    notes: Vec<Value>,
-    presentation: NpcPresentation,
+    pub(super) name: String,
+    pub(super) notes: Vec<Value>,
+    pub(super) presentation: NpcPresentation,
 }
 
 #[derive(Debug, Serialize)]

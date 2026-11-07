@@ -3,6 +3,7 @@ use base64::{engine::general_purpose::STANDARD, Engine};
 use sha2::{Digest, Sha256};
 use std::{fs, io::Write, path::Path};
 
+#[cfg(feature = "legacy-sqlite")]
 pub(super) fn transform_location_image(
     location: &mut Location,
     folder: &Path,
@@ -14,6 +15,7 @@ pub(super) fn transform_location_image(
     Ok(())
 }
 
+#[cfg(feature = "legacy-sqlite")]
 pub(super) fn transform_faction_image(
     faction: &mut Faction,
     folder: &Path,
@@ -25,6 +27,7 @@ pub(super) fn transform_faction_image(
     Ok(())
 }
 
+#[cfg(feature = "legacy-sqlite")]
 pub(super) fn transform_presentation_images(
     presentation: &mut NpcPresentation,
     folder: &Path,

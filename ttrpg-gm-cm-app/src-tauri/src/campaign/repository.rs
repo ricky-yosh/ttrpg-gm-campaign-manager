@@ -12,6 +12,7 @@ pub(super) fn write_campaign(folder: &Path, mut campaign: Campaign) -> Result<()
         return Err("Campaign package must be a folder.".into());
     }
     fs::create_dir_all(folder).map_err(|e| e.to_string())?;
+    let _lock = super::storage::lock_package(folder)?;
     fs::create_dir_all(folder.join("assets")).map_err(|e| e.to_string())?;
     let root = folder.canonicalize().map_err(|e| e.to_string())?;
     if !folder
@@ -186,6 +187,7 @@ pub(super) fn read_campaign(folder: &Path) -> Result<Campaign, String> {
     if folder.extension().and_then(|ext| ext.to_str()) != Some("campaign") {
         return Err("Choose a folder ending in .campaign.".into());
     }
+    let _lock = super::storage::lock_package(folder)?;
     let connection = Connection::open_with_flags(
         folder.join("campaign.sqlite"),
         rusqlite::OpenFlags::SQLITE_OPEN_READ_ONLY,
@@ -413,14 +415,14 @@ pub(super) fn table_exists(connection: &Connection, name: &str) -> Result<bool, 
 }
 
 /// Owns campaign-package reads and writes backed by SQLite and the assets directory.
-pub(crate) struct CampaignRepository;
+pub struct CampaignRepository;
 
 impl CampaignRepository {
-    pub(crate) fn save(folder: &Path, campaign: Campaign) -> Result<(), String> {
+    pub fn save(folder: &Path, campaign: Campaign) -> Result<(), String> {
         write_campaign(folder, campaign)
     }
 
-    pub(crate) fn load(folder: &Path) -> Result<Campaign, String> {
+    pub fn load(folder: &Path) -> Result<Campaign, String> {
         read_campaign(folder)
     }
 }

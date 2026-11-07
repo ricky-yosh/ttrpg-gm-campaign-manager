@@ -345,7 +345,7 @@ mod tests {
             "npcId": npc.id, "name": name, "notes": npc.notes, "presentation": npc.presentation
         }))
         .unwrap();
-        let result = history.update(snapshot(&campaign), change).unwrap();
+        let result = history.update(snapshot(campaign), change).unwrap();
         campaign.npcs[0] = result.npc.clone();
         result
     }

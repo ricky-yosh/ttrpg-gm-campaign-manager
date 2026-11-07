@@ -18,6 +18,7 @@ crate-type = ["staticlib", "cdylib", "rlib"]
 tauri-build = { version = "2", features = [] }
 
 [dependencies]
+campaign-core = { path = "../../crates/campaign-core", features = ["legacy-sqlite"] }
 tauri = { version = "2", features = [] }
 tauri-plugin-opener = "2"
 serde = { version = "1", features = ["derive"] }
@@ -27,9 +28,6 @@ tauri-specta = { version = "2.0.0-rc.25", features = ["derive", "typescript"] }
 specta-typescript = "0.0.12"
 tauri-plugin-dialog = "=2.7.3"
 base64 = "0.22"
-sha2 = "0.10"
-tempfile = "3"
-rusqlite = { version = "0.38", features = ["bundled"] }
 image = { version = "0.25.10", default-features = false, features = ["png", "jpeg", "webp"] }
 webp = { version = "0.3.1", default-features = false }
 

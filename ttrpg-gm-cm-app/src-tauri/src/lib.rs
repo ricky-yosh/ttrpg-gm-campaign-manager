@@ -1,3 +1,4 @@
+#[path = "legacy_campaign.rs"]
 mod campaign;
 mod images;
 use campaign::{open_campaign, redo_npc, save_campaign, undo_npc, update_npc, CampaignHistory};

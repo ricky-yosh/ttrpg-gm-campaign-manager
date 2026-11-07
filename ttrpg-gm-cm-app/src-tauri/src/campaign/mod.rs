@@ -3,27 +3,31 @@ use serde_json::Value;
 use std::collections::HashMap;
 
 mod assets;
-mod commands;
-mod history;
+pub mod history;
+#[cfg(feature = "legacy-sqlite")]
 mod migrations;
+#[cfg(feature = "legacy-sqlite")]
 mod repository;
-mod service;
+pub mod service;
+mod session;
+mod storage;
 mod validation;
 
-use assets::{
-    transform_faction_image, transform_images, transform_location_image,
-    transform_presentation_images,
-};
-pub(crate) use commands::{open_campaign, redo_npc, save_campaign, undo_npc, update_npc};
-pub(crate) use history::CampaignHistory;
+use assets::transform_images;
+#[cfg(feature = "legacy-sqlite")]
+use assets::{transform_faction_image, transform_location_image, transform_presentation_images};
+pub use history::CampaignHistory;
+#[cfg(feature = "legacy-sqlite")]
 use migrations::ensure_schema;
-#[cfg(test)]
+#[cfg(all(test, feature = "legacy-sqlite"))]
 use repository::table_exists;
-pub(crate) use repository::CampaignRepository;
-#[cfg(test)]
+#[cfg(feature = "legacy-sqlite")]
+pub use repository::CampaignRepository;
+#[cfg(all(test, feature = "legacy-sqlite"))]
 use repository::{read_campaign, write_campaign};
+pub use session::{CoreError, Session};
 
-#[derive(Debug, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase", deny_unknown_fields)]
 pub struct Campaign {
     format: String,
@@ -74,7 +78,7 @@ impl Default for StatblockFieldSet {
     }
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Default, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase", deny_unknown_fields)]
 struct NpcPresentation {
     #[serde(default)]
@@ -89,21 +93,6 @@ struct NpcPresentation {
     #[serde(alias = "reference")]
     gm_reference: NpcGmReference,
     statblock: NpcStatblock,
-}
-
-impl Default for NpcPresentation {
-    fn default() -> Self {
-        Self {
-            relationships: Vec::new(),
-            locations: Vec::new(),
-            factions: Vec::new(),
-            banner: None,
-            portrait: None,
-            player_description: String::new(),
-            gm_reference: NpcGmReference::default(),
-            statblock: NpcStatblock::default(),
-        }
-    }
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -160,7 +149,7 @@ impl Default for NpcStatblock {
     }
 }
 
-#[derive(Debug, Default, Serialize, Deserialize)]
+#[derive(Debug, Clone, Default, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase", deny_unknown_fields)]
 struct Location {
     #[serde(default)]
@@ -220,7 +209,7 @@ fn unknown_party_knowledge() -> String {
     "unknown".into()
 }
 
-#[derive(Debug, Default, Serialize, Deserialize)]
+#[derive(Debug, Clone, Default, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase", deny_unknown_fields)]
 struct LocationReference {
     #[serde(default)]
@@ -233,7 +222,7 @@ struct LocationReference {
     secrets: String,
 }
 
-#[derive(Debug, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase", deny_unknown_fields)]
 struct Faction {
     id: String,
@@ -243,14 +232,14 @@ struct Faction {
     gm_notes: String,
 }
 
-#[derive(Debug, Default, Serialize, Deserialize)]
+#[derive(Debug, Clone, Default, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase", deny_unknown_fields)]
 struct PartyInventory {
     gold: u64,
     entries: Vec<InventoryEntry>,
 }
 
-#[derive(Debug, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase", deny_unknown_fields)]
 struct InventoryEntry {
     id: String,
@@ -260,12 +249,12 @@ struct InventoryEntry {
     note: String,
 }
 
-#[derive(Debug, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 struct Sidebar {
     width: f64,
     open: bool,
 }
-#[derive(Debug, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 struct Workspace {
     layout: Value,
@@ -275,13 +264,13 @@ struct Workspace {
     collapsed: bool,
     history: NavigationHistory,
 }
-#[derive(Debug, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 struct NavigationHistory {
     #[serde(deserialize_with = "deserialize_destinations")]
     entries: Vec<Destination>,
     index: i32,
 }
-#[derive(Debug, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(
     tag = "kind",
     rename_all = "camelCase",
@@ -352,7 +341,7 @@ where
         .collect())
 }
 
-#[cfg(test)]
+#[cfg(all(test, feature = "legacy-sqlite"))]
 mod tests {
     use super::*;
     use rusqlite::Connection;
