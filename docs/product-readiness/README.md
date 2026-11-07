@@ -4,6 +4,15 @@ Status: **documentation-only assessment**. This run inspected the documented
 product, the React/Tauri desktop app, the headless Rust/Turso core and CLI, and
 the tests. It did not implement or fix product behavior.
 
+> **Implementation update after this assessment.** The recommended core/CLI
+> session-persistence slice has since been implemented: database version 8 adds
+> `session_record`, and `session.list`/`get`/`create`/`update` persist session
+> details, ordered beats, prep/running notes, recap, and record references. The
+> desktop Sessions UI remains memory-only and has not been migrated. The gap
+> statements below describe the pre-implementation baseline; see
+> [Sessions](../sessions.md#headless-persistence) for the current core/CLI
+> contract.
+
 ## Inspection baseline
 
 Git revision `f0c997b` (`Add headless campaign persistence workflows`). The

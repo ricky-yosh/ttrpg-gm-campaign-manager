@@ -68,7 +68,7 @@ impl Storage {
             folder,
         };
         let version = storage.version().await?;
-        if (create && version != 0) || (!create && !(1..=7).contains(&version)) {
+        if (create && version != 0) || (!create && !(1..=8).contains(&version)) {
             return Err(format!("Unsupported campaign database version {version}."));
         }
         // Existing packages are only migrated on explicit Save.
@@ -114,7 +114,7 @@ impl Storage {
         transform_images(&mut document, &self.folder, true)?;
         let campaign: Campaign = serde_json::from_value(document).map_err(|e| e.to_string())?;
         let version = self.version().await?;
-        if !(1..=7).contains(&version) {
+        if !(1..=8).contains(&version) {
             return Err(format!("Unsupported campaign database version {version}."));
         }
         let tx = self
@@ -178,6 +178,7 @@ impl Storage {
             items,
             item_fields,
             threads: self.records("story_thread", &id).await?,
+            sessions: self.records("session_record", &id).await?,
             npcs: Vec::new(),
             locations: self.records("location", &id).await?,
             factions: self.records("faction", &id).await?,
@@ -416,6 +417,7 @@ async fn write(connection: &Connection, campaign: &Campaign) -> Result<()> {
         ("faction", serde_json::to_value(&campaign.factions)),
         ("map_record", serde_json::to_value(&campaign.maps)),
         ("story_thread", serde_json::to_value(&campaign.threads)),
+        ("session_record", serde_json::to_value(&campaign.sessions)),
     ] {
         connection
             .execute(
@@ -559,6 +561,28 @@ mod tests {
             .contains("Missing or unreadable"));
     }
 
+    fn session_campaign() -> Campaign {
+        let mut value = serde_json::to_value(version_seven_campaign()).unwrap();
+        value["sessions"] = json!([{
+            "id": "session-1", "title": "The Low Tide", "number": 8,
+            "date": "2026-11-14", "previous": false,
+            "whereLeftOff": [{"type":"p","children":[{"text":"The party reached the harbor."}]}],
+            "prep": [{"type":"p","children":[{"text":"Meet Niya beneath the bell tower."}]}],
+            "happened": [{"type":"p","children":[{"text":"The party chose the tunnel."}]}],
+            "summary": [{"type":"p","children":[{"text":"A lantern waits below the seawall."}]},
+                {"type":"img","url":"data:image/png;base64,c2Vzc2lvbg==","children":[{"text":""}]}],
+            "beats": [
+                {"id":"beat-1","title":"Meet Niya","notes":[{"type":"p","children":[{"text":"She has a tide chart."}]}],"status":"planned"},
+                {"id":"beat-2","title":"Follow the lantern","notes":[{"type":"p","children":[{"text":"The tunnel is one route."}]}],"status":"happened"}
+            ],
+            "links": [
+                {"kind":"npc","targetId":"missing-npc","label":"Witness"},
+                {"kind":"location","targetId":"missing-place","label":"Last seen"}
+            ]
+        }]);
+        serde_json::from_value(value).unwrap()
+    }
+
     fn version_seven_campaign() -> Campaign {
         serde_json::from_value(json!({
             "format": "ttrpg-campaign", "schemaVersion": 1, "id": "v7-campaign",
@@ -631,6 +655,55 @@ mod tests {
     }
 
     #[tokio::test]
+    async fn sessions_round_trip_and_v7_upgrade_adds_empty_session_table() {
+        let temp = tempfile::tempdir().unwrap();
+        let path = temp.path().join("sessions.campaign");
+        let original = session_campaign();
+        let mut storage = Storage::open(&path, true).await.unwrap();
+        storage.save(&original).await.unwrap();
+        assert_eq!(storage.version().await.unwrap(), 8);
+        // Thread, item, and session summary images.
+        assert_eq!(fs::read_dir(path.join("assets")).unwrap().count(), 3);
+        let loaded = storage.load().await.unwrap();
+        assert_eq!(loaded.sessions.len(), 1);
+        assert_eq!(loaded.sessions[0].title, "The Low Tide");
+        assert_eq!(loaded.sessions[0].beats.len(), 2);
+        assert_eq!(loaded.sessions[0].beats[1].status, "happened");
+        assert_eq!(loaded.sessions[0].links[1].target_id, "missing-place");
+        assert_eq!(
+            serde_json::to_value(&loaded).unwrap(),
+            serde_json::to_value(&original).unwrap()
+        );
+        drop(storage);
+
+        let moved = temp.path().join("moved-sessions.campaign");
+        fs::rename(&path, &moved).unwrap();
+        let mut storage = Storage::open(&moved, false).await.unwrap();
+        let loaded = storage.load().await.unwrap();
+        storage.save(&loaded).await.unwrap();
+        assert_eq!(storage.version().await.unwrap(), 8);
+
+        // A v7 package has no session table and loads with an empty collection.
+        let v7_path = temp.path().join("v7-no-sessions.campaign");
+        let mut v7 = Storage::open(&v7_path, true).await.unwrap();
+        v7.save(&version_seven_campaign()).await.unwrap();
+        v7.connection
+            .execute("DROP TABLE session_record", ())
+            .await
+            .unwrap();
+        v7.connection
+            .execute("PRAGMA user_version=7", ())
+            .await
+            .unwrap();
+        drop(v7);
+        let mut v7 = Storage::open(&v7_path, false).await.unwrap();
+        assert!(v7.load().await.unwrap().sessions.is_empty());
+        v7.save(&version_seven_campaign()).await.unwrap();
+        assert_eq!(v7.version().await.unwrap(), 8);
+        assert!(v7.table_exists("session_record").await.unwrap());
+    }
+
+    #[tokio::test]
     async fn version_six_loads_without_items_and_upgrades_on_save() {
         let temp = tempfile::tempdir().unwrap();
         let path = temp.path().join("v6.campaign");
@@ -644,6 +717,11 @@ mod tests {
             .unwrap();
         storage
             .connection
+            .execute("DROP TABLE session_record", ())
+            .await
+            .unwrap();
+        storage
+            .connection
             .execute("PRAGMA user_version=6", ())
             .await
             .unwrap();
@@ -651,10 +729,12 @@ mod tests {
         let mut storage = Storage::open(&path, false).await.unwrap();
         let loaded = storage.load().await.unwrap();
         assert!(loaded.items.is_empty() && loaded.item_fields.is_empty());
+        assert!(loaded.sessions.is_empty());
         assert_eq!(loaded.threads.len(), 1);
         storage.save(&loaded).await.unwrap();
-        assert_eq!(storage.version().await.unwrap(), 7);
+        assert_eq!(storage.version().await.unwrap(), 8);
         assert!(storage.table_exists("item_catalog").await.unwrap());
+        assert!(storage.table_exists("session_record").await.unwrap());
     }
 
     #[tokio::test]
@@ -666,6 +746,7 @@ mod tests {
         for sql in [
             "DROP TABLE story_thread",
             "DROP TABLE item_catalog",
+            "DROP TABLE session_record",
             "PRAGMA user_version=5",
         ] {
             storage.connection.execute(sql, ()).await.unwrap();
@@ -675,8 +756,9 @@ mod tests {
         let loaded = storage.load().await.unwrap();
         assert!(loaded.threads.is_empty());
         assert!(loaded.items.is_empty());
+        assert!(loaded.sessions.is_empty());
         storage.save(&loaded).await.unwrap();
-        assert_eq!(storage.version().await.unwrap(), 7);
+        assert_eq!(storage.version().await.unwrap(), 8);
     }
 
     #[cfg(feature = "legacy-sqlite")]
@@ -836,6 +918,24 @@ mod compatibility_fixture {
                 "locations": [{"targetId": "loc-2", "label": "Last seen"}],
                 "factions": [{"targetId": "faction-1", "label": "Involved"}]
             }],
+            "sessions": [{
+                "id": "session-1", "title": "The Low Tide", "number": 8,
+                "date": "2026-11-14", "previous": false,
+                "whereLeftOff": [{"type": "p", "children": [{"text": "The party reached the harbor."}]}],
+                "prep": [{"type": "p", "children": [{"text": "Meet Niya beneath the bell tower."}]}],
+                "happened": [{"type": "p", "children": [{"text": "The party chose the tunnel."}]}],
+                "summary": [{"type": "p", "children": [{"text": "A lantern waits below the seawall."}]},
+                    {"type": "img", "url": "data:image/png;base64,c2Vzc2lvbg==", "children": [{"text": ""}]}],
+                "beats": [
+                    {"id": "beat-1", "title": "Meet Niya",
+                        "notes": [{"type": "p", "children": [{"text": "She has a tide chart."}]}],
+                        "status": "planned"},
+                    {"id": "beat-2", "title": "Follow the lantern",
+                        "notes": [{"type": "p", "children": [{"text": "The tunnel is one route."}]}],
+                        "status": "happened"}
+                ],
+                "links": [{"kind": "npc", "targetId": "npc-1", "label": "Witness"}]
+            }],
             "inventory": {"gold": 248, "entries": [
                 {"id": "rope", "name": "Rope", "kind": "item", "quantity": 2, "note": "50 feet"},
                 {"id": "ore", "name": "Iron ore", "kind": "material", "quantity": 8, "note": ""}
@@ -864,7 +964,7 @@ mod compatibility_fixture {
         let path = temp.path().join("complex.campaign");
         let original = complex_campaign();
         CampaignRepository::save(&path, original.clone()).unwrap();
-        assert_eq!(fs::read_dir(path.join("assets")).unwrap().count(), 11);
+        assert_eq!(fs::read_dir(path.join("assets")).unwrap().count(), 12);
         let storage = Storage::open(&path, false).await.unwrap();
         let loaded = storage.load().await.unwrap();
         assert_eq!(
@@ -890,6 +990,9 @@ mod compatibility_fixture {
             Some("map-2")
         );
         assert_eq!(legacy.threads[0].people[0].target_id, "npc-1");
+        assert_eq!(legacy.sessions[0].title, "The Low Tide");
+        assert_eq!(legacy.sessions[0].beats[1].status, "happened");
+        assert_eq!(legacy.sessions[0].links[0].target_id, "npc-1");
         assert_eq!(
             legacy.npcs[0].presentation.relationships[0].target_id,
             "npc-2"
@@ -1001,9 +1104,10 @@ mod historical_versions {
             assert!(loaded.items.is_empty());
         }
         storage.save(&loaded).await.unwrap();
-        assert_eq!(storage.version().await.unwrap(), 7);
+        assert_eq!(storage.version().await.unwrap(), 8);
         assert!(storage.table_exists("item_catalog").await.unwrap());
         assert!(storage.table_exists("story_thread").await.unwrap());
+        assert!(storage.table_exists("session_record").await.unwrap());
         drop(storage);
 
         let storage = Storage::open(&path, false).await.unwrap();
@@ -1023,6 +1127,7 @@ mod historical_versions {
                 "map_record",
                 "story_thread",
                 "item_catalog",
+                "session_record",
                 "npc_presentation",
                 "campaign_settings",
             ],
@@ -1036,6 +1141,7 @@ mod historical_versions {
                 "map_record",
                 "story_thread",
                 "item_catalog",
+                "session_record",
             ],
         )
         .await;
@@ -1046,9 +1152,19 @@ mod historical_versions {
                 "map_record",
                 "story_thread",
                 "item_catalog",
+                "session_record",
             ],
         )
         .await;
-        assert_version_round_trip(4, &["map_record", "story_thread", "item_catalog"]).await;
+        assert_version_round_trip(
+            4,
+            &[
+                "map_record",
+                "story_thread",
+                "item_catalog",
+                "session_record",
+            ],
+        )
+        .await;
     }
 }

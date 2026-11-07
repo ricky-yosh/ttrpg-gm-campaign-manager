@@ -50,6 +50,8 @@ pub struct Campaign {
     #[serde(default)]
     threads: Vec<StoryThread>,
     #[serde(default)]
+    sessions: Vec<CampaignSession>,
+    #[serde(default)]
     inventory: PartyInventory,
     #[serde(default)]
     items: Vec<CampaignItem>,
@@ -254,6 +256,50 @@ struct StoryThread {
     people: Vec<NpcRelationship>,
     locations: Vec<NpcRelationship>,
     factions: Vec<NpcRelationship>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, schemars::JsonSchema)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+struct CampaignSession {
+    id: String,
+    title: String,
+    number: u32,
+    #[serde(default)]
+    date: String,
+    #[serde(default)]
+    previous: bool,
+    #[serde(default, alias = "whereWeLeftOff")]
+    where_left_off: Vec<Value>,
+    #[serde(default, alias = "prepNotes")]
+    prep: Vec<Value>,
+    #[serde(default, alias = "runningNotes")]
+    happened: Vec<Value>,
+    #[serde(default, alias = "recap", alias = "playerSummary")]
+    summary: Vec<Value>,
+    #[serde(default)]
+    beats: Vec<SessionBeat>,
+    #[serde(default)]
+    links: Vec<SessionLink>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, schemars::JsonSchema)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+struct SessionBeat {
+    id: String,
+    #[serde(default)]
+    title: String,
+    #[serde(default)]
+    notes: Vec<Value>,
+    status: String,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, schemars::JsonSchema)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+struct SessionLink {
+    kind: String,
+    target_id: String,
+    #[serde(default)]
+    label: String,
 }
 
 #[derive(Debug, Clone, Default, Serialize, Deserialize, schemars::JsonSchema)]
@@ -510,7 +556,7 @@ mod tests {
         assert_eq!(
             db.pragma_query_value(None, "user_version", |row| row.get::<_, i32>(0))
                 .unwrap(),
-            7
+            8
         );
         assert!(table_exists(&db, "item_catalog").unwrap());
     }
@@ -609,7 +655,7 @@ mod tests {
             database
                 .pragma_query_value(None, "user_version", |row| row.get::<_, i32>(0))
                 .unwrap(),
-            7
+            8
         );
     }
 
@@ -706,7 +752,7 @@ mod tests {
         assert_eq!(
             db.pragma_query_value(None, "user_version", |row| row.get::<_, i32>(0))
                 .unwrap(),
-            7
+            8
         );
     }
 
@@ -941,7 +987,7 @@ mod tests {
         assert_eq!(
             db.pragma_query_value(None, "user_version", |row| row.get::<_, i32>(0))
                 .unwrap(),
-            7
+            8
         );
         assert!(table_exists(&db, "location").unwrap());
     }
@@ -1118,7 +1164,7 @@ mod tests {
         assert_eq!(
             db.pragma_query_value(None, "user_version", |row| row.get::<_, i32>(0))
                 .unwrap(),
-            7
+            8
         );
         assert!(table_exists(&db, "faction").unwrap());
     }
@@ -1259,7 +1305,7 @@ mod tests {
         assert_eq!(
             db.pragma_query_value(None, "user_version", |row| row.get::<_, i32>(0))
                 .unwrap(),
-            7
+            8
         );
     }
 }

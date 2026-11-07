@@ -1,5 +1,12 @@
 # Workflow inventory
 
+> **Implementation update after this assessment.** The shared core/CLI now
+> persists game sessions (database version 8, `session_record`, and
+> `session.list`/`get`/`create`/`update`). The desktop Sessions UI is still the
+> memory-only frontend prototype. The body below records the pre-implementation
+> assessment; use [Sessions](../sessions.md#headless-persistence) for the
+> current contract.
+
 This inventory is organized around **preparing**, **running**, and **reviewing**
 a game session. Shared campaign/reference capabilities are described once in the
 supporting section; the stage sections link to them instead of repeating every

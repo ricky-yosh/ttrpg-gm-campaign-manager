@@ -39,6 +39,7 @@ pub enum RecordKind {
     Item,
     ItemFields,
     Thread,
+    Session,
     Map,
     Inventory,
 }
@@ -67,6 +68,7 @@ impl RecordTarget {
                 RecordKind::Item => "item",
                 RecordKind::ItemFields => "item-fields",
                 RecordKind::Thread => "thread",
+                RecordKind::Session => "session",
                 RecordKind::Map => "map",
                 RecordKind::Inventory => "inventory",
             },
@@ -724,6 +726,7 @@ fn list_key(kind: RecordKind) -> &'static str {
         RecordKind::Faction => "factions",
         RecordKind::Item => "items",
         RecordKind::Thread => "threads",
+        RecordKind::Session => "sessions",
         RecordKind::Map => "maps",
         RecordKind::ItemFields | RecordKind::Inventory => "",
     }

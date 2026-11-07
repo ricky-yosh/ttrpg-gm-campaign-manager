@@ -267,6 +267,43 @@ struct GetThread {
 
 #[derive(Deserialize, JsonSchema)]
 #[serde(rename_all = "camelCase", deny_unknown_fields)]
+struct CreateSession {
+    title: String,
+    number: Option<u32>,
+    #[serde(default)]
+    date: String,
+    #[serde(default)]
+    previous: bool,
+    #[serde(default, alias = "whereWeLeftOff")]
+    where_left_off: Option<Vec<Value>>,
+    #[serde(default, alias = "prepNotes")]
+    prep: Option<Vec<Value>>,
+    #[serde(default, alias = "runningNotes")]
+    happened: Option<Vec<Value>>,
+    #[serde(default, alias = "recap", alias = "playerSummary")]
+    summary: Option<Vec<Value>>,
+    #[serde(default)]
+    beats: Vec<SessionBeat>,
+    #[serde(default)]
+    links: Vec<SessionLink>,
+    expected_revision: u64,
+}
+
+#[derive(Deserialize, JsonSchema)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+struct UpdateSession {
+    session: CampaignSession,
+    expected_revision: u64,
+}
+
+#[derive(Deserialize, JsonSchema)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+struct GetSession {
+    session_id: String,
+}
+
+#[derive(Deserialize, JsonSchema)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
 struct CreateMap {
     name: String,
     kind: String,
@@ -376,6 +413,10 @@ impl Session {
         method!("thread.get" => GetThread);
         method!("thread.create" => CreateThread);
         method!("thread.update" => UpdateThread);
+        method!("session.list" => Empty);
+        method!("session.get" => GetSession);
+        method!("session.create" => CreateSession);
+        method!("session.update" => UpdateSession);
         method!("map.list" => Empty);
         method!("map.get" => GetMap);
         method!("map.create" => CreateMap);
@@ -391,7 +432,7 @@ impl Session {
                 "system.describe", "campaign.inspect", "npc.list", "npc.get",
                 "location.list", "location.get", "faction.list", "faction.get",
                 "inventory.get", "item.list", "item.get", "thread.list", "thread.get",
-                "map.list", "map.get", "history.status"
+                "session.list", "session.get", "map.list", "map.get", "history.status"
             ],
             "mutations": [
                 "campaign.new", "campaign.open", "campaign.save", "asset.import",
@@ -400,6 +441,7 @@ impl Session {
                 "faction.create", "faction.update", "inventory.update",
                 "item.create", "item.update", "item.delete",
                 "thread.create", "thread.update",
+                "session.create", "session.update",
                 "map.create", "map.update", "map.delete",
                 "history.undo", "history.redo"
             ],
@@ -409,7 +451,7 @@ impl Session {
                 "Explicit save, no autosave. EOF discards unsaved work.",
                 "Edit history is one in-memory stream per campaign session, bounded to 100 entries and 16 MiB; it is not persisted.",
                 "campaign.inspect returns complete GM data and is not a player-safe endpoint.",
-                "No player presentation, sessions, backup/save-copy, Rune, or frontend workspace actions are implemented.",
+                "Game-session preparation and review are persistent; no player presentation, backup/save-copy, Rune, or frontend workspace actions are implemented.",
                 "asset.import is preparation-only, requires an open saved package, and accepts only already-encoded PNG/JPEG/WebP data URLs; it does not require expectedRevision and does not perform WebP conversion.",
                 "Output schemas are not generated; inspect the result of a successful action for its shape."
             ]
@@ -566,6 +608,13 @@ impl Session {
             "thread.get" => self.thread_get(parse::<GetThread>(params)?),
             "thread.create" => self.thread_create(parse::<CreateThread>(params)?),
             "thread.update" => self.thread_update(parse::<UpdateThread>(params)?),
+            "session.list" => {
+                parse::<Empty>(params)?;
+                Ok(json!({"revision": self.revision, "sessions": self.campaign()?.sessions}))
+            }
+            "session.get" => self.session_get(parse::<GetSession>(params)?),
+            "session.create" => self.session_create(parse::<CreateSession>(params)?),
+            "session.update" => self.session_update(parse::<UpdateSession>(params)?),
             "map.list" => {
                 parse::<Empty>(params)?;
                 Ok(json!({"revision": self.revision, "maps": self.campaign()?.maps}))
@@ -601,6 +650,7 @@ impl Session {
             factions: Vec::new(),
             maps: Vec::new(),
             threads: Vec::new(),
+            sessions: Vec::new(),
             inventory: PartyInventory::default(),
             items: Vec::new(),
             item_fields: Vec::new(),
@@ -1099,6 +1149,92 @@ impl Session {
         Ok(json!({"revision": self.revision, "thread": thread}))
     }
 
+    fn session_get(&self, input: GetSession) -> Result<Value, CoreError> {
+        let session = self
+            .campaign()?
+            .sessions
+            .iter()
+            .find(|session| session.id == input.session_id)
+            .cloned()
+            .ok_or_else(|| CoreError::new("not_found", "Game session not found."))?;
+        Ok(json!({"revision": self.revision, "session": session}))
+    }
+
+    fn session_create(&mut self, input: CreateSession) -> Result<Value, CoreError> {
+        self.check_revision(input.expected_revision)?;
+        let current = self.campaign()?.clone();
+        let number = match input.number {
+            Some(number) => number,
+            None => current
+                .sessions
+                .iter()
+                .map(|session| session.number)
+                .max()
+                .unwrap_or(0)
+                .checked_add(1)
+                .ok_or_else(|| {
+                    CoreError::new("validation", "No next session number is available.")
+                })?,
+        };
+        let session = CampaignSession {
+            id: self.ids.next_id(),
+            title: input.title.trim().into(),
+            number,
+            date: input.date.trim().into(),
+            previous: input.previous,
+            where_left_off: input.where_left_off.unwrap_or_else(blank_notes),
+            prep: input.prep.unwrap_or_else(blank_notes),
+            happened: input.happened.unwrap_or_else(blank_notes),
+            summary: input.summary.unwrap_or_else(blank_notes),
+            beats: input.beats,
+            links: input.links,
+        };
+        let position = current.sessions.len();
+        let mut next = current.clone();
+        next.sessions.push(session.clone());
+        let change = RecordChange::create(
+            RecordTarget::new(RecordKind::Session, session.id.clone()),
+            serde_json::to_value(&session).map_err(json_error)?,
+            Some(position),
+        );
+        self.commit(current, next, "Create session", vec![change])?;
+        Ok(json!({"revision": self.revision, "session": session}))
+    }
+
+    fn session_update(&mut self, input: UpdateSession) -> Result<Value, CoreError> {
+        self.check_revision(input.expected_revision)?;
+        let current = self.campaign()?.clone();
+        let index = current
+            .sessions
+            .iter()
+            .position(|session| session.id == input.session.id)
+            .ok_or_else(|| CoreError::new("not_found", "Game session not found."))?;
+        let mut session = input.session;
+        session.title = session.title.trim().into();
+        session.date = session.date.trim().into();
+        for beat in &mut session.beats {
+            beat.title = beat.title.trim().into();
+        }
+        for link in &mut session.links {
+            link.target_id = link.target_id.trim().into();
+            link.label = link.label.trim().into();
+        }
+        let before = current.sessions[index].clone();
+        let label = rename_label("session", "title", &before, &session)?;
+        let mut next = current.clone();
+        next.sessions[index] = session.clone();
+        let Some(change) = update_change(
+            RecordTarget::new(RecordKind::Session, session.id.clone()),
+            &before,
+            &session,
+        )?
+        else {
+            return Ok(json!({"revision": self.revision, "session": session}));
+        };
+        self.commit(current, next, &label, vec![change])?;
+        Ok(json!({"revision": self.revision, "session": session}))
+    }
+
     fn map_get(&self, input: GetMap) -> Result<Value, CoreError> {
         let map = self
             .campaign()?
@@ -1376,6 +1512,206 @@ mod tests {
     }
 
     #[tokio::test]
+    async fn sessions_persist_details_beats_notes_links_and_history() {
+        let mut session = session();
+        session
+            .execute(
+                "campaign.new",
+                json!({"name":"Session test","expectedRevision":0}),
+            )
+            .await
+            .unwrap();
+        session
+            .execute("npc.create", json!({"name":"Niya","expectedRevision":1}))
+            .await
+            .unwrap();
+        session
+            .execute(
+                "location.create",
+                json!({"name":"Eastern Seawall","expectedRevision":2}),
+            )
+            .await
+            .unwrap();
+        let created = session
+            .execute(
+                "session.create",
+                json!({"title":" The Low Tide ","number":8,"date":" 2026-11-14 ",
+                    "previous":false,"expectedRevision":3}),
+            )
+            .await
+            .unwrap();
+        let id = created["session"]["id"].as_str().unwrap().to_owned();
+        assert_eq!(created["session"]["title"], "The Low Tide");
+        assert_eq!(created["session"]["number"], 8);
+        let automatically_numbered = session
+            .execute(
+                "session.create",
+                json!({"title":"A Quiet Bargain","expectedRevision":4,
+                    "prep":[{"type":"p","children":[{"text":"Breakfast."}]}],
+                    "beats":[{"id":"bargain-1","title":"Talk","notes":[{"type":"p","children":[{"text":"Listen."}]}],"status":"planned"}]}),
+            )
+            .await
+            .unwrap();
+        assert_eq!(automatically_numbered["session"]["number"], 9);
+        assert_eq!(automatically_numbered["session"]["prep"][0]["type"], "p");
+        assert_eq!(
+            automatically_numbered["session"]["beats"][0]["status"],
+            "planned"
+        );
+        let mut draft = created["session"].clone();
+        draft["prep"] = json!([{"type":"p","children":[{"text":"Meet Niya."}]}]);
+        draft["happened"] =
+            json!([{"type":"p","children":[{"text":"The party chose the tunnel."}]}]);
+        draft["summary"] = json!([{"type":"p","children":[{"text":"A lantern waits below."}]},
+            {"type":"custom-block","children":[{"text":"Keep unknown nodes"}]}]);
+        draft["beats"] = json!([
+            {"id":"beat-1","title":"Meet Niya","notes":[{"type":"p","children":[{"text":"Tide chart."}]}],"status":"planned"},
+            {"id":"beat-2","title":"Follow the lantern","notes":[{"type":"p","children":[{"text":"One route."}]}],"status":"happened"}
+        ]);
+        draft["links"] = json!([
+            {"kind":"npc","targetId":"missing-npc","label":"Witness"},
+            {"kind":"location","targetId":"missing-place","label":"Last seen"}
+        ]);
+        let updated = session
+            .execute(
+                "session.update",
+                json!({"session":draft,"expectedRevision":5}),
+            )
+            .await
+            .unwrap();
+        assert_eq!(updated["session"]["beats"][1]["status"], "happened");
+        assert_eq!(updated["session"]["summary"][1]["type"], "custom-block");
+        assert_eq!(updated["revision"], 6);
+        let listed = session.execute("session.list", json!({})).await.unwrap();
+        assert_eq!(listed["sessions"].as_array().unwrap().len(), 2);
+        let fetched = session
+            .execute("session.get", json!({"sessionId":id}))
+            .await
+            .unwrap();
+        assert_eq!(fetched["session"], updated["session"]);
+
+        let before_invalid = session
+            .execute("campaign.inspect", json!({}))
+            .await
+            .unwrap();
+        let history_before_invalid = session.execute("history.status", json!({})).await.unwrap();
+        let mut invalid = updated["session"].clone();
+        invalid["beats"][0]["status"] = json!("unknown");
+        let rejected = session
+            .execute(
+                "session.update",
+                json!({"session":invalid,"expectedRevision":6}),
+            )
+            .await
+            .unwrap_err();
+        assert_eq!(rejected.code, "validation");
+        assert_eq!(
+            session
+                .execute("campaign.inspect", json!({}))
+                .await
+                .unwrap(),
+            before_invalid
+        );
+        assert_eq!(
+            session.execute("history.status", json!({})).await.unwrap()["history"]["length"],
+            history_before_invalid["history"]["length"]
+        );
+
+        let history_before_no_op = session.execute("history.status", json!({})).await.unwrap();
+        let no_op = session
+            .execute(
+                "session.update",
+                json!({"session":updated["session"],"expectedRevision":6}),
+            )
+            .await
+            .unwrap();
+        assert_eq!(no_op["revision"], 6);
+        assert_eq!(
+            session.execute("history.status", json!({})).await.unwrap()["history"]["length"],
+            history_before_no_op["history"]["length"]
+        );
+
+        let undone = session
+            .execute("history.undo", json!({"expectedRevision":6}))
+            .await
+            .unwrap();
+        assert_eq!(undone["revision"], 7);
+        assert_eq!(
+            session
+                .execute("session.get", json!({"sessionId":id}))
+                .await
+                .unwrap()["session"]["beats"],
+            json!([])
+        );
+        let redone = session
+            .execute("history.redo", json!({"expectedRevision":7}))
+            .await
+            .unwrap();
+        assert_eq!(redone["revision"], 8);
+        assert_eq!(
+            session
+                .execute("session.get", json!({"sessionId":id}))
+                .await
+                .unwrap()["session"]["beats"]
+                .as_array()
+                .unwrap()
+                .len(),
+            2
+        );
+        let undone_update = session
+            .execute("history.undo", json!({"expectedRevision":8}))
+            .await
+            .unwrap();
+        assert_eq!(undone_update["revision"], 9);
+        assert_eq!(
+            session
+                .execute("session.get", json!({"sessionId":id}))
+                .await
+                .unwrap()["session"]["beats"],
+            json!([])
+        );
+        let removed = session
+            .execute("history.undo", json!({"expectedRevision":9}))
+            .await
+            .unwrap();
+        assert_eq!(removed["revision"], 10);
+        assert_eq!(
+            session.execute("session.list", json!({})).await.unwrap()["sessions"]
+                .as_array()
+                .unwrap()
+                .len(),
+            1
+        );
+        let restored = session
+            .execute("history.redo", json!({"expectedRevision":10}))
+            .await
+            .unwrap();
+        assert_eq!(restored["revision"], 11);
+        assert_eq!(
+            session
+                .execute("session.get", json!({"sessionId":id}))
+                .await
+                .unwrap()["session"]["beats"],
+            json!([])
+        );
+        let restored_update = session
+            .execute("history.redo", json!({"expectedRevision":11}))
+            .await
+            .unwrap();
+        assert_eq!(restored_update["revision"], 12);
+        assert_eq!(
+            session
+                .execute("session.get", json!({"sessionId":id}))
+                .await
+                .unwrap()["session"]["beats"]
+                .as_array()
+                .unwrap()
+                .len(),
+            2
+        );
+    }
+
+    #[tokio::test]
     async fn failed_open_preserves_active_campaign_and_history() {
         let temp = tempfile::tempdir().unwrap();
         let path = temp.path().join("missing.campaign");
@@ -1434,6 +1770,6 @@ mod discovery_tests {
         }
         let schema_methods: HashSet<_> = methods.keys().cloned().collect();
         assert_eq!(listed, schema_methods);
-        assert!(methods.len() >= 39);
+        assert!(methods.len() >= 43);
     }
 }

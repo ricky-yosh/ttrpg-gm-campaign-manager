@@ -884,3 +884,14 @@ Move presentation/player-safety onto the same core: define typed player-safe
 projections and a separate player contract, with tests proving private NPC,
 location, faction, item, thread, and workspace data never enters the payload.
 Do not build Rune or session persistence as part of that goal.
+
+## Post-run implementation note
+
+After this acceptance run, game-session preparation and review were added to the
+shared core and CLI: database version 8 adds `session_record`, and
+`session.list`/`get`/`create`/`update` persist session details, ordered beats,
+prep/running notes, recap, and NPC/location/faction/thread/item references. See
+[Sessions](sessions.md#headless-persistence) and the current
+[Headless development](headless-development.md) contract. The desktop Sessions
+UI remains the separate memory-only frontend prototype; this note does not
+retroactively change the approved scope or evidence of the original run.

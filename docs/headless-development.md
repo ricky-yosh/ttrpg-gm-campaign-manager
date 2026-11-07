@@ -73,6 +73,12 @@ cargo run -p campaign-cli -- run <<'EOF'
 EOF
 ```
 
+Game sessions follow the same pattern: `session.create` makes a session with a
+title/number/date and blank note documents or supplied initial notes/beats;
+`session.get` returns the full record; `session.update` replaces the ordered
+beats, prep/running notes, recap, and NPC/location/faction/thread/item links.
+`session.list` returns all saved sessions.
+
 For interactive agents/test harnesses, use `cargo run -p campaign-cli -- serve`
 or the built `target/debug/campaign serve`. Keep stdin/stdout open and send
 newline-delimited JSON-RPC 2.0:
@@ -111,6 +117,7 @@ player-safe endpoint.
 | `inventory.get` / `inventory.update` | Atomic party inventory replacement with validated gold and entries |
 | `item.list` / `item.get` / `item.create` / `item.update` / `item.delete` | Item catalog, typed custom-field definitions, values, images, deletion |
 | `thread.list` / `thread.get` / `thread.create` / `thread.update` | Saved story-thread dossiers, Plate notes, and people/location/faction links |
+| `session.list` / `session.get` / `session.create` / `session.update` | Persistent game-session preparation and review: title, number, date, previous/upcoming grouping, prep/running notes, recap, ordered story beats, and NPC/location/faction/thread/item links |
 | `map.list` / `map.get` / `map.create` / `map.update` / `map.delete` | Saved map authoring data: kind, image, dimensions, location attachments, pins, party marker; deletion clears incoming map shortcuts |
 | `history.status` / `history.undo` / `history.redo` | One chronological in-memory campaign-edit stream with labels |
 
@@ -140,7 +147,7 @@ There is one core-owned, chronological edit history per campaign session:
 - updates store field diffs, so unchanged image payloads are not copied into
   every entry; creation/deletion store the record plus its list position;
 - covers NPCs, locations, factions, inventory, items, item fields, story threads,
-  and maps;
+  game sessions, and maps;
 - no-op and rejected actions add nothing; a new edit after undo discards the
   redo branch; undo/redo conflicts if a record changed outside its history;
 - cleared on New/Open and **not persisted**. A fresh process starts with no
@@ -157,8 +164,8 @@ whole stream.
 - Campaign packages are folders containing `campaign.sqlite` and `assets/`.
   Turso may leave a `campaign.sqlite-wal` sidecar; keep the entire package
   together. Save Copy/backup is not implemented.
-- The Turso adapter reads database versions 1–7 and writes version 7. Missing
-  v2–v7 collections default to empty; older packages upgrade on Save. Unknown or
+- The Turso adapter reads database versions 1–8 and writes version 8. Missing
+  v2–v8 collections default to empty; older packages upgrade on Save. Unknown or
   future versions are rejected without replacing the active campaign.
 - The shared schema, domain types, validation, asset transformation, and history
   are used by the headless host and the temporary desktop `rusqlite` adapter.
@@ -190,12 +197,13 @@ attach to the desktop app.
   rejection with expected/actual revisions, and busy-package rejection;
 - a cross-record journey covering factions, a location hierarchy, NPCs with full
   presentation and links, party inventory, item fields/values, story threads,
-  two maps with pins/party/links, map deletion/undo, hashed images, save,
-  terminate, reopen, and a second save/reopen;
+  persistent game sessions with beats/notes/links, two maps with pins/party/links,
+  map deletion/undo, hashed images, save, terminate, reopen, and a second
+  save/reopen;
 - campaign-wide history for creation, updates, item/inventory compound changes,
-  map-deletion cascades, no-ops, rejection safety, redo truncation, bounded
-  length, and non-persistence across restart;
-- v1–v7 database reads, v7 writes, v5/v6 upgrades, a complex legacy v7 package
+  session creation/update, map-deletion cascades, no-ops, rejection safety, redo
+  truncation, bounded length, and non-persistence across restart;
+- v1–v8 database reads, v8 writes, v5/v6/v7 upgrades, a complex legacy package
   round trip through both adapters after moving the package, FK enforcement,
   transaction rollback, asset hashing/verification, and future-version rejection;
 - JSON-RPC parse/request/method/parameter errors, notifications, CLI exit status,
@@ -205,8 +213,10 @@ attach to the desktop app.
 
 1. No player-safe projection or presentation playback. `campaign.inspect` is
    GM-only; no endpoint in this contract may be described as player-safe.
-2. Sessions, session notes/beats/visits, puzzles, bestiary, crafting, loot, and
-   other brainstorm-only features are not implemented.
+2. Session visits, puzzles, bestiary, crafting, loot, and other brainstorm-only
+   features are not implemented. Game-session records persist through the core
+   and CLI; the desktop Sessions UI remains a separate frontend prototype and
+   does not yet edit those saved records.
 3. Rune, workspace/navigation actions, rich-editor replacement, and desktop
    cutover are future work. The core preserves existing workspace JSON but does
    not author it.

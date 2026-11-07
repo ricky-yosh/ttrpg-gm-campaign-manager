@@ -63,4 +63,10 @@ CREATE TABLE IF NOT EXISTS item_catalog (
     items_json TEXT NOT NULL,
     fields_json TEXT NOT NULL
 );
-PRAGMA user_version = 7;
+CREATE TABLE IF NOT EXISTS session_record (
+    id TEXT PRIMARY KEY NOT NULL,
+    campaign_id TEXT NOT NULL REFERENCES campaign(id) ON DELETE CASCADE,
+    sort_order INTEGER NOT NULL,
+    record_json TEXT NOT NULL
+);
+PRAGMA user_version = 8;

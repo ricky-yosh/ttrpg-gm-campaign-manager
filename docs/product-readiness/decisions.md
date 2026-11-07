@@ -6,6 +6,12 @@ crate boundaries are deliberately excluded. Every recommendation below is
 **not approved**; the report records a recommendation for human review, not a
 new requirement.
 
+> **Implementation update after this assessment.** The core/CLI part of D1 has
+> been implemented: game sessions persist through schema version 8 and the
+> `session.list`/`get`/`create`/`update` actions. The desktop Sessions UI remains
+> memory-only. D1 still requires a product decision for the desktop authoring,
+> lifecycle, and presentation surfaces.
+
 Priority order:
 
 1. **D1** and **D3** block the recommended next bounded goal.

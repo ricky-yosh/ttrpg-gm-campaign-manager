@@ -1685,3 +1685,242 @@ fn npc_creation_is_undoable_through_the_compatibility_endpoint() {
     assert_eq!(client.ok("npc.list", json!({}))["npcs"][0]["name"], "Scout");
     client.close();
 }
+
+#[test]
+fn session_preparation_and_review_persist_through_the_cli() {
+    let folder = tempfile::tempdir().unwrap();
+    let path = folder.path().join("sessions.campaign");
+    let mut client = Client::new();
+
+    let description = client.ok("system.describe", json!({}));
+    assert!(description["methods"]["session.create"]["properties"]["expectedRevision"].is_object());
+    assert!(description["queries"]
+        .as_array()
+        .unwrap()
+        .contains(&json!("session.list")));
+    assert!(description["mutations"]
+        .as_array()
+        .unwrap()
+        .contains(&json!("session.update")));
+
+    let created = client.ok(
+        "campaign.new",
+        json!({"name":"Session prep","expectedRevision":0}),
+    );
+    let mut revision = self::revision(&created);
+    let before_invalid_create = client.ok("campaign.inspect", json!({}));
+    let invalid_create = client.request(
+        "session.create",
+        json!({"title":" ","expectedRevision":revision}),
+    );
+    assert_eq!(error_code(&invalid_create), "validation");
+    assert_eq!(
+        client.ok("campaign.inspect", json!({})),
+        before_invalid_create
+    );
+    let npc = client.ok(
+        "npc.create",
+        json!({"name":"Niya Jade","expectedRevision":revision}),
+    );
+    revision = self::revision(&npc);
+    let npc_id = npc["npc"]["id"].as_str().unwrap().to_owned();
+    let location = client.ok(
+        "location.create",
+        json!({"name":"Eastern Seawall","expectedRevision":revision}),
+    );
+    revision = self::revision(&location);
+    let location_id = location["location"]["id"].as_str().unwrap().to_owned();
+    let faction = client.ok(
+        "faction.create",
+        json!({"name":"Dockworkers' Guild","expectedRevision":revision}),
+    );
+    revision = self::revision(&faction);
+    let faction_id = faction["faction"]["id"].as_str().unwrap().to_owned();
+    let thread = client.ok(
+        "thread.create",
+        json!({"title":"The Missing Morrow","expectedRevision":revision}),
+    );
+    revision = self::revision(&thread);
+    let thread_id = thread["thread"]["id"].as_str().unwrap().to_owned();
+
+    let session = client.ok(
+        "session.create",
+        json!({
+            "title": " The Low Tide ",
+            "number": 8,
+            "date": " 2026-11-14 ",
+            "previous": false,
+            "expectedRevision": revision
+        }),
+    );
+    revision = self::revision(&session);
+    let session_id = session["session"]["id"].as_str().unwrap().to_owned();
+    assert_eq!(session["session"]["title"], "The Low Tide");
+    assert_eq!(session["session"]["date"], "2026-11-14");
+    assert_eq!(session["session"]["beats"], json!([]));
+
+    let mut draft = session["session"].clone();
+    draft["whereLeftOff"] =
+        json!([{"type":"p","children":[{"text":"A soaked manifest survived the fire."}]}]);
+    draft["prep"] = json!([
+        {"type":"p","children":[{"text":"Meet Niya beneath the bell tower."}]},
+        {"type":"custom-block","value":{"keep":true},"children":[{"text":"Preserve unknown node"}]}
+    ]);
+    draft["happened"] = json!([{"type":"p","children":[{"text":"The party chose the tunnel."}]}]);
+    draft["summary"] = json!([
+        {"type":"p","children":[{"text":"A lantern waits below the seawall."}]},
+        {"type":"img","url":"data:image/png;base64,c2Vzc2lvbg==","children":[{"text":""}]}
+    ]);
+    draft["beats"] = json!([
+        {"id":"beat-1","title":"Meet Niya","notes":[{"type":"p","children":[{"text":"She has a tide chart."}]}],"status":"planned"},
+        {"id":"beat-2","title":"Follow the lantern","notes":[{"type":"p","children":[{"text":"The tunnel is one route."}]}],"status":"happened"},
+        {"id":"beat-3","title":"The three harbor bells","notes":[{"type":"p","children":[{"text":"The order matters."}]}],"status":"skipped"}
+    ]);
+    draft["links"] = json!([
+        {"kind":"npc","targetId":npc_id,"label":"Contact"},
+        {"kind":"location","targetId":location_id,"label":"Last seen"},
+        {"kind":"faction","targetId":faction_id,"label":"Involved"},
+        {"kind":"thread","targetId":thread_id,"label":"Related thread"},
+        {"kind":"item","targetId":"missing-item","label":"Missing target retained"}
+    ]);
+    let updated = client.ok(
+        "session.update",
+        json!({"session":draft,"expectedRevision":revision}),
+    );
+    revision = self::revision(&updated);
+    assert_eq!(updated["session"]["beats"][1]["status"], "happened");
+    assert_eq!(updated["session"]["prep"][1]["type"], "custom-block");
+    assert_eq!(updated["session"]["links"][4]["targetId"], "missing-item");
+    assert_eq!(updated["revision"], revision);
+    assert_eq!(
+        client.ok("session.list", json!({}))["sessions"]
+            .as_array()
+            .unwrap()
+            .len(),
+        1
+    );
+    let fetched = client.ok("session.get", json!({"sessionId":session_id}));
+    assert_eq!(fetched["session"], updated["session"]);
+    let history_after_update = client.ok("history.status", json!({}));
+    let history_length = history_after_update["history"]["length"].clone();
+
+    let no_op = client.ok(
+        "session.update",
+        json!({"session":updated["session"],"expectedRevision":revision}),
+    );
+    assert_eq!(self::revision(&no_op), revision);
+    assert_eq!(
+        client.ok("history.status", json!({}))["history"]["length"],
+        history_length,
+        "a no-op session update must not add history"
+    );
+
+    let before_invalid = client.ok("campaign.inspect", json!({}));
+    let mut invalid = updated["session"].clone();
+    invalid["beats"][0]["status"] = json!("unknown");
+    let rejected = client.request(
+        "session.update",
+        json!({"session":invalid,"expectedRevision":revision}),
+    );
+    assert_eq!(error_code(&rejected), "validation");
+    assert_eq!(client.ok("campaign.inspect", json!({})), before_invalid);
+    assert_eq!(
+        client.ok("history.status", json!({}))["history"]["length"],
+        history_length
+    );
+
+    let mut duplicate_beat = updated["session"].clone();
+    duplicate_beat["beats"][1]["id"] = json!("beat-1");
+    let duplicate_beat_response = client.request(
+        "session.update",
+        json!({"session":duplicate_beat,"expectedRevision":revision}),
+    );
+    assert_eq!(error_code(&duplicate_beat_response), "validation");
+    assert_eq!(client.ok("campaign.inspect", json!({})), before_invalid);
+
+    let mut duplicate_link = updated["session"].clone();
+    duplicate_link["links"] = json!([
+        {"kind":"npc","targetId":npc_id,"label":"First"},
+        {"kind":"npc","targetId":npc_id,"label":"Second"}
+    ]);
+    let duplicate_link_response = client.request(
+        "session.update",
+        json!({"session":duplicate_link,"expectedRevision":revision}),
+    );
+    assert_eq!(error_code(&duplicate_link_response), "validation");
+    assert_eq!(client.ok("campaign.inspect", json!({})), before_invalid);
+
+    let mut unsupported_link = updated["session"].clone();
+    unsupported_link["links"][0]["kind"] = json!("puzzle");
+    let unsupported_link_response = client.request(
+        "session.update",
+        json!({"session":unsupported_link,"expectedRevision":revision}),
+    );
+    assert_eq!(error_code(&unsupported_link_response), "validation");
+    assert_eq!(client.ok("campaign.inspect", json!({})), before_invalid);
+
+    let undone = client.ok("history.undo", json!({"expectedRevision":revision}));
+    revision = self::revision(&undone);
+    assert_eq!(undone["label"], "Edit session");
+    assert_eq!(
+        client.ok("session.get", json!({"sessionId":session_id}))["session"]["beats"],
+        json!([])
+    );
+    let redone = client.ok("history.redo", json!({"expectedRevision":revision}));
+    revision = self::revision(&redone);
+    assert_eq!(
+        client.ok("session.get", json!({"sessionId":session_id}))["session"]["beats"]
+            .as_array()
+            .unwrap()
+            .len(),
+        3
+    );
+
+    let saved = client.ok(
+        "campaign.save",
+        json!({"path":path,"expectedRevision":revision}),
+    );
+    assert_eq!(saved["dirty"], false);
+    assert_eq!(saved["campaign"]["sessions"].as_array().unwrap().len(), 1);
+    assert_eq!(
+        std::fs::read_dir(path.join("assets")).unwrap().count(),
+        1,
+        "the session summary image must be stored as one asset"
+    );
+    client.close();
+
+    let mut reopened = Client::new();
+    let loaded = reopened.ok("campaign.open", json!({"path":path,"expectedRevision":0}));
+    let loaded_revision = self::revision(&loaded);
+    assert_eq!(loaded["campaign"]["sessions"].as_array().unwrap().len(), 1);
+    let loaded_session = reopened.ok("session.get", json!({"sessionId":session_id}));
+    assert_eq!(loaded_session["session"]["title"], "The Low Tide");
+    assert_eq!(loaded_session["session"]["number"], 8);
+    assert_eq!(loaded_session["session"]["date"], "2026-11-14");
+    assert_eq!(
+        loaded_session["session"]["beats"][2]["title"],
+        "The three harbor bells"
+    );
+    assert_eq!(loaded_session["session"]["beats"][2]["status"], "skipped");
+    assert_eq!(loaded_session["session"]["prep"][1]["type"], "custom-block");
+    assert_eq!(loaded_session["session"]["links"][0]["targetId"], npc_id);
+    assert_eq!(
+        loaded_session["session"]["links"][4]["targetId"],
+        "missing-item"
+    );
+    assert_eq!(loaded_session["session"]["summary"][1]["type"], "img");
+    assert!(
+        loaded_session["session"]["summary"][1]["url"]
+            .as_str()
+            .unwrap()
+            .starts_with("data:image/png;base64,"),
+        "the session image URL must resolve back to its data URL"
+    );
+    assert_eq!(
+        reopened.ok("history.status", json!({}))["history"]["canUndo"],
+        false
+    );
+    let no_history = reopened.request("history.undo", json!({"expectedRevision":loaded_revision}));
+    assert_eq!(error_code(&no_history), "conflict");
+    reopened.close();
+}

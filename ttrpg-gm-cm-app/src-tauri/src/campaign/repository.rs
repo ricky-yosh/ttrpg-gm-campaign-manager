@@ -40,6 +40,22 @@ pub(super) fn write_campaign(folder: &Path, mut campaign: Campaign) -> Result<()
             transform_images(node, folder, true)?;
         }
     }
+    for session in &mut campaign.sessions {
+        for node in session
+            .where_left_off
+            .iter_mut()
+            .chain(session.prep.iter_mut())
+            .chain(session.happened.iter_mut())
+            .chain(session.summary.iter_mut())
+        {
+            transform_images(node, folder, true)?;
+        }
+        for beat in &mut session.beats {
+            for node in &mut beat.notes {
+                transform_images(node, folder, true)?;
+            }
+        }
+    }
     for map in &mut campaign.maps {
         let mut image = serde_json::to_value(&map.image).map_err(|e| e.to_string())?;
         transform_images(&mut image, folder, true)?;
@@ -165,6 +181,20 @@ fn write_transaction(transaction: &Transaction<'_>, campaign: &Campaign) -> Resu
         ).map_err(|e| e.to_string())?;
     }
     transaction
+        .execute(
+            "DELETE FROM session_record WHERE campaign_id=?1",
+            [&campaign.id],
+        )
+        .map_err(|e| e.to_string())?;
+    for (index, session) in campaign.sessions.iter().enumerate() {
+        transaction
+            .execute(
+                "INSERT INTO session_record (id,campaign_id,sort_order,record_json) VALUES (?1,?2,?3,?4)",
+                params![session.id, campaign.id, index as i64, serde_json::to_string(session).map_err(|e| e.to_string())?],
+            )
+            .map_err(|e| e.to_string())?;
+    }
+    transaction
         .execute("DELETE FROM faction WHERE campaign_id=?1", [&campaign.id])
         .map_err(|e| e.to_string())?;
     for (index, faction) in campaign.factions.iter().enumerate() {
@@ -217,7 +247,7 @@ pub(super) fn read_campaign(folder: &Path) -> Result<Campaign, String> {
     let version: i32 = connection
         .pragma_query_value(None, "user_version", |row| row.get(0))
         .map_err(|e| e.to_string())?;
-    if !(1..=7).contains(&version) {
+    if !(1..=8).contains(&version) {
         return Err(format!("Unsupported campaign database version {version}."));
     }
     let mut statement = connection.prepare("SELECT id,name,schema_version,created_at,updated_at,section,sidebar_width,sidebar_open FROM campaign").map_err(|e| e.to_string())?;
@@ -408,6 +438,28 @@ pub(super) fn read_campaign(folder: &Path) -> Result<Campaign, String> {
             threads.push(thread);
         }
     }
+    let mut sessions = Vec::new();
+    if table_exists(&connection, "session_record")? {
+        let mut statement = connection
+            .prepare(
+                "SELECT id,record_json FROM session_record WHERE campaign_id=?1 ORDER BY sort_order",
+            )
+            .map_err(|e| e.to_string())?;
+        let rows = statement
+            .query_map([&id], |row| {
+                Ok((row.get::<_, String>(0)?, row.get::<_, String>(1)?))
+            })
+            .map_err(|e| e.to_string())?;
+        for row in rows {
+            let (record_id, json) = row.map_err(|e| e.to_string())?;
+            let session: CampaignSession =
+                serde_json::from_str(&json).map_err(|e| e.to_string())?;
+            if session.id != record_id {
+                return Err("Session record ID does not match its stored ID.".into());
+            }
+            sessions.push(session);
+        }
+    }
     let (items, item_fields) = if table_exists(&connection, "item_catalog")? {
         let row: Option<(String, String)> = connection
             .query_row(
@@ -440,6 +492,7 @@ pub(super) fn read_campaign(folder: &Path) -> Result<Campaign, String> {
         maps,
         factions,
         threads,
+        sessions,
         inventory,
         items,
         item_fields,
@@ -470,6 +523,22 @@ pub(super) fn read_campaign(folder: &Path) -> Result<Campaign, String> {
             .chain(thread.gm_possibilities.iter_mut())
         {
             transform_images(node, folder, false)?;
+        }
+    }
+    for session in &mut campaign.sessions {
+        for node in session
+            .where_left_off
+            .iter_mut()
+            .chain(session.prep.iter_mut())
+            .chain(session.happened.iter_mut())
+            .chain(session.summary.iter_mut())
+        {
+            transform_images(node, folder, false)?;
+        }
+        for beat in &mut session.beats {
+            for node in &mut beat.notes {
+                transform_images(node, folder, false)?;
+            }
         }
     }
     for map in &mut campaign.maps {

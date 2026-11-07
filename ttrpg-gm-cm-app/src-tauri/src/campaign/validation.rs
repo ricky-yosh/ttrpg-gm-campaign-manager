@@ -245,6 +245,58 @@ impl Campaign {
                 }
             }
         }
+        let mut session_ids = HashSet::new();
+        for session in &self.sessions {
+            if session.id.trim().is_empty()
+                || session.title.trim().is_empty()
+                || session.number == 0
+                || !session_ids.insert(&session.id)
+            {
+                return Err(
+                    "Sessions need unique IDs, nonempty titles, and positive numbers.".into(),
+                );
+            }
+            for document in [
+                &session.where_left_off,
+                &session.prep,
+                &session.happened,
+                &session.summary,
+            ] {
+                if document.is_empty() {
+                    return Err("Session notes need at least one block.".into());
+                }
+                for node in document {
+                    validate_node(node)?;
+                }
+            }
+            let mut beat_ids = HashSet::new();
+            for beat in &session.beats {
+                if beat.id.trim().is_empty() || !beat_ids.insert(&beat.id) {
+                    return Err("Session beats need unique, nonempty IDs.".into());
+                }
+                if !["planned", "happened", "skipped"].contains(&beat.status.as_str()) {
+                    return Err("Invalid session beat status.".into());
+                }
+                if beat.notes.is_empty() {
+                    return Err("Session beats need at least one note block.".into());
+                }
+                for node in &beat.notes {
+                    validate_node(node)?;
+                }
+            }
+            let mut link_targets = HashSet::new();
+            for link in &session.links {
+                if !["npc", "location", "faction", "thread", "item"].contains(&link.kind.as_str())
+                    || link.target_id.trim().is_empty()
+                    || !link_targets.insert((&link.kind, &link.target_id))
+                {
+                    return Err(
+                        "Session links need a supported kind and unique, nonempty target IDs."
+                            .into(),
+                    );
+                }
+            }
+        }
         let mut faction_ids = HashSet::new();
         for faction in &self.factions {
             if faction.id.trim().is_empty()
