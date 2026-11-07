@@ -1,7 +1,23 @@
 use super::*;
 use base64::{engine::general_purpose::STANDARD, Engine};
 use sha2::{Digest, Sha256};
-use std::{fs, io::Write, path::Path};
+use std::{
+    fs,
+    io::Write,
+    path::{Path, PathBuf},
+};
+
+/// Resolve the asset directory inside the package before creating image files.
+pub(super) fn prepare_asset_directory(folder: &Path) -> Result<PathBuf, String> {
+    let root = folder.canonicalize().map_err(|e| e.to_string())?;
+    let directory = root.join("assets");
+    fs::create_dir_all(&directory).map_err(|e| e.to_string())?;
+    let directory = directory.canonicalize().map_err(|e| e.to_string())?;
+    if !directory.starts_with(&root) {
+        return Err("Assets folder resolves outside the campaign package.".into());
+    }
+    Ok(directory)
+}
 
 #[cfg(feature = "legacy-sqlite")]
 pub(super) fn transform_location_image(
@@ -104,7 +120,7 @@ pub(super) fn transform_images(
                     return Err("Images must be between 1 byte and 10 MB.".into());
                 }
                 let filename = format!("{:x}.{extension}", Sha256::digest(&bytes));
-                let asset = folder.join("assets").join(&filename);
+                let asset = prepare_asset_directory(folder)?.join(&filename);
                 if !asset.exists() {
                     atomic_write(&asset, &bytes)?;
                 }

@@ -121,6 +121,16 @@ expected and actual revisions. Standard parse/request/method/parameter errors us
 standard JSON-RPC codes. Notifications run without responses. Batch requests are
 not supported. Input lines are limited to 16 MiB.
 
+Responses may exceed 16 MiB because a campaign can aggregate many individually
+bounded edits and images. `run` spools each response from its own child host to a
+private temporary file, validates the JSON and request ID, then forwards the
+original envelope unchanged. The file is automatically removed when closed.
+This avoids a second full in-memory response in the CLI, but requires temporary
+disk space proportional to the largest response. The host still builds full
+campaign snapshots in memory; compact projections and separate asset retrieval
+remain future optimizations. An I/O failure after dispatch does not mean the
+operation was rolled back; do not blindly retry a mutation.
+
 ### History policy
 
 There is one core-owned, chronological edit history per campaign session:
@@ -158,6 +168,9 @@ whole stream.
   content-hashed files under `assets/`. Loading verifies hashes and rejects
   missing, corrupt, or outside-package references. Unreferenced assets may remain
   after a failed save or unused import; cleanup is future work.
+- Asset imports and both save adapters share the asset-directory containment
+  check. An `assets/` symlink pointing outside the package is rejected before
+  creating image files, including temporary files.
 - Both adapters honor the advisory `.campaign.lock`; a second writer is rejected.
   The lock is not protection from arbitrary SQL tools or older app builds.
 - The core links no network client. Behavior tests use local stdio, temporary

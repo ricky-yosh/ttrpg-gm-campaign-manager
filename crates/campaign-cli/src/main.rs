@@ -1,7 +1,8 @@
 use campaign_cli::{handle, MAX_MESSAGE_BYTES};
 use campaign_core::campaign::Session;
+use serde::{de::IgnoredAny, Deserialize, Deserializer};
 use serde_json::{json, Value};
-use std::io::{self, BufRead, Read, Write};
+use std::io::{self, BufRead, Read, Seek, Write};
 use std::process::{Command, Stdio};
 
 const HELP: &str = "\
@@ -82,6 +83,55 @@ async fn serve() -> Result<(), String> {
     Ok(())
 }
 
+#[derive(Deserialize)]
+struct ResponseStatus {
+    id: u64,
+    #[serde(default, deserialize_with = "error_present")]
+    error: bool,
+}
+
+fn error_present<'de, D: Deserializer<'de>>(deserializer: D) -> Result<bool, D::Error> {
+    IgnoredAny::deserialize(deserializer)?;
+    Ok(true)
+}
+
+// Only requests are capped at 16 MiB. Our child host may return a whole campaign
+// assembled from many individually bounded edits. Spool one NDJSON response to
+// disk and validate its envelope before forwarding it, without buffering its
+// image-bearing result in memory or changing the public response shape.
+fn forward_response(
+    reader: &mut impl BufRead,
+    output: &mut impl Write,
+    expected_id: u64,
+) -> Result<bool, String> {
+    let mut response = tempfile::tempfile().map_err(|e| e.to_string())?;
+    loop {
+        let buffer = reader.fill_buf().map_err(|e| e.to_string())?;
+        if buffer.is_empty() {
+            return Err("Host exited without a complete response.".into());
+        }
+        let newline = buffer.iter().position(|byte| *byte == b'\n');
+        let length = newline.map_or(buffer.len(), |index| index + 1);
+        response
+            .write_all(&buffer[..length])
+            .map_err(|e| e.to_string())?;
+        reader.consume(length);
+        if newline.is_some() {
+            break;
+        }
+    }
+    response.rewind().map_err(|e| e.to_string())?;
+    let status: ResponseStatus =
+        serde_json::from_reader(io::BufReader::new(&mut response)).map_err(|e| e.to_string())?;
+    if status.id != expected_id {
+        return Err("Host returned an unexpected response ID.".into());
+    }
+    response.rewind().map_err(|e| e.to_string())?;
+    io::copy(&mut response, output).map_err(|e| e.to_string())?;
+    output.flush().map_err(|e| e.to_string())?;
+    Ok(status.error)
+}
+
 fn run() -> Result<bool, String> {
     let mut child = Command::new(std::env::current_exe().map_err(|e| e.to_string())?)
         .arg("serve")
@@ -118,16 +168,7 @@ fn run() -> Result<bool, String> {
             writeln!(host_input, "{request}")
                 .and_then(|()| host_input.flush())
                 .map_err(|e| e.to_string())?;
-            let response =
-                read_message(&mut host_output)?.ok_or("Host exited without a response.")?;
-            let value: Value = serde_json::from_str(&response).map_err(|e| e.to_string())?;
-            if value["id"] != id {
-                return Err("Host returned an unexpected response ID.".into());
-            }
-            failed |= value.get("error").is_some();
-            write!(output, "{response}")
-                .and_then(|()| output.flush())
-                .map_err(|e| e.to_string())?;
+            failed |= forward_response(&mut host_output, &mut output, id)?;
         }
         drop(host_input);
         Ok(failed)
@@ -140,4 +181,57 @@ fn run() -> Result<bool, String> {
         return Err(format!("Host exited with {status}."));
     }
     result
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn responses_are_forwarded_one_at_a_time_with_error_status() {
+        let success = b"{\"jsonrpc\":\"2.0\",\"id\":1,\"result\":{\"nested\":[\"value\"]}}\n";
+        let failure = b"{\"jsonrpc\":\"2.0\",\"id\":2,\"error\":{\"code\":-32000}}\n";
+        let stream = [success.as_slice(), failure.as_slice()].concat();
+        let mut reader = io::BufReader::with_capacity(3, stream.as_slice());
+        let mut output = Vec::new();
+        assert!(!forward_response(&mut reader, &mut output, 1).unwrap());
+        assert_eq!(output, success);
+        output.clear();
+        assert!(forward_response(&mut reader, &mut output, 2).unwrap());
+        assert_eq!(output, failure);
+    }
+
+    #[test]
+    fn invalid_responses_are_not_forwarded() {
+        for response in [
+            "",
+            "{\"id\":1,\"result\":{}}",
+            "{\"id\":2,\"result\":{}}\n",
+            "{\"id\":1,\"result\":broken}\n",
+            "{\"id\":1,\"result\":{}} trailing\n",
+        ] {
+            let mut reader = io::BufReader::new(response.as_bytes());
+            let mut output = Vec::new();
+            assert!(
+                forward_response(&mut reader, &mut output, 1).is_err(),
+                "invalid response was accepted: {response}"
+            );
+            assert!(output.is_empty(), "invalid response leaked to stdout");
+        }
+    }
+
+    #[test]
+    fn requests_still_enforce_the_original_size_limit() {
+        let bytes = vec![b' '; MAX_MESSAGE_BYTES + 1];
+        let mut at_limit = io::BufReader::new(&bytes[..MAX_MESSAGE_BYTES]);
+        assert_eq!(
+            read_message(&mut at_limit).unwrap().unwrap().len(),
+            MAX_MESSAGE_BYTES
+        );
+        let mut over_limit = io::BufReader::new(bytes.as_slice());
+        assert_eq!(
+            read_message(&mut over_limit).unwrap_err(),
+            "Message exceeds 16 MiB limit."
+        );
+    }
 }

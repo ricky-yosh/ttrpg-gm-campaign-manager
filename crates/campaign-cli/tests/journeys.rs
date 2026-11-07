@@ -2,6 +2,134 @@ use serde_json::{json, Value};
 use std::io::{BufRead, BufReader, Write};
 use std::process::{Child, ChildStdin, ChildStdout, Command, Stdio};
 
+#[cfg(unix)]
+#[test]
+fn asset_import_rejects_outside_directory_before_writing() {
+    let folder = tempfile::tempdir().unwrap();
+    let path = folder.path().join("assets.campaign");
+    let outside = folder.path().join("outside");
+    std::fs::create_dir(&outside).unwrap();
+    let mut client = Client::new();
+    client.ok(
+        "campaign.new",
+        json!({"name":"Assets","expectedRevision":0}),
+    );
+    client.ok("campaign.save", json!({"path":path,"expectedRevision":1}));
+    std::fs::remove_dir(path.join("assets")).unwrap();
+    std::os::unix::fs::symlink(&outside, path.join("assets")).unwrap();
+
+    let before = client.ok("campaign.inspect", json!({}));
+    let history = client.ok("history.status", json!({}));
+    let rejected = client.request(
+        "asset.import",
+        json!({"data":"data:image/png;base64,aW1hZ2U="}),
+    );
+    assert_eq!(rejected["error"]["data"]["code"], "storage");
+    assert_eq!(
+        std::fs::read_dir(&outside).unwrap().count(),
+        0,
+        "a rejected import must not write through the assets symlink"
+    );
+    assert_eq!(client.ok("campaign.inspect", json!({})), before);
+    assert_eq!(client.ok("history.status", json!({})), history);
+    let rejected_save = client.request("campaign.save", json!({"expectedRevision":2}));
+    assert_eq!(rejected_save["error"]["data"]["code"], "storage");
+    assert_eq!(std::fs::read_dir(&outside).unwrap().count(), 0);
+
+    // Removing the unsafe link permits a normal import, even when assets/ is
+    // absent. Neither the rejection nor its retry changes campaign history.
+    std::fs::remove_file(path.join("assets")).unwrap();
+    let imported = client.ok(
+        "asset.import",
+        json!({"data":"data:image/png;base64,aW1hZ2U="}),
+    );
+    assert!(path.join(imported["url"].as_str().unwrap()).is_file());
+    assert_eq!(client.ok("campaign.inspect", json!({})), before);
+    assert_eq!(client.ok("history.status", json!({})), history);
+    client.close();
+}
+
+#[test]
+fn cli_run_forwards_large_open_inspect_and_save_responses() {
+    let folder = tempfile::tempdir().unwrap();
+    let path = folder.path().join("large.campaign");
+    let mut client = Client::new();
+    client.ok("campaign.new", json!({"name":"Large","expectedRevision":0}));
+    // Each request fits the input limit, but the combined image-bearing
+    // campaign exceeds it. These are encoded-byte fixtures, not decoded images.
+    let image = format!(
+        "data:image/png;base64,{}",
+        "AAAA".repeat(campaign_cli::MAX_MESSAGE_BYTES / 12 + 128)
+    );
+    let mut revision = 1;
+    for name in ["One", "Two", "Three"] {
+        let created = client.ok(
+            "npc.create",
+            json!({"name":name,"expectedRevision":revision}),
+        );
+        revision += 1;
+        client.ok(
+            "npc.update",
+            json!({
+                "npcId":created["npc"]["id"],"expectedRevision":revision,
+                "notes":[{"type":"img","url":image,"children":[{"text":""}]}]
+            }),
+        );
+        revision += 1;
+    }
+    client.ok(
+        "campaign.save",
+        json!({"path":path,"expectedRevision":revision}),
+    );
+    client.close();
+
+    let mut responses = tempfile::tempfile().unwrap();
+    let mut child = Command::new(env!("CARGO_BIN_EXE_campaign"))
+        .arg("run")
+        .stdin(Stdio::piped())
+        .stdout(responses.try_clone().unwrap())
+        .stderr(Stdio::piped())
+        .spawn()
+        .unwrap();
+    {
+        let mut input = child.stdin.take().unwrap();
+        for command in [
+            json!({"method":"campaign.open","params":{"path":path,"expectedRevision":0}}),
+            json!({"method":"campaign.inspect"}),
+            json!({"method":"campaign.save","params":{"expectedRevision":1}}),
+        ] {
+            writeln!(input, "{command}").unwrap();
+        }
+    }
+    let output = child.wait_with_output().unwrap();
+    assert!(
+        output.status.success(),
+        "run failed: {}",
+        String::from_utf8_lossy(&output.stderr)
+    );
+    std::io::Seek::rewind(&mut responses).unwrap();
+    let mut reader = BufReader::new(responses);
+    for id in 1..=3 {
+        let mut line = String::new();
+        reader.read_line(&mut line).unwrap();
+        assert!(line.len() > campaign_cli::MAX_MESSAGE_BYTES);
+        let response: Value = serde_json::from_str(&line).unwrap();
+        assert_eq!(response["id"], id);
+        assert!(response.get("error").is_none());
+        let campaign = &response["result"]["campaign"];
+        assert_eq!(campaign["npcs"].as_array().unwrap().len(), 3);
+        assert_eq!(campaign["npcs"][2]["notes"][0]["url"], image);
+        assert_eq!(response["result"]["dirty"], false);
+    }
+    let mut extra = String::new();
+    assert_eq!(reader.read_line(&mut extra).unwrap(), 0);
+
+    let mut reopened = Client::new();
+    let state = reopened.ok("campaign.open", json!({"path":path,"expectedRevision":0}));
+    assert_eq!(state["campaign"]["npcs"][2]["notes"][0]["url"], image);
+    reopened.close();
+}
+
 struct Client {
     child: Child,
     input: Option<ChildStdin>,

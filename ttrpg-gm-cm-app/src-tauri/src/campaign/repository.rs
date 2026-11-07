@@ -13,16 +13,7 @@ pub(super) fn write_campaign(folder: &Path, mut campaign: Campaign) -> Result<()
     }
     fs::create_dir_all(folder).map_err(|e| e.to_string())?;
     let _lock = super::storage::lock_package(folder)?;
-    fs::create_dir_all(folder.join("assets")).map_err(|e| e.to_string())?;
-    let root = folder.canonicalize().map_err(|e| e.to_string())?;
-    if !folder
-        .join("assets")
-        .canonicalize()
-        .map_err(|e| e.to_string())?
-        .starts_with(&root)
-    {
-        return Err("Assets folder resolves outside the campaign package.".into());
-    }
+    assets::prepare_asset_directory(folder)?;
     for npc in &mut campaign.npcs {
         for node in &mut npc.notes {
             transform_images(node, folder, true)?;

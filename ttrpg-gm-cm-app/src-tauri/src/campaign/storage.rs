@@ -110,15 +110,7 @@ impl Storage {
     pub async fn save(&mut self, campaign: &Campaign) -> Result<()> {
         campaign.validate()?;
         let mut document = serde_json::to_value(campaign).map_err(|e| e.to_string())?;
-        let assets = self.folder.join("assets");
-        fs::create_dir_all(&assets).map_err(|e| e.to_string())?;
-        if !assets
-            .canonicalize()
-            .map_err(|e| e.to_string())?
-            .starts_with(&self.folder)
-        {
-            return Err("Assets folder resolves outside the campaign package.".into());
-        }
+        assets::prepare_asset_directory(&self.folder)?;
         transform_images(&mut document, &self.folder, true)?;
         let campaign: Campaign = serde_json::from_value(document).map_err(|e| e.to_string())?;
         let version = self.version().await?;

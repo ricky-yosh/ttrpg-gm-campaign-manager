@@ -2,6 +2,7 @@
 use campaign_core::campaign::Session;
 use serde_json::{json, Value};
 
+/// Maximum input-line size; responses can contain a larger aggregate campaign.
 pub const MAX_MESSAGE_BYTES: usize = 16 * 1024 * 1024;
 
 pub async fn handle(session: &mut Session, line: &str) -> Option<Value> {
