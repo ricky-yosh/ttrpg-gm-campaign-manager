@@ -141,6 +141,29 @@ Keep the existing app usable as a reference client during extraction. Do not bui
 
 Phase 2 is the first functional milestone: CLI → JSON-RPC → core → embedded Turso, with no Rune dependency. Phase 3 follows after the headless logic works. Decide feature ordering after the inventory; simple records can establish patterns, but prove the hard UI before committing to full frontend cutover.
 
+### Updated requirements and core-readiness gate
+
+The user wants the intended GM-kit behavior specified thoroughly and fleshed out
+in the core before moving on to the frontend. The phase table above is the
+original migration sequence, not permission to treat a CRUD foundation as
+frontend-ready. [Map requirements](map-requirements.md) provide the expanded map
+target and a reusable requirements checklist.
+
+For each intended feature, establish user journeys, entities/relationships,
+actions/queries, core/UI ownership, persistence, failures, history, privacy, and
+CLI acceptance evidence. Implement agreed core slices in bounded goals, and
+review their acceptance before beginning frontend implementation. Distinguish
+confirmed scope, recommended details, deferred capabilities, and genuine product
+questions; do not silently include every brainstorm idea.
+
+Puzzles are explicitly deferred as a possible plugin-like feature; React versus
+Rune, plugin/storage design, and AI generation have not been selected. Do not
+implement or choose them as a side effect of completing maps.
+
+Rendered/input, accessibility, native platform, and performance gates below
+still apply later. Headless acceptance cannot prove those properties or replace
+the required rich-note/workspace experience.
+
 ### Rune feasibility gates
 
 - **Notes:** load and preserve current Plate JSON, including images, captions, columns, and unknown nodes. Demonstrate required editing, selection, clipboard, IME, and undo. Rich text rendering and plain text fields do not prove a full document editor exists. Choose a native editor strategy or an explicit compatibility bridge; no lossy conversion by default.

@@ -1081,14 +1081,28 @@ mod tests {
     fn compound_entry_undoes_changes_in_reverse_order() {
         let history = CampaignHistory::default();
         let campaign = campaign();
-        let map_before = json!({"id": "map-1", "name": "City", "kind": "City",
+        let default_map_settings = json!({
+            "calibration": null,
+            "grid": {"mode": "none", "visible": false, "size": 64.0,
+                "offsetX": 0.0, "offsetY": 0.0, "orientation": "pointy"},
+            "snap": false
+        });
+        let mut map_before = json!({"id": "map-1", "name": "City", "kind": "City",
             "image": {"type": "img", "url": "data:image/png;base64,bWFw"},
             "width": 100, "height": 100, "locationIds": [], "pins": [], "party": null});
-        let other_before = json!({"id": "map-2", "name": "Region", "kind": "Region",
+        let mut other_before = json!({"id": "map-2", "name": "Region", "kind": "Region",
             "image": {"type": "img", "url": "data:image/png;base64,bWFw"},
             "width": 100, "height": 100, "locationIds": [],
             "pins": [{"id": "pin-1", "x": 0.5, "y": 0.5, "locationId": "loc-1",
                 "label": "", "destinationMapId": "map-1"}], "party": null});
+        map_before
+            .as_object_mut()
+            .unwrap()
+            .extend(default_map_settings.as_object().unwrap().clone());
+        other_before
+            .as_object_mut()
+            .unwrap()
+            .extend(default_map_settings.as_object().unwrap().clone());
         let mut other_after = other_before.clone();
         other_after["pins"][0]["destinationMapId"] = Value::Null;
         let mut value = serde_json::to_value(&campaign).unwrap();

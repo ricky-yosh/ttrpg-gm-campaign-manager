@@ -1,220 +1,260 @@
-# Goal: Assess product readiness for the GM toolkit
+# Goal: Build headless map calibration, grids, snapping, and measurement
 
-Investigate the documented product and current implementation, then write a
-source-linked readiness report in `docs/product-readiness/`.
+Implement the first tactical-map foundation through the shared Rust core and
+public JSON-RPC/CLI contract. No frontend implementation is required or
+authorized. This is a bounded slice of the complete map requirements, not the
+whole map system.
 
-This is a **documentation and discovery run only**. Do not implement features,
-fix application code, or continue the previous campaign-authoring goal.
-Finish the reports and stop for human review.
+## GM outcome
 
-## User outcome
+A GM or agent can configure an existing map's scale and grid, preview snapped
+positions, and measure lines and waypoint paths without launching a window:
 
-The user wants a useful kit for preparing, running, and reviewing TTRPG sessions,
-not just a collection of independent record editors. A GM expects to create a
-session and connect relevant NPCs, factions, locations, story threads, and other
-campaign material without maintaining duplicate copies.
+Configure map → calibrate scale → select grid and snapping → inspect preview
+positions and distances → save → terminate → reopen → obtain the same results.
 
-The user does not yet have a clear picture of what is implemented. Your job is
-to explain what actually works, what is only a prototype, what is missing, and
-which product boundaries need a decision before another implementation goal.
+Example: 100 image pixels represent 10 feet. A straight horizontal 250-pixel
+measurement reports 25 feet. Changing camera zoom would not change that answer.
+An unsnapped query preserves its supplied position; a snapped query reports the
+deterministic grid anchor without moving any saved pin or marker.
 
-Do not preselect sessions or player-safe presentation as the next implementation
-task. Investigate the whole product first.
+## Approved first-slice choices
 
-## Confirmed direction
+The user accepted these defaults:
 
-- One UI-independent Rust application core, embedded Turso Database, and
-  JSON-RPC with a machine-readable CLI.
-- CLI sessions run independently; desktop attachment is not required.
-- Rune is the eventual lightweight frontend, not part of this run.
-- Preserve rich-note editing, dockable workspaces, portable campaign packages,
-  existing records, assets, and private GM information.
-- Keep the React/Tauri app as a behavior reference during migration.
-- Brainstorm ideas and prototype UI are evidence to investigate, not blanket
-  approval to implement every proposed feature.
+- Units are per map: feet, metres, or miles.
+- Calibration uses two distinct map points and a positive known distance.
+- Grids are None, Square, or Hex; support pointy-top and flat-top hexes.
+- Snapping can be enabled/disabled; toggling it never moves existing objects.
+- Straight-line distance is the default. Grid distance uses an explicitly
+  selected, documented rule; there is no universal implicit TTRPG diagonal rule.
+- Tools display distances. They do not enforce movement allowances, resolve
+  attacks, or consume character resources.
 
-## Investigation scope
+Implement within this scope without seeking approval for routine technical
+details. Do not interpret approval as including every recommendation in the full
+map specification.
 
-Read `AGENTS.md` and applicable nested instructions. Discover and read all
-top-level documents in `docs/`, including the product brainstorm, data model,
-feature documents, architecture, headless plan, capability ledger, and previous
-acceptance map. Then inspect the relevant implementation and tests.
+## Read and inspect first
 
-Cover at least:
+Read `AGENTS.md` and applicable nested instructions, then:
 
-- Campaign lifecycle, saving, reopening, portability, and recovery limitations.
-- Sessions, preparation notes, story beats, running notes, and recaps.
-- NPCs, factions, locations, story threads, items, and party inventory.
-- Maps, pins, record attachments, and documented encounter/exploration features.
-- Rich notes, images/assets, and references within or alongside documents.
-- Relationships across records and sessions, navigation to linked records,
-  backlinks, renames, and unavailable/deleted targets.
-- Editing/drafts, undo/redo, search, workspace/navigation, and restoration.
-- Player knowledge, public/private content, presentation, and multi-window use.
-- Other documented areas such as puzzles, bestiary, crafting, and media cues:
-  identify their status without assuming they belong in the next release.
+- `docs/map-requirements.md`, especially coordinates, grids, snapping,
+  measurement, core/UI ownership, persistence, and acceptance journeys M1/M2.
+- `docs/maps.md`
+- `docs/headless-development.md`
+- `docs/headless-core-plan.md`
+- `docs/data-model.md`
+- Relevant current status notes in `docs/product-readiness/`.
 
-Distinguish a **game session** (a GM's prepared or played session) from a
-**host/application session** (a running CLI/core process). Existing support for
-the latter does not establish support for the former.
+Inspect current map domain types, validation, map create/update/get actions,
+history, asset handling, discovery, both storage adapters, and CLI journeys.
+Existing map pins/party positions are normalized coordinates; do not silently
+reinterpret them as pixels or cell coordinates.
 
-## Evidence rules
+Game sessions and session reference queries are implemented. Preserve them and
+other existing campaign behavior. Record the actual starting revision and dirty
+worktree; do not redo prior goals.
 
-Keep intended behavior and implementation status separate.
+## Required behavior
 
-For intended behavior, distinguish:
+### 1. Coordinate and measurement contract
 
-- Confirmed requirement or decision.
-- Proposal or brainstorm idea.
-- Explicitly deferred feature.
-- Unresolved or conflicting requirement.
+- Document the coordinate convention for every public input/output. Reuse
+  existing normalized positions where coherent; keep image/map coordinates,
+  physical units, and grid cells explicitly distinguishable.
+- Convert normalized x/y using the respective image width/height. Test
+  non-square maps; identical normalized offsets on different axes need not
+  represent identical distances.
+- Geometry and distances are independent of camera pan/zoom, viewport size,
+  display DPI, and frontend framework.
+- Preserve numeric precision internally. Specify reported/display rounding
+  separately; never round before summing path lengths or snapping.
+- Physical measurement requires calibration. An uncalibrated map must be
+  explicitly inspectable as uncalibrated; either return clearly identified
+  image-space distances or a structured error for a physical-distance request.
+  Never invent a default feet-per-cell conversion.
 
-For current implementation, distinguish:
+### 2. Calibration and units
 
-- Working and persistent.
-- Working but transient/prototype-only.
-- Partially implemented.
-- Missing.
-- Unverified.
+- Configure scale from two distinct points and a positive known distance with
+  explicit units; expose the accepted calibration/scale for inspection.
+- Support feet, metres, and miles without conflating them with cell counts.
+  Changing a unit converts the same physical scale; recalibration is the action
+  that changes the intended physical scale.
+- Persist the scale and unit per map. Changing them does not reposition existing
+  pins or the party marker, rewrite artwork, or reset grid alignment.
+- Reject invalid/degenerate calibration, nonfinite values, nonpositive distance,
+  invalid units, and missing maps without accepted-state/history changes.
 
-Record desktop and CLI/core support separately. A desktop-only capability is
-not automatically a headless capability; a CLI method does not prove the full
-GM workflow is complete.
+### 3. Grid configuration
 
-Use document sections, code paths, and named tests as evidence. Include relative
-Markdown links where useful and exact file/line references for code claims.
-Record the inspected Git revision and any relevant uncommitted changes; a
-revision alone does not describe a dirty worktree.
+- Support None, Square, and Hex, with pointy-top/flat-top hex orientation.
+- Configure alignment origin/offset and positive cell size in a documented
+  map/image-space convention. Define exactly what hex size measures, including
+  conversion to cell-centre spacing; clients must not guess radius vs diameter.
+- Keep grid topology, overlay visibility, cell geometry, physical calibration,
+  and snapping policy distinct. Hiding a grid is not the same as removing it.
+- Grid changes and snap toggles must never implicitly move existing placements.
+  Bulk resnapping and artwork replacement/remapping are outside this goal.
+- Old maps default to no grid and no calibration, without moving their pins or
+  marker. Define how a stored snap preference behaves when mode is None:
+  grid snapping is inactive, not an invisible square grid.
 
-Distinguish source inspection, existing test coverage, tests you actually ran,
-and manual verification. Do not claim success from test names alone. Do not
-claim absence solely because a method name was not found: trace the applicable
-storage, action, and frontend paths.
+### 4. Snap previews
 
-Existing acceptance maps describe previous scopes, not approval of every future
-feature. Do not silently reconcile contradictions by treating either current
-code or older documentation as the complete product specification.
+- Expose a read-only position-preview query using saved grid settings and an
+  optional explicit snapping override.
+- For this point-geometry foundation, snap to nearest square/hex cell centres;
+  document the square/hex cell addressing and exact boundary/tie behavior.
+  Multi-cell token anchors and template edge/corner anchors are later work.
+- Off means continuous positioning; None has no grid snapping. Return both the
+  requested and effective positions and enough grid identity to inspect results.
+- Preview and future commit paths must be able to reuse the same pure geometry.
+  Do not implement a second rule in CLI argument handling.
 
-## Investigation loop
+### 5. Measured lines and waypoint paths
 
-Repeat until the scope above has evidence or an explicitly recorded unknown:
+- Add a read-only query for a straight segment or ordered waypoint path.
+  Return effective points, per-segment lengths, total, units, selected metric,
+  and whether snapping was applied, plus current campaign revision.
+- Use saved map settings unless the request explicitly overrides a supported
+  policy. All returned values must be unambiguous about physical vs cell units.
+- Provide straight-line measurement as the default. For explicit square-grid
+  measurement, support equal-cost diagonals and alternating diagonal costs as
+  named policies. For hexes, support cell-step distance as an explicit policy.
+  These geometric policies do not infer a ruleset from NPC statblock settings.
+- Specify valid endpoints for cell-based metrics and how off-centre input is
+  handled. Do not silently round unsnapped free-space requests into cell steps.
+  Reject incompatible combinations with actionable structured errors.
+- Alternating diagonal costs carry their state across waypoint segments rather
+  than restarting at each waypoint. Splitting an equivalent route must not
+  reset the diagonal count.
+- Zero-length segments and repeated waypoints are valid and contribute zero.
+  A bent path reports the sum of its segments, not just endpoint separation.
+- Preserve existing map boundary conventions; define behavior at edges and
+  document rejected out-of-map requests. Do not silently clamp input.
+- Reject malformed paths and unreasonable input sizes with bounded diagnostics.
+  Use analytic distance/cell calculations; do not enumerate an entire map grid.
 
-1. Select a GM workflow or an uncovered part of it.
-2. Read the relevant product requirements and identify their authority/status.
-3. Trace the desktop, core/CLI, relationships, and persistence paths.
-4. Inspect tests; run a focused non-destructive check when it materially
-   increases confidence.
-5. Record the outcome, supporting evidence, gaps, and unresolved product rules.
-6. Review related workflows for contradictions and update the three reports.
+### 6. Actions, history, and storage
 
-Use real public CLI journeys with temporary campaigns where practical. For
-persistence claims, prefer save, terminate, reopen in a fresh process, and
-inspect. Do not use raw database edits as proof of application behavior.
+- Keep authoritative configuration and geometry in the UI-independent core.
+  JSON-RPC/CLI adapters only decode, dispatch, and present machine-readable data.
+- Make new operations discoverable with generated input schemas and explicit
+  query/mutation classification. Prefer additive methods; preserve existing
+  map methods and response contracts.
+- Read-only geometry queries must not alter revision, dirty state, campaign
+  data, history, assets, database, or WAL. Read accepted unsaved map changes,
+  not just the last saved database state.
+- Accepted configuration changes require expectedRevision and enter labeled
+  campaign history. Reject stale writes; no-ops do not add edits/revisions.
+- Validate and normalize through a coherent shared rule before applying edits.
+  Ensure ordinary map updates cannot accidentally drop new settings.
+- Save/reopen and undo/redo preserve configuration. Extend both Turso and the
+  temporary legacy adapter so existing desktop saves can preserve the new data
+  even though desktop controls are outside scope.
+- Use the smallest tested, compatible persistence change. If a migration is
+  necessary, it must preserve older packages, their positions, assets, sessions,
+  relationships, and unrelated workspace data. Never test on original campaigns.
+- All endpoints in this slice are GM inspection/authoring. Do not claim a
+  player-safe map or publish geometry to players.
 
-Continue independent investigation when a product question is unresolved.
-Collect questions in `decisions.md` rather than stopping after each one.
-Ask during the run only if access or safety prevents useful progress.
+## Execution loop
 
-## Required deliverables
+1. Inspect the existing map contract and define precise input/output examples.
+2. Add public-contract tests for one small capability, including failure cases.
+3. Implement a complete core/discovery/storage slice where applicable.
+4. Verify no-ops, stale writes, unchanged state after rejection, and read-only
+   previews; test geometry primitives separately where useful.
+5. Prove undo/redo and real save/fresh-process reopen.
+6. Run regressions, review the diff, update docs, and continue within this scope.
 
-Create exactly these three report files. If they already exist, update them
-without discarding unrelated user content. Keep findings in these files rather
-than scattering new status documents throughout the repository.
+Do not stop after routine slices to ask what to do next. Favor a few direct,
+reusable geometry functions over a generic rules engine or renderer abstraction.
 
-### `docs/product-readiness/README.md`
+## Acceptance checklist
 
-A short entry point, approximately one page:
+Use temporary campaigns and the actual public CLI/host:
 
-- What a GM can actually accomplish today.
-- The most consequential gaps in preparing, running, and reviewing a session.
-- Links to the inventory and decisions.
-- One recommended next bounded implementation goal, with a short rationale,
-  dependencies, and non-goals. Compare a plausible alternative if useful.
-- Which decisions, if any, block that recommendation.
-- Inspection baseline and a concise summary of verification and limitations.
+- Discover the new operations and generated schemas.
+- Create a non-square map; calibrate a known horizontal segment and verify
+  horizontal, vertical, diagonal, fractional, and zero-distance results.
+- Verify physically equivalent calibrations and unit conversions, plus rejected
+  coincident points, invalid numbers, invalid units, and stale revisions.
+- Exercise None, Square, and both Hex orientations with nonzero alignment
+  offsets. Test known cell centres, neighbours, edges, and deterministic ties.
+- Toggle grid visibility and snapping independently. Verify existing pins/
+  marker coordinates remain unchanged and unsnapped preview preserves input.
+- Measure direct and waypoint paths with per-segment/total assertions, repeated
+  points, and each supported metric. Test alternating-diagonal continuity and
+  incompatible/off-centre grid requests explicitly.
+- Verify query output follows accepted configuration edits and undo/redo.
+- Compare campaign state, revision, dirty flag, and history before/after queries,
+  including dirty campaigns. Verify saved database/WAL are unchanged by queries.
+- Verify configuration no-ops and rejected changes preserve state/history/data.
+- Save, terminate, reopen, and remeasure with the same results and settings.
+- Open/save representative older packages with existing pins/party markers and
+  unrelated complex records; verify backward compatibility and adapter parity.
+- Cover missing maps, no active campaign, unsupported settings, bounded large
+  paths, and active-campaign isolation.
 
-Make it readable without knowing the codebase or the agent's conversation.
-Do not describe the whole toolkit as finished because one foundation run passed.
+Property/unit tests for coordinate conversion, snapping idempotence, distance
+symmetry, hex-neighbour steps, and numeric tolerance supplement real CLI
+journeys. They do not replace persistence/contract evidence.
 
-### `docs/product-readiness/workflow-inventory.md`
+## Explicitly outside this goal
 
-Organize around **preparing**, **running**, and **reviewing** a session.
-Put shared campaign/reference capabilities in a supporting section; do not
-duplicate the same detailed finding under every stage.
+- Rune/React controls, canvas rendering, pointer events, camera code, screenshots.
+- Token placements, NPC/bestiary/enemy instances, ghost-token movement commits.
+- Cone/circle/beam templates, attack targeting, hit/damage calculation.
+- Movement budgets, terrain cost, elevation, pathfinding, walls, dynamic lighting.
+- Fog, visibility/reveal state, player-safe projection, presentation.
+- Session visits, per-beat/map-pin references, relationship-model expansion.
+- Artwork replacement/remapping, backup/recovery, map-art generation.
+- Puzzles: plugin-like design is deferred; React/Rune, storage, execution, and
+  AI generation remain undecided.
 
-For each workflow, record:
+These remain in the broader requirements where applicable. Completing this goal
+does not make the whole map feature or core frontend-ready.
 
-1. A concrete GM outcome or short example journey.
-2. Source requirements and their status.
-3. Current desktop behavior and current CLI/core behavior.
-4. What persists across navigation, campaign replacement, and process restart,
-   as applicable; distinguish committed content from unsaved drafts.
-5. Connections to other records and their relevant lifecycle behavior.
-6. Implementation/test evidence and what you actually verified.
-7. Gaps, contradictions, and unresolved questions linked to `decisions.md`.
-8. A candidate public-contract acceptance journey for missing behavior,
-   clearly labeled as a proposed test, not an existing command.
+Preserve unrelated dirty work. Do not commit, push, merge, publish, or change
+real campaign data. Stop for a specific user decision only if a conflicting
+product rule, incompatible migration, storage limitation, or scope expansion
+prevents safe progress; report evidence and a recommended resolution.
 
-Include a compact coverage index so a reviewer can locate every investigated
-feature. Explicitly identify future/proposed features rather than losing them
-or turning them into requirements.
+## Required checks and handoff
 
-### `docs/product-readiness/decisions.md`
+From the repository root:
 
-Include only unresolved **product** questions with meaningful consequences.
-Group overlapping questions and prioritize those blocking the recommended goal.
-Do not ask the user to choose Rust types, crate layouts, or routine API details.
+```sh
+cargo build --workspace --locked
+cargo test --workspace --locked
+cargo test --workspace --all-features --locked
+cargo clippy --workspace --all-targets --all-features --locked -- -D warnings
+cargo fmt --all -- --check
+cargo test --manifest-path ttrpg-gm-cm-app/src-tauri/Cargo.toml --locked
+git diff --check
+```
 
-For each question include:
+From `ttrpg-gm-cm-app`:
 
-- A stable ID and a plain-language question.
-- The relevant requirement or contradiction and its source.
-- A concrete GM example that makes the choice understandable.
-- Plausible options and their consequences.
-- Your recommended answer and rationale, explicitly marked **not approved**.
-- What it blocks and what can proceed independently.
+```sh
+pnpm lint
+pnpm test
+pnpm build
+```
 
-Do not pad this list with questions existing requirements already answer.
-Previously settled rules should be cited in the inventory, not reopened.
-If no blocking questions remain, say so.
+Run a real CLI calibration/grid/measurement journey and fresh-process reopen
+in addition to tests. Record exact commands, failures, checks not run, and
+remaining assumptions. Do not claim renderer performance from geometry tests.
 
-## Safety and scope limits
+Update `docs/headless-development.md`, `docs/maps.md`, and
+`docs/map-requirements.md` with implemented contract/examples, exact geometry/
+unit/rounding conventions, compatibility evidence, and remaining limitations.
+Keep confirmed requirements, proposed later features, and implemented behavior
+distinct.
 
-- Only write the three report files for this run. Do not modify application
-  code, tests, dependencies, schemas, other product docs, or this goal.
-- Existing uncommitted work may be present. Do not reset, overwrite, commit,
-  or otherwise clean it up.
-- Do not implement fixes discovered during investigation. Record defects and
-  their impact separately from missing or deferred functionality.
-- Do not introduce new product behavior, choose unresolved visibility rules,
-  or promote recommendations into approved requirements.
-- Do not convert documents, migrate original campaigns, or test on real user
-  data. Use temporary campaigns and disposable copies only.
-- No Rune work, external services, cloud setup, network listeners, publishing,
-  pushing, or merging.
-- If tools or dependencies are unavailable, record the limitation rather than
-  changing the environment to make the report look complete.
-
-## Checks and completion
-
-Run relevant existing tests and CLI checks proportionate to the claims.
-Record exact commands, outcomes, and checks not run. Report blockers honestly;
-do not fix the application to make the checks pass.
-
-Run `pnpm lint` from `ttrpg-gm-cm-app` as required by project instructions and
-`git diff --check`. Verify report links and citations against the inspected
-sources, and confirm the run changed only the three permitted files.
-
-The goal is complete when:
-
-- Every investigation area is accounted for with evidence or a specific unknown.
-- The reports separate intended product behavior, current behavior, prototype
-  limitations, and future work.
-- Relationships and end-to-end GM journeys are covered, not just CRUD catalogs.
-- The user can understand what exists and what is missing without reading code.
-- Decision questions are concrete, prioritized, and include recommendations.
-- The next implementation goal is recommended, not silently authorized.
-
-End with links to the three files, a brief summary, and the highest-priority
-decisions requiring review. **Stop there. Do not enter an implementation phase,
-rewrite the next goal, or start building the recommendation.**
+Finish with the supported workflow, changed files, verification evidence, and
+remaining map work. **Stop when this slice passes; do not start tokens, enemies,
+templates, frontend work, or another goal.**

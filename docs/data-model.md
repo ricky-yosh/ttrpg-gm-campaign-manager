@@ -40,9 +40,21 @@ These are starting attributes to discuss, not a complete schema. Every saved obj
 
 Public descriptions and summaries are candidate player-facing fields; private notes must remain GM-only. Exactly how the GM selects which fields to present is a UI decision.
 
+The implemented headless map record stores an optional scale derived from a
+two-point calibration (`units` plus `pixelsPerUnit`), a None/Square/Hex grid
+(`mode`, visibility, image-pixel size/offset, and hex orientation), and a
+snapping preference. These
+are GM-only configuration fields; tokens, fog, per-record visibility, and
+player-safe map projections remain unimplemented. See [Maps](maps.md#headless-map-geometry-implemented-first-slice).
+
 Player knowledge is persistent: it records what the party knows about campaign records. The live Player Presentation state is separate: it selects the active view, visible NPC portraits, and current speaker. Build the player window's content from known records and explicitly allowed fields rather than passing full NPC, map, or item records to it. See [Player Presentation](player-presentation.md).
 
 ## Bestiary, creature instances, and NPCs
+
+The user has confirmed map tokens linked to NPCs and bestiary creatures,
+including enemies. See [map requirements](map-requirements.md#5-tokens-npcs-bestiary-and-enemies)
+for the identity/placement boundary and open encounter/import choices. These are
+target requirements, not a claim that enemy instances or bestiary storage exist.
 
 The enemy library is an importable bestiary. Preserve imported reference information by making entries read-only by default; custom variations should be explicit copies. An NPC is an editable campaign character created from that reference or from a particular creature already in play.
 

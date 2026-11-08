@@ -32,7 +32,9 @@ More detailed design notes: [UI/UX](ui-ux.md), [Player Presentation](player-pres
 
 ## Player-facing interactions
 
-- **Puzzles:** Provide a modular way to create and display different puzzles over the course of a campaign.
+- **Puzzles (deferred):** The user wants to explore plugin-like puzzles. React
+  versus Rune, plugin execution, storage, and AI generation remain undecided.
+  Do not select a runtime or puzzle schema during map/core work.
 - **Item unboxing:** Play a chest-opening video as part of revealing multiple items from one chest, with each item's information. Other visual motion, such as token movement, uses simple tweening and transitions.
 - **Item crafting:** Let the GM manage players' decisions to recycle items they do not need and pool materials as a party to create new items. Save the party's collected materials and crafting activity.
 

@@ -216,6 +216,10 @@ impl Campaign {
             {
                 return Err("Invalid party marker position.".into());
             }
+            map_geometry::validate_grid(&map.grid)?;
+            if let Some(calibration) = &map.calibration {
+                map_geometry::validate_calibration(calibration)?;
+            }
         }
         let mut thread_ids = HashSet::new();
         for thread in &self.threads {
@@ -286,7 +290,7 @@ impl Campaign {
             }
             let mut link_targets = HashSet::new();
             for link in &session.links {
-                if !["npc", "location", "faction", "thread", "item"].contains(&link.kind.as_str())
+                if !SESSION_LINK_KINDS.contains(&link.kind.as_str())
                     || link.target_id.trim().is_empty()
                     || !link_targets.insert((&link.kind, &link.target_id))
                 {

@@ -2,9 +2,15 @@
 
 > **Implementation update after this assessment.** The shared core/CLI now
 > persists game sessions (database version 8, `session_record`, and
-> `session.list`/`get`/`create`/`update`). The desktop Sessions UI is still the
+> `session.list`/`get`/`create`/`update`) and exposes `session.references` and
+> `session.backlinks` for live reference resolution and computed session
+> backlinks. This is session-scoped, not a universal relationship graph. The
+> core/CLI also implements map calibration, None/Square/Hex grids, snapping
+> previews, and straight/cell measurement; the desktop map canvas and player
+> projection do not expose those controls. The desktop Sessions UI is still the
 > memory-only frontend prototype. The body below records the pre-implementation
-> assessment; use [Sessions](../sessions.md#headless-persistence) for the
+> assessment; use [Sessions](../sessions.md#headless-persistence) and
+> [Maps](../maps.md#headless-map-geometry-implemented-first-slice) for the
 > current contract.
 
 This inventory is organized around **preparing**, **running**, and **reviewing**
@@ -382,7 +388,10 @@ authoring data. The shared validation rejects invalid coordinates/links and map
 deletion clears incoming destination links while preserving locations
 ([`session.rs`](../../ttrpg-gm-cm-app/src-tauri/src/campaign/session.rs) lines
 1102–1218; [`validation.rs`](../../ttrpg-gm-cm-app/src-tauri/src/campaign/validation.rs)
-lines 172–219). No runtime gameplay actions exist.
+lines 172–219). A later core/CLI slice adds `map.calibrate`, `map.configure`,
+`map.snap`, and `map.measure` for GM-only scale/grid/snapping/measurement
+geometry; no desktop controls, tokens, fog, initiative, or runtime gameplay
+actions exist.
 
 **What persists.** Map metadata, image, dimensions, location attachments, pins,
 party marker, destination-map links, and the map record survive save/reopen.
@@ -1022,7 +1031,7 @@ These are recorded so they are not lost and not mistaken for requirements.
 | Puzzles | Brainstorm; sample-only UI | `sample-section-page.tsx` and sample session references show three illustrative puzzles; no saved puzzle type, CLI action, or table in `schema.sql` ([`sample-section-page.tsx`](../../ttrpg-gm-cm-app/src/components/campaign/sample-section-page.tsx) lines 25–53; [`sample-sessions.ts`](../../ttrpg-gm-cm-app/src/lib/sample-sessions.ts) lines 6–8) |
 | Bestiary | Proposed in data model; no implementation | No bestiary type, import flow, source/version tracking, or UI; only [data-model](../data-model.md) lines 20–22, 45–53 |
 | Encounters/initiative | Proposed/future | No encounter/token/initiative types or tables; maps docs lines 60–72 and data-model lines 20–27 |
-| Fog, tokens, grids, measurement | Deferred | Map panel only renders image/pins/party; no code path for these controls (map-panel lines 24–259) |
+| Fog, tokens, grid/measurement UI | Deferred in the desktop app; core/CLI geometry implemented | Map panel only renders image/pins/party; `map.calibrate`/`configure`/`snap`/`measure` exist in the headless core |
 | Session visits and session-to-place links | Deferred | [maps](../maps.md) lines 50–58 and [story-threads](../story-threads.md) lines 19–23; no persisted session |
 | Crafting | Brainstorm | No code; [brainstorm-doc](../brainstorm-doc.md) lines 33–42 and backend-architecture module table lines 49–68 |
 | Loot/chest video | Brainstorm | No code; backend-architecture lines 61–72 |

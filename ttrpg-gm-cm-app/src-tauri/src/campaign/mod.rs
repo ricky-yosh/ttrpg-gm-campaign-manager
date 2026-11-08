@@ -5,6 +5,7 @@ use std::collections::HashMap;
 mod assets;
 pub mod history;
 mod items;
+mod map_geometry;
 use items::{CampaignItem, ItemFieldDefinition};
 #[cfg(feature = "legacy-sqlite")]
 mod migrations;
@@ -185,6 +186,10 @@ struct Location {
     gm_notes: String,
 }
 
+const MAP_UNITS: [&str; 3] = ["feet", "metres", "miles"];
+const MAP_GRID_MODES: [&str; 3] = ["none", "square", "hex"];
+const HEX_ORIENTATIONS: [&str; 2] = ["pointy", "flat"];
+
 #[derive(Debug, Clone, Serialize, Deserialize, schemars::JsonSchema)]
 #[serde(rename_all = "camelCase", deny_unknown_fields)]
 struct CampaignMap {
@@ -197,6 +202,12 @@ struct CampaignMap {
     location_ids: Vec<String>,
     pins: Vec<MapPin>,
     party: Option<MapPoint>,
+    #[serde(default)]
+    calibration: Option<MapCalibration>,
+    #[serde(default)]
+    grid: MapGrid,
+    #[serde(default)]
+    snap: bool,
 }
 #[derive(Debug, Clone, Serialize, Deserialize, schemars::JsonSchema)]
 #[serde(deny_unknown_fields)]
@@ -204,6 +215,56 @@ struct MapPoint {
     x: f64,
     y: f64,
 }
+
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, schemars::JsonSchema)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+struct MapCalibration {
+    units: String,
+    pixels_per_unit: f64,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, schemars::JsonSchema)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+struct MapGrid {
+    #[serde(default = "no_grid_mode")]
+    mode: String,
+    #[serde(default)]
+    visible: bool,
+    #[serde(default = "default_grid_size")]
+    size: f64,
+    #[serde(default)]
+    offset_x: f64,
+    #[serde(default)]
+    offset_y: f64,
+    #[serde(default = "default_hex_orientation")]
+    orientation: String,
+}
+
+impl Default for MapGrid {
+    fn default() -> Self {
+        Self {
+            mode: no_grid_mode(),
+            visible: false,
+            size: default_grid_size(),
+            offset_x: 0.0,
+            offset_y: 0.0,
+            orientation: default_hex_orientation(),
+        }
+    }
+}
+
+fn no_grid_mode() -> String {
+    "none".into()
+}
+
+fn default_grid_size() -> f64 {
+    64.0
+}
+
+fn default_hex_orientation() -> String {
+    "pointy".into()
+}
+
 #[derive(Debug, Clone, Serialize, Deserialize, schemars::JsonSchema)]
 #[serde(rename_all = "camelCase", deny_unknown_fields)]
 struct MapPin {
@@ -257,6 +318,8 @@ struct StoryThread {
     locations: Vec<NpcRelationship>,
     factions: Vec<NpcRelationship>,
 }
+
+const SESSION_LINK_KINDS: [&str; 5] = ["npc", "location", "faction", "thread", "item"];
 
 #[derive(Debug, Clone, Serialize, Deserialize, schemars::JsonSchema)]
 #[serde(rename_all = "camelCase", deny_unknown_fields)]
@@ -1266,19 +1329,33 @@ mod tests {
         let path = folder.path().join("atlas.campaign");
         let expected = serde_json::to_value(atlas_example()).unwrap();
         write_campaign(&path, atlas_example()).unwrap();
-        for invalid in 0..5 {
+        for invalid in 0..9 {
             let mut campaign = atlas_example();
             match invalid {
                 0 => campaign.maps[0].pins[0].x = 1.5,
                 1 => campaign.maps[0].pins[0].destination_map_id = Some("missing".into()),
                 2 => campaign.maps[0].location_ids.push("missing".into()),
                 3 => campaign.maps[0].width = 0,
-                _ => {
+                4 => {
                     campaign.maps[0].party = Some(MapPoint {
                         x: f64::NAN,
                         y: 0.5,
                     })
                 }
+                5 => {
+                    campaign.maps[0].calibration = Some(MapCalibration {
+                        units: "yards".into(),
+                        pixels_per_unit: 10.0,
+                    })
+                }
+                6 => {
+                    campaign.maps[0].calibration = Some(MapCalibration {
+                        units: "feet".into(),
+                        pixels_per_unit: 0.0,
+                    })
+                }
+                7 => campaign.maps[0].grid.mode = "triangle".into(),
+                _ => campaign.maps[0].grid.size = 0.0,
             }
             assert!(write_campaign(&path, campaign).is_err());
             assert_eq!(

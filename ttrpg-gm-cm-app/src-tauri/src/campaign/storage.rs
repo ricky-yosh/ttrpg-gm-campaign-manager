@@ -974,16 +974,62 @@ mod compatibility_fixture {
         assert_eq!(loaded.threads[0].title, "The Missing Morrow");
         assert_eq!(loaded.items.len(), 1);
         assert_eq!(loaded.item_fields.len(), 4);
+        assert!(loaded.maps[0].calibration.is_none());
+        assert_eq!(loaded.maps[0].grid.mode, "none");
+        assert!(!loaded.maps[0].grid.visible);
+        assert!(!loaded.maps[0].snap);
+        assert_eq!(loaded.maps[0].pins[0].x, 0.5);
+        assert_eq!(loaded.maps[0].pins[0].y, 0.5);
+        assert_eq!(
+            loaded.maps[0]
+                .party
+                .as_ref()
+                .map(|point| (point.x, point.y)),
+            Some((0.2, 0.8))
+        );
         drop(storage);
         let moved = temp.path().join("moved-complex.campaign");
         fs::rename(&path, &moved).unwrap();
         let mut storage = Storage::open(&moved, false).await.unwrap();
         let mut loaded = storage.load().await.unwrap();
         loaded.inventory.gold = 249;
+        loaded.maps[0].calibration = Some(MapCalibration {
+            units: "metres".into(),
+            pixels_per_unit: 2.5,
+        });
+        loaded.maps[0].grid = MapGrid {
+            mode: "hex".into(),
+            visible: true,
+            size: 50.0,
+            offset_x: 12.0,
+            offset_y: 8.0,
+            orientation: "flat".into(),
+        };
+        loaded.maps[0].snap = true;
         storage.save(&loaded).await.unwrap();
         drop(storage);
         let legacy = CampaignRepository::load(&moved).unwrap();
         assert_eq!(legacy.inventory.gold, 249);
+        assert_eq!(
+            legacy.maps[0].calibration,
+            Some(MapCalibration {
+                units: "metres".into(),
+                pixels_per_unit: 2.5,
+            })
+        );
+        assert_eq!(legacy.maps[0].grid.mode, "hex");
+        assert_eq!(legacy.maps[0].grid.orientation, "flat");
+        assert!(legacy.maps[0].grid.visible);
+        assert!(legacy.maps[0].snap);
+        assert_eq!(legacy.maps[0].pins[0].x, 0.5);
+        assert_eq!(legacy.maps[0].pins[0].y, 0.5);
+        assert_eq!(
+            legacy.maps[0]
+                .party
+                .as_ref()
+                .map(|point| (point.x, point.y)),
+            Some((0.2, 0.8))
+        );
         assert_eq!(legacy.locations[1].parent_id.as_deref(), Some("loc-1"));
         assert_eq!(
             legacy.maps[0].pins[0].destination_map_id.as_deref(),

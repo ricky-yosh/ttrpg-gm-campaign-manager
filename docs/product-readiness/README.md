@@ -7,11 +7,17 @@ the tests. It did not implement or fix product behavior.
 > **Implementation update after this assessment.** The recommended core/CLI
 > session-persistence slice has since been implemented: database version 8 adds
 > `session_record`, and `session.list`/`get`/`create`/`update` persist session
-> details, ordered beats, prep/running notes, recap, and record references. The
-> desktop Sessions UI remains memory-only and has not been migrated. The gap
+> details, ordered beats, prep/running notes, recap, and record references. A
+> follow-up core/CLI slice adds `session.references` and `session.backlinks` for
+> live name resolution and computed session backlinks; this is not a universal
+> relationship graph and does not add a desktop UI. A separate core/CLI slice
+> adds per-map calibration, None/Square/Hex grids, snapping previews, and
+> straight/cell-policy measurement with no renderer or player-safe projection.
+> The desktop Sessions UI remains memory-only and has not been migrated. The gap
 > statements below describe the pre-implementation baseline; see
-> [Sessions](../sessions.md#headless-persistence) for the current core/CLI
-> contract.
+> [Sessions](../sessions.md#headless-persistence) and
+> [Maps](../maps.md#headless-map-geometry-implemented-first-slice) for the
+> current core/CLI contract.
 
 ## Inspection baseline
 
@@ -75,8 +81,11 @@ unsaved work at EOF.
    round-trip, but the current editor has no image-insertion affordance and does
    not register the installed column plugin, despite documented inline-image and
    column requirements.
-5. **The map is an authoring atlas, not a play surface.** Fog, tokens, grids,
-   measurement, initiative, visits, and player-visible map state do not exist.
+5. **The map is an authoring atlas, not a play surface.** At the assessment
+   baseline, fog, tokens, grids, measurement, initiative, visits, and
+   player-visible map state did not exist; the later core/CLI slice adds
+   GM-only calibration, grid, snapping, and measurement geometry but not a play
+   surface or player projection.
 6. **Recovery and release operations are not production-grade.** Save As exists,
    but there is no verified Save Copy/backup, ZIP export, crash recovery, asset
    cleanup, or durable edit history. The documented backup is a manual folder

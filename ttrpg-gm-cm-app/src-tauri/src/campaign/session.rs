@@ -1,6 +1,7 @@
 //! Single-writer in-memory application session. No transport or UI imports.
 use super::history::{CampaignHistory, HistoryStatus, RecordChange, RecordKind, RecordTarget};
 use super::items;
+use super::map_geometry::{self, image_point, GridCell, MeasurementMetric};
 use super::*;
 use schemars::{schema_for, JsonSchema};
 use serde_json::{json, Value};
@@ -304,6 +305,19 @@ struct GetSession {
 
 #[derive(Deserialize, JsonSchema)]
 #[serde(rename_all = "camelCase", deny_unknown_fields)]
+struct GetSessionReferences {
+    session_id: String,
+}
+
+#[derive(Deserialize, JsonSchema)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+struct GetSessionBacklinks {
+    kind: String,
+    target_id: String,
+}
+
+#[derive(Deserialize, JsonSchema)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
 struct CreateMap {
     name: String,
     kind: String,
@@ -321,8 +335,55 @@ struct CreateMap {
 #[derive(Deserialize, JsonSchema)]
 #[serde(rename_all = "camelCase", deny_unknown_fields)]
 struct UpdateMap {
-    map: CampaignMap,
+    map: MapUpdate,
     expected_revision: u64,
+}
+
+#[derive(Deserialize, JsonSchema)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+struct MapUpdate {
+    id: String,
+    name: String,
+    kind: String,
+    image: NpcImage,
+    width: u32,
+    height: u32,
+    #[serde(default)]
+    location_ids: Vec<String>,
+    #[serde(default)]
+    pins: Vec<MapPin>,
+    #[serde(default)]
+    party: Option<MapPoint>,
+    #[serde(default)]
+    calibration: Option<MapCalibration>,
+    #[serde(default)]
+    grid: Option<MapGridInput>,
+    #[serde(default)]
+    snap: Option<bool>,
+}
+
+#[derive(Deserialize, JsonSchema)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+struct MapGridInput {
+    mode: String,
+    visible: bool,
+    size: f64,
+    offset_x: f64,
+    offset_y: f64,
+    orientation: String,
+}
+
+impl MapGridInput {
+    fn into_grid(self) -> MapGrid {
+        MapGrid {
+            mode: self.mode,
+            visible: self.visible,
+            size: self.size,
+            offset_x: self.offset_x,
+            offset_y: self.offset_y,
+            orientation: self.orientation,
+        }
+    }
 }
 
 #[derive(Deserialize, JsonSchema)]
@@ -336,6 +397,50 @@ struct GetMap {
 struct DeleteMap {
     map_id: String,
     expected_revision: u64,
+}
+
+#[derive(Deserialize, JsonSchema)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+struct CalibrateMap {
+    map_id: String,
+    point_a: MapPoint,
+    point_b: MapPoint,
+    known_distance: f64,
+    units: String,
+    expected_revision: u64,
+}
+
+#[derive(Deserialize, JsonSchema)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+struct ConfigureMap {
+    map_id: String,
+    #[serde(default)]
+    units: Option<String>,
+    #[serde(default)]
+    grid: Option<MapGridInput>,
+    #[serde(default)]
+    snap: Option<bool>,
+    expected_revision: u64,
+}
+
+#[derive(Deserialize, JsonSchema)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+struct SnapMap {
+    map_id: String,
+    point: MapPoint,
+    #[serde(default)]
+    snap: Option<bool>,
+}
+
+#[derive(Deserialize, JsonSchema)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+struct MeasureMap {
+    map_id: String,
+    points: Vec<MapPoint>,
+    #[serde(default)]
+    metric: Option<String>,
+    #[serde(default)]
+    snap: Option<bool>,
 }
 
 #[derive(Deserialize, JsonSchema)]
@@ -415,12 +520,18 @@ impl Session {
         method!("thread.update" => UpdateThread);
         method!("session.list" => Empty);
         method!("session.get" => GetSession);
+        method!("session.references" => GetSessionReferences);
+        method!("session.backlinks" => GetSessionBacklinks);
         method!("session.create" => CreateSession);
         method!("session.update" => UpdateSession);
         method!("map.list" => Empty);
         method!("map.get" => GetMap);
+        method!("map.snap" => SnapMap);
+        method!("map.measure" => MeasureMap);
         method!("map.create" => CreateMap);
         method!("map.update" => UpdateMap);
+        method!("map.calibrate" => CalibrateMap);
+        method!("map.configure" => ConfigureMap);
         method!("map.delete" => DeleteMap);
         method!("history.status" => Empty);
         method!("history.undo" => HistoryInput);
@@ -432,7 +543,8 @@ impl Session {
                 "system.describe", "campaign.inspect", "npc.list", "npc.get",
                 "location.list", "location.get", "faction.list", "faction.get",
                 "inventory.get", "item.list", "item.get", "thread.list", "thread.get",
-                "session.list", "session.get", "map.list", "map.get", "history.status"
+                "session.list", "session.get", "session.references", "session.backlinks",
+                "map.list", "map.get", "map.snap", "map.measure", "history.status"
             ],
             "mutations": [
                 "campaign.new", "campaign.open", "campaign.save", "asset.import",
@@ -442,7 +554,7 @@ impl Session {
                 "item.create", "item.update", "item.delete",
                 "thread.create", "thread.update",
                 "session.create", "session.update",
-                "map.create", "map.update", "map.delete",
+                "map.create", "map.update", "map.calibrate", "map.configure", "map.delete",
                 "history.undo", "history.redo"
             ],
             "methods": Value::Object(methods),
@@ -451,6 +563,7 @@ impl Session {
                 "Explicit save, no autosave. EOF discards unsaved work.",
                 "Edit history is one in-memory stream per campaign session, bounded to 100 entries and 16 MiB; it is not persisted.",
                 "campaign.inspect returns complete GM data and is not a player-safe endpoint.",
+                "Map calibration, grids, snapping previews, and measurement are GM inspection/authoring only; no tokens, fog, templates, player projection, or renderer is implemented.",
                 "Game-session preparation and review are persistent; no player presentation, backup/save-copy, Rune, or frontend workspace actions are implemented.",
                 "asset.import is preparation-only, requires an open saved package, and accepts only already-encoded PNG/JPEG/WebP data URLs; it does not require expectedRevision and does not perform WebP conversion.",
                 "Output schemas are not generated; inspect the result of a successful action for its shape."
@@ -613,6 +726,8 @@ impl Session {
                 Ok(json!({"revision": self.revision, "sessions": self.campaign()?.sessions}))
             }
             "session.get" => self.session_get(parse::<GetSession>(params)?),
+            "session.references" => self.session_references(parse::<GetSessionReferences>(params)?),
+            "session.backlinks" => self.session_backlinks(parse::<GetSessionBacklinks>(params)?),
             "session.create" => self.session_create(parse::<CreateSession>(params)?),
             "session.update" => self.session_update(parse::<UpdateSession>(params)?),
             "map.list" => {
@@ -620,8 +735,12 @@ impl Session {
                 Ok(json!({"revision": self.revision, "maps": self.campaign()?.maps}))
             }
             "map.get" => self.map_get(parse::<GetMap>(params)?),
+            "map.snap" => self.map_snap(parse::<SnapMap>(params)?),
+            "map.measure" => self.map_measure(parse::<MeasureMap>(params)?),
             "map.create" => self.map_create(parse::<CreateMap>(params)?),
             "map.update" => self.map_update(parse::<UpdateMap>(params)?),
+            "map.calibrate" => self.map_calibrate(parse::<CalibrateMap>(params)?),
+            "map.configure" => self.map_configure(parse::<ConfigureMap>(params)?),
             "map.delete" => self.map_delete(parse::<DeleteMap>(params)?),
             "history.status" => self.history_status(),
             "history.undo" => self.history_step(parse::<HistoryInput>(params)?, false),
@@ -1160,6 +1279,78 @@ impl Session {
         Ok(json!({"revision": self.revision, "session": session}))
     }
 
+    fn session_references(&self, input: GetSessionReferences) -> Result<Value, CoreError> {
+        let campaign = self.campaign()?;
+        let session = campaign
+            .sessions
+            .iter()
+            .find(|session| session.id == input.session_id)
+            .ok_or_else(|| CoreError::new("not_found", "Game session not found."))?;
+        let references = session
+            .links
+            .iter()
+            .map(|link| {
+                let name = session_link_name(campaign, &link.kind, &link.target_id);
+                json!({
+                    "kind": link.kind,
+                    "targetId": link.target_id,
+                    "label": link.label,
+                    "available": name.is_some(),
+                    "name": name,
+                })
+            })
+            .collect::<Vec<_>>();
+        Ok(json!({
+            "revision": self.revision,
+            "sessionId": session.id,
+            "references": references,
+        }))
+    }
+
+    fn session_backlinks(&self, input: GetSessionBacklinks) -> Result<Value, CoreError> {
+        let kind = input.kind.trim();
+        if !SESSION_LINK_KINDS.contains(&kind) {
+            return Err(CoreError::new(
+                "validation",
+                "Unsupported session reference kind.",
+            ));
+        }
+        let target_id = input.target_id.trim();
+        if target_id.is_empty() {
+            return Err(CoreError::new(
+                "validation",
+                "Session reference target ID must not be empty.",
+            ));
+        }
+        let campaign = self.campaign()?;
+        let sessions = campaign
+            .sessions
+            .iter()
+            .filter_map(|session| {
+                session
+                    .links
+                    .iter()
+                    .find(|link| link.kind == kind && link.target_id.trim() == target_id)
+                    .map(|link| {
+                        json!({
+                            "id": session.id,
+                            "title": session.title,
+                            "number": session.number,
+                            "date": session.date,
+                            "previous": session.previous,
+                            "label": link.label,
+                        })
+                    })
+            })
+            .collect::<Vec<_>>();
+        Ok(json!({
+            "revision": self.revision,
+            "kind": kind,
+            "targetId": target_id,
+            "sessions": sessions,
+        }))
+    }
+
     fn session_create(&mut self, input: CreateSession) -> Result<Value, CoreError> {
         self.check_revision(input.expected_revision)?;
         let current = self.campaign()?.clone();
@@ -1176,11 +1367,11 @@ impl Session {
                     CoreError::new("validation", "No next session number is available.")
                 })?,
         };
-        let session = CampaignSession {
+        let mut session = CampaignSession {
             id: self.ids.next_id(),
-            title: input.title.trim().into(),
+            title: input.title,
             number,
-            date: input.date.trim().into(),
+            date: input.date,
             previous: input.previous,
             where_left_off: input.where_left_off.unwrap_or_else(blank_notes),
             prep: input.prep.unwrap_or_else(blank_notes),
@@ -1189,6 +1380,7 @@ impl Session {
             beats: input.beats,
             links: input.links,
         };
+        normalize_session(&mut session);
         let position = current.sessions.len();
         let mut next = current.clone();
         next.sessions.push(session.clone());
@@ -1210,15 +1402,7 @@ impl Session {
             .position(|session| session.id == input.session.id)
             .ok_or_else(|| CoreError::new("not_found", "Game session not found."))?;
         let mut session = input.session;
-        session.title = session.title.trim().into();
-        session.date = session.date.trim().into();
-        for beat in &mut session.beats {
-            beat.title = beat.title.trim().into();
-        }
-        for link in &mut session.links {
-            link.target_id = link.target_id.trim().into();
-            link.label = link.label.trim().into();
-        }
+        normalize_session(&mut session);
         let before = current.sessions[index].clone();
         let label = rename_label("session", "title", &before, &session)?;
         let mut next = current.clone();
@@ -1266,6 +1450,9 @@ impl Session {
             location_ids: input.location_ids,
             pins,
             party: input.party,
+            calibration: None,
+            grid: MapGrid::default(),
+            snap: false,
         };
         let position = current.maps.len();
         let mut next = current.clone();
@@ -1287,15 +1474,34 @@ impl Session {
             .iter()
             .position(|map| map.id == input.map.id)
             .ok_or_else(|| CoreError::new("not_found", "Map not found."))?;
-        let mut map = input.map;
-        map.name = map.name.trim().into();
+        let input = input.map;
+        let before = current.maps[index].clone();
+        let mut map = CampaignMap {
+            id: input.id,
+            name: input.name.trim().into(),
+            kind: input.kind,
+            image: input.image,
+            width: input.width,
+            height: input.height,
+            location_ids: input.location_ids,
+            pins: input.pins,
+            party: input.party,
+            calibration: input
+                .calibration
+                .map(map_geometry::normalize_calibration)
+                .or_else(|| before.calibration.clone()),
+            grid: input
+                .grid
+                .map(|grid| map_geometry::normalize_grid(grid.into_grid()))
+                .unwrap_or_else(|| before.grid.clone()),
+            snap: input.snap.unwrap_or(before.snap),
+        };
         for pin in &mut map.pins {
             if pin.id.trim().is_empty() {
                 pin.id = self.ids.next_id();
             }
             pin.label = pin.label.trim().into();
         }
-        let before = current.maps[index].clone();
         let label = rename_label("map", "name", &before, &map)?;
         let mut next = current.clone();
         next.maps[index] = map.clone();
@@ -1309,6 +1515,200 @@ impl Session {
         };
         self.commit(current, next, &label, vec![change])?;
         Ok(json!({"revision": self.revision, "map": map}))
+    }
+
+    fn map_calibrate(&mut self, input: CalibrateMap) -> Result<Value, CoreError> {
+        self.check_revision(input.expected_revision)?;
+        let current = self.campaign()?.clone();
+        let index = current
+            .maps
+            .iter()
+            .position(|map| map.id == input.map_id)
+            .ok_or_else(|| CoreError::new("not_found", "Map not found."))?;
+        let calibration = map_geometry::calibration_from_points(
+            &current.maps[index],
+            &input.point_a,
+            &input.point_b,
+            input.known_distance,
+            &input.units,
+        )
+        .map_err(|error| CoreError::new("validation", error))?;
+        let before = current.maps[index].clone();
+        let mut next = current.clone();
+        next.maps[index].calibration = Some(calibration);
+        let Some(change) = update_change(
+            RecordTarget::new(RecordKind::Map, before.id.clone()),
+            &before,
+            &next.maps[index],
+        )?
+        else {
+            return Ok(json!({"revision": self.revision, "map": before}));
+        };
+        self.commit(current, next, "Calibrate map", vec![change])?;
+        Ok(json!({
+            "revision": self.revision,
+            "map": self.campaign()?.maps[index],
+        }))
+    }
+
+    fn map_configure(&mut self, input: ConfigureMap) -> Result<Value, CoreError> {
+        self.check_revision(input.expected_revision)?;
+        let current = self.campaign()?.clone();
+        let index = current
+            .maps
+            .iter()
+            .position(|map| map.id == input.map_id)
+            .ok_or_else(|| CoreError::new("not_found", "Map not found."))?;
+        let before = current.maps[index].clone();
+        let mut map = before.clone();
+        let mut changed_units = false;
+        let mut changed_grid = false;
+        let mut changed_snap = false;
+        if let Some(units) = input.units {
+            let units = units.trim();
+            if !map_geometry::metres_per_unit(units).is_some() {
+                return Err(CoreError::new(
+                    "validation",
+                    "Map scale units must be feet, metres, or miles.",
+                ));
+            }
+            let calibration = map.calibration.as_ref().ok_or_else(|| {
+                CoreError::new(
+                    "validation",
+                    "Calibrate the map before changing its scale units.",
+                )
+            })?;
+            if calibration.units != units {
+                map.calibration = Some(
+                    map_geometry::convert_calibration_units(calibration, units)
+                        .map_err(|error| CoreError::new("validation", error))?,
+                );
+                changed_units = true;
+            }
+        }
+        if let Some(grid) = input.grid {
+            let grid = map_geometry::normalize_grid(grid.into_grid());
+            map_geometry::validate_grid(&grid)
+                .map_err(|error| CoreError::new("validation", error))?;
+            if grid.mode != map.grid.mode
+                || grid.visible != map.grid.visible
+                || grid.size != map.grid.size
+                || grid.offset_x != map.grid.offset_x
+                || grid.offset_y != map.grid.offset_y
+                || grid.orientation != map.grid.orientation
+            {
+                map.grid = grid;
+                changed_grid = true;
+            }
+        }
+        if let Some(snap) = input.snap {
+            if snap != map.snap {
+                map.snap = snap;
+                changed_snap = true;
+            }
+        }
+        if !changed_units && !changed_grid && !changed_snap {
+            return Ok(json!({"revision": self.revision, "map": before}));
+        }
+        let label = match (changed_units, changed_grid, changed_snap) {
+            (true, false, false) => "Change map units",
+            (false, true, false) => "Configure map grid",
+            (false, false, true) => "Change map snapping",
+            _ => "Configure map",
+        };
+        let mut next = current.clone();
+        next.maps[index] = map.clone();
+        let Some(change) = update_change(
+            RecordTarget::new(RecordKind::Map, map.id.clone()),
+            &before,
+            &map,
+        )?
+        else {
+            return Ok(json!({"revision": self.revision, "map": before}));
+        };
+        self.commit(current, next, label, vec![change])?;
+        Ok(json!({"revision": self.revision, "map": map}))
+    }
+
+    fn map_snap(&self, input: SnapMap) -> Result<Value, CoreError> {
+        let campaign = self.campaign()?;
+        let map = campaign
+            .maps
+            .iter()
+            .find(|map| map.id == input.map_id)
+            .ok_or_else(|| CoreError::new("not_found", "Map not found."))?;
+        let outcome = map_geometry::snap_point(
+            map,
+            &input.point,
+            input.snap.unwrap_or(map.snap),
+            "Requested point",
+        )
+        .map_err(|error| CoreError::new("validation", error))?;
+        let (requested_x, requested_y) = image_point(map, &outcome.requested);
+        let (effective_x, effective_y) = image_point(map, &outcome.effective);
+        Ok(json!({
+            "revision": self.revision,
+            "mapId": map.id,
+            "requested": outcome.requested,
+            "effective": outcome.effective,
+            "requestedImage": {"x": requested_x, "y": requested_y},
+            "effectiveImage": {"x": effective_x, "y": effective_y},
+            "snapRequested": input.snap.unwrap_or(map.snap),
+            "snapped": outcome.snapped,
+            "cell": outcome.cell.as_ref().map(GridCell::to_json),
+            "grid": map_geometry::grid_json(&map.grid),
+        }))
+    }
+
+    fn map_measure(&self, input: MeasureMap) -> Result<Value, CoreError> {
+        let metric_name = input.metric.as_deref().unwrap_or("straight").trim();
+        let metric = MeasurementMetric::parse(metric_name).ok_or_else(|| {
+            CoreError::new(
+                "validation",
+                "Map measurement metric must be straight, square-equal-diagonals, square-alternating-diagonals, or hex-steps.",
+            )
+        })?;
+        let campaign = self.campaign()?;
+        let map = campaign
+            .maps
+            .iter()
+            .find(|map| map.id == input.map_id)
+            .ok_or_else(|| CoreError::new("not_found", "Map not found."))?;
+        let measurement =
+            map_geometry::measure(map, &input.points, metric, input.snap.unwrap_or(map.snap))
+                .map_err(|error| CoreError::new("validation", error))?;
+        let units = measurement.units.clone();
+        let segments = measurement
+            .segments
+            .iter()
+            .map(|segment| {
+                json!({
+                    "from": segment.from,
+                    "to": segment.to,
+                    "imageDistance": segment.image_distance,
+                    "distance": segment.distance,
+                    "units": &units,
+                    "fromCell": segment.from_cell.as_ref().map(GridCell::to_json),
+                    "toCell": segment.to_cell.as_ref().map(GridCell::to_json),
+                    "diagonalSteps": segment.diagonal_steps,
+                    "nextDiagonalCost": segment.next_diagonal_cost,
+                })
+            })
+            .collect::<Vec<_>>();
+        Ok(json!({
+            "revision": self.revision,
+            "mapId": map.id,
+            "metric": metric.as_str(),
+            "units": units,
+            "snapRequested": input.snap.unwrap_or(map.snap),
+            "snapped": measurement.snapped,
+            "calibration": measurement.calibration,
+            "grid": map_geometry::grid_json(&map.grid),
+            "points": measurement.points,
+            "segments": segments,
+            "imageTotal": measurement.image_total,
+            "total": measurement.total,
+        }))
     }
 
     fn map_delete(&mut self, input: DeleteMap) -> Result<Value, CoreError> {
@@ -1416,6 +1816,50 @@ fn rename_label<T: Serialize>(
 
 fn blank_notes() -> Vec<Value> {
     vec![json!({"type": "p", "children": [{"text": ""}]})]
+}
+
+fn session_link_name(campaign: &Campaign, kind: &str, target_id: &str) -> Option<String> {
+    let target_id = target_id.trim();
+    match kind {
+        "npc" => campaign
+            .npcs
+            .iter()
+            .find(|record| record.id == target_id)
+            .map(|record| record.name.clone()),
+        "location" => campaign
+            .locations
+            .iter()
+            .find(|record| record.id == target_id)
+            .map(|record| record.name.clone()),
+        "faction" => campaign
+            .factions
+            .iter()
+            .find(|record| record.id == target_id)
+            .map(|record| record.name.clone()),
+        "thread" => campaign
+            .threads
+            .iter()
+            .find(|record| record.id == target_id)
+            .map(|record| record.title.clone()),
+        "item" => campaign
+            .items
+            .iter()
+            .find(|record| record.id == target_id)
+            .map(|record| record.name.clone()),
+        _ => None,
+    }
+}
+
+fn normalize_session(session: &mut CampaignSession) {
+    session.title = session.title.trim().into();
+    session.date = session.date.trim().into();
+    for beat in &mut session.beats {
+        beat.title = beat.title.trim().into();
+    }
+    for link in &mut session.links {
+        link.target_id = link.target_id.trim().into();
+        link.label = link.label.trim().into();
+    }
 }
 
 fn parse<T: serde::de::DeserializeOwned>(value: Value) -> Result<T, CoreError> {
@@ -1712,6 +2156,752 @@ mod tests {
     }
 
     #[tokio::test]
+    async fn session_references_and_backlinks_follow_live_state_and_history() {
+        let mut state = session();
+        for (method, params) in [
+            ("session.references", json!({"sessionId":"missing"})),
+            (
+                "session.backlinks",
+                json!({"kind":"npc","targetId":"missing"}),
+            ),
+        ] {
+            let error = state.execute(method, params).await.unwrap_err();
+            assert_eq!(error.code, "no_campaign");
+        }
+
+        state
+            .execute(
+                "campaign.new",
+                json!({"name":"Reference test","expectedRevision":0}),
+            )
+            .await
+            .unwrap();
+        let npc = state
+            .execute(
+                "npc.create",
+                json!({"name":"Niya Jade","expectedRevision":1}),
+            )
+            .await
+            .unwrap();
+        let npc_id = npc["npc"]["id"].as_str().unwrap().to_owned();
+        // Duplicate display name on another kind proves resolution is by ID.
+        let location = state
+            .execute(
+                "location.create",
+                json!({"name":"Niya Jade","expectedRevision":2}),
+            )
+            .await
+            .unwrap();
+        let location_id = location["location"]["id"].as_str().unwrap().to_owned();
+        let faction = state
+            .execute(
+                "faction.create",
+                json!({"name":"Dockworkers' Guild","expectedRevision":3}),
+            )
+            .await
+            .unwrap();
+        let faction_id = faction["faction"]["id"].as_str().unwrap().to_owned();
+        let item = state
+            .execute(
+                "item.create",
+                json!({"name":"Tide Chart","expectedRevision":4}),
+            )
+            .await
+            .unwrap();
+        let item_id = item["item"]["id"].as_str().unwrap().to_owned();
+        let thread = state
+            .execute(
+                "thread.create",
+                json!({"title":"The Missing Morrow","expectedRevision":5}),
+            )
+            .await
+            .unwrap();
+        let thread_id = thread["thread"]["id"].as_str().unwrap().to_owned();
+        let unused = state
+            .execute("npc.create", json!({"name":"Unused","expectedRevision":6}))
+            .await
+            .unwrap();
+        let unused_id = unused["npc"]["id"].as_str().unwrap().to_owned();
+
+        let first = state
+            .execute(
+                "session.create",
+                json!({
+                    "title":"The Low Tide","number":8,"date":"2026-11-14","previous":false,
+                    "links":[
+                        {"kind":"npc","targetId":npc_id,"label":"Witness"},
+                        {"kind":"location","targetId":location_id,"label":"Last seen"},
+                        {"kind":"item","targetId":item_id,"label":"Clue"},
+                        {"kind":"thread","targetId":"never-existed","label":"Lost thread"}
+                    ],
+                    "expectedRevision":7
+                }),
+            )
+            .await
+            .unwrap();
+        let first_id = first["session"]["id"].as_str().unwrap().to_owned();
+        let second = state
+            .execute(
+                "session.create",
+                json!({
+                    "title":"A Quiet Bargain","number":3,"previous":true,
+                    "links":[
+                        {"kind":"npc","targetId":npc_id,"label":"Ally"},
+                        {"kind":"faction","targetId":faction_id,"label":"Employer"},
+                        {"kind":"thread","targetId":thread_id,"label":"Origin"}
+                    ],
+                    "expectedRevision":8
+                }),
+            )
+            .await
+            .unwrap();
+        let second_id = second["session"]["id"].as_str().unwrap().to_owned();
+        let third = state
+            .execute(
+                "session.create",
+                json!({
+                    "title":"Bells at Dusk","number":5,
+                    "links":[{"kind":"location","targetId":location_id,"label":"Visited"}],
+                    "expectedRevision":9
+                }),
+            )
+            .await
+            .unwrap();
+        let third_id = third["session"]["id"].as_str().unwrap().to_owned();
+
+        let before_query = state.execute("campaign.inspect", json!({})).await.unwrap();
+        let history_before_query = state.execute("history.status", json!({})).await.unwrap();
+        assert_eq!(before_query["dirty"], true);
+        let references = state
+            .execute("session.references", json!({"sessionId":first_id}))
+            .await
+            .unwrap();
+        assert_eq!(references["revision"], 10);
+        assert_eq!(
+            references["references"],
+            json!([
+                {"kind":"npc","targetId":npc_id,"label":"Witness","available":true,"name":"Niya Jade"},
+                {"kind":"location","targetId":location_id,"label":"Last seen","available":true,"name":"Niya Jade"},
+                {"kind":"item","targetId":item_id,"label":"Clue","available":true,"name":"Tide Chart"},
+                {"kind":"thread","targetId":"never-existed","label":"Lost thread","available":false,"name":null}
+            ])
+        );
+        let backlinks = state
+            .execute("session.backlinks", json!({"kind":"npc","targetId":npc_id}))
+            .await
+            .unwrap();
+        assert_eq!(
+            backlinks["sessions"],
+            json!([
+                {"id":first_id,"title":"The Low Tide","number":8,"date":"2026-11-14","previous":false,"label":"Witness"},
+                {"id":second_id,"title":"A Quiet Bargain","number":3,"date":"","previous":true,"label":"Ally"}
+            ])
+        );
+        assert_eq!(
+            state
+                .execute(
+                    "session.backlinks",
+                    json!({"kind":"location","targetId":location_id}),
+                )
+                .await
+                .unwrap()["sessions"],
+            json!([
+                {"id":first_id,"title":"The Low Tide","number":8,"date":"2026-11-14","previous":false,"label":"Last seen"},
+                {"id":third_id,"title":"Bells at Dusk","number":5,"date":"","previous":false,"label":"Visited"}
+            ])
+        );
+        assert_eq!(
+            state
+                .execute(
+                    "session.backlinks",
+                    json!({"kind":"npc","targetId":unused_id}),
+                )
+                .await
+                .unwrap()["sessions"],
+            json!([])
+        );
+        assert_eq!(
+            state
+                .execute(
+                    "session.backlinks",
+                    json!({"kind":"item","targetId":"never-existed"}),
+                )
+                .await
+                .unwrap()["sessions"],
+            json!([])
+        );
+        for params in [
+            json!({"kind":"puzzle","targetId":npc_id}),
+            json!({"kind":"npc","targetId":"   "}),
+        ] {
+            let error = state
+                .execute("session.backlinks", params)
+                .await
+                .unwrap_err();
+            assert_eq!(error.code, "validation");
+        }
+        let missing_session = state
+            .execute("session.references", json!({"sessionId":"missing"}))
+            .await
+            .unwrap_err();
+        assert_eq!(missing_session.code, "not_found");
+        assert_eq!(
+            state.execute("campaign.inspect", json!({})).await.unwrap(),
+            before_query
+        );
+        assert_eq!(
+            state.execute("history.status", json!({})).await.unwrap(),
+            history_before_query
+        );
+
+        // Rename through the public action; labels and order stay authored.
+        state
+            .execute(
+                "npc.update",
+                json!({"npcId":npc_id,"name":"Niya Jade Renamed","expectedRevision":10}),
+            )
+            .await
+            .unwrap();
+        let renamed = state
+            .execute("session.references", json!({"sessionId":first_id}))
+            .await
+            .unwrap();
+        assert_eq!(renamed["references"][0]["name"], "Niya Jade Renamed");
+        assert_eq!(renamed["references"][0]["label"], "Witness");
+        assert_eq!(renamed["references"][1]["name"], "Niya Jade");
+        let undo = state
+            .execute("history.undo", json!({"expectedRevision":11}))
+            .await
+            .unwrap();
+        assert_eq!(undo["revision"], 12);
+        assert_eq!(
+            state
+                .execute("session.references", json!({"sessionId":first_id}))
+                .await
+                .unwrap()["references"][0]["name"],
+            "Niya Jade"
+        );
+        let redo = state
+            .execute("history.redo", json!({"expectedRevision":12}))
+            .await
+            .unwrap();
+        assert_eq!(redo["revision"], 13);
+        assert_eq!(
+            state
+                .execute("session.references", json!({"sessionId":first_id}))
+                .await
+                .unwrap()["references"][0]["name"],
+            "Niya Jade Renamed"
+        );
+
+        // Editing session-owned links updates backlinks immediately.
+        let mut second_record = state
+            .execute("session.get", json!({"sessionId":second_id}))
+            .await
+            .unwrap()["session"]
+            .clone();
+        second_record["links"] = json!([
+            {"kind":"faction","targetId":faction_id,"label":"Employer"},
+            {"kind":"thread","targetId":thread_id,"label":"Origin"}
+        ]);
+        state
+            .execute(
+                "session.update",
+                json!({"session":second_record,"expectedRevision":13}),
+            )
+            .await
+            .unwrap();
+        assert_eq!(
+            state
+                .execute("session.backlinks", json!({"kind":"npc","targetId":npc_id}),)
+                .await
+                .unwrap()["sessions"]
+                .as_array()
+                .unwrap()
+                .len(),
+            1
+        );
+        state
+            .execute("history.undo", json!({"expectedRevision":14}))
+            .await
+            .unwrap();
+        assert_eq!(
+            state
+                .execute("session.backlinks", json!({"kind":"npc","targetId":npc_id}),)
+                .await
+                .unwrap()["sessions"]
+                .as_array()
+                .unwrap()
+                .len(),
+            2
+        );
+        state
+            .execute("history.redo", json!({"expectedRevision":15}))
+            .await
+            .unwrap();
+        assert_eq!(
+            state
+                .execute("session.backlinks", json!({"kind":"npc","targetId":npc_id}),)
+                .await
+                .unwrap()["sessions"]
+                .as_array()
+                .unwrap()
+                .len(),
+            1
+        );
+
+        // Deleting a target makes it unavailable but preserves the reference.
+        state
+            .execute(
+                "item.delete",
+                json!({"itemId":item_id,"expectedRevision":16}),
+            )
+            .await
+            .unwrap();
+        let deleted_references = state
+            .execute("session.references", json!({"sessionId":first_id}))
+            .await
+            .unwrap();
+        assert_eq!(deleted_references["references"][2]["available"], false);
+        assert_eq!(deleted_references["references"][2]["name"], Value::Null);
+        assert_eq!(deleted_references["references"][2]["label"], "Clue");
+        assert_eq!(
+            state
+                .execute(
+                    "session.backlinks",
+                    json!({"kind":"item","targetId":item_id}),
+                )
+                .await
+                .unwrap()["sessions"][0]["id"],
+            first_id
+        );
+        state
+            .execute("history.undo", json!({"expectedRevision":17}))
+            .await
+            .unwrap();
+        assert_eq!(
+            state
+                .execute("session.references", json!({"sessionId":first_id}))
+                .await
+                .unwrap()["references"][2]["name"],
+            "Tide Chart"
+        );
+    }
+
+    #[tokio::test]
+    async fn session_reference_lookup_isolates_equal_ids_across_kinds() {
+        let mut state = session();
+        state.campaign = Some(
+            serde_json::from_value(json!({
+                "format": "ttrpg-campaign", "schemaVersion": 1,
+                "id": "campaign-shared", "name": "Shared IDs",
+                "createdAt": "2026-01-01", "updatedAt": "2026-01-01",
+                "section": null, "sidebar": {"width": 256, "open": true},
+                "workspace": null,
+                "npcs": [{"id": "shared", "name": "Shared NPC",
+                    "notes": [{"type": "p", "children": [{"text": ""}]}]}],
+                "locations": [{"id": "shared", "name": "Shared Location",
+                    "image": null, "publicDescription": "", "gmNotes": ""}],
+                "sessions": [{"id": "session-1", "title": "One", "number": 1,
+                    "links": [
+                        {"kind": "npc", "targetId": "shared", "label": "NPC role"},
+                        {"kind": "location", "targetId": " shared ", "label": "Place role"}
+                    ]}]
+            }))
+            .unwrap(),
+        );
+        state.revision = 1;
+        let references = state
+            .execute("session.references", json!({"sessionId":"session-1"}))
+            .await
+            .unwrap();
+        assert_eq!(
+            references["references"],
+            json!([
+                {"kind":"npc","targetId":"shared","label":"NPC role","available":true,"name":"Shared NPC"},
+                {"kind":"location","targetId":" shared ","label":"Place role","available":true,"name":"Shared Location"}
+            ])
+        );
+        assert_eq!(
+            state
+                .execute(
+                    "session.backlinks",
+                    json!({"kind":"npc","targetId":"shared"}),
+                )
+                .await
+                .unwrap()["sessions"][0]["label"],
+            "NPC role"
+        );
+        assert_eq!(
+            state
+                .execute(
+                    "session.backlinks",
+                    json!({"kind":"location","targetId":"shared"}),
+                )
+                .await
+                .unwrap()["sessions"][0]["label"],
+            "Place role"
+        );
+        assert_eq!(
+            state
+                .execute(
+                    "session.backlinks",
+                    json!({"kind":"location","targetId":" shared "}),
+                )
+                .await
+                .unwrap()["sessions"][0]["label"],
+            "Place role"
+        );
+        assert_eq!(
+            state
+                .execute("session.get", json!({"sessionId":"session-1"}))
+                .await
+                .unwrap()["session"]["links"][1]["targetId"],
+            " shared ",
+            "queries must not rewrite stored target IDs"
+        );
+    }
+
+    #[tokio::test]
+    async fn map_geometry_queries_follow_configuration_history_and_read_only_state() {
+        let mut state = session();
+        for (method, params) in [
+            (
+                "map.snap",
+                json!({"mapId":"missing","point":{"x":0.5,"y":0.5}}),
+            ),
+            (
+                "map.measure",
+                json!({"mapId":"missing","points":[{"x":0.1,"y":0.5},{"x":0.2,"y":0.5}]}),
+            ),
+            (
+                "map.calibrate",
+                json!({"mapId":"missing","pointA":{"x":0.1,"y":0.5},"pointB":{"x":0.2,"y":0.5},"knownDistance":10,"units":"feet","expectedRevision":0}),
+            ),
+            (
+                "map.configure",
+                json!({"mapId":"missing","snap":true,"expectedRevision":0}),
+            ),
+        ] {
+            let error = state.execute(method, params).await.unwrap_err();
+            assert_eq!(error.code, "no_campaign");
+        }
+
+        let mut revision = state
+            .execute(
+                "campaign.new",
+                json!({"name":"Map geometry test","expectedRevision":0}),
+            )
+            .await
+            .unwrap()["revision"]
+            .as_u64()
+            .unwrap();
+        let location = state
+            .execute(
+                "location.create",
+                json!({"name":"Dock","expectedRevision":revision}),
+            )
+            .await
+            .unwrap();
+        revision = location["revision"].as_u64().unwrap();
+        let location_id = location["location"]["id"].as_str().unwrap().to_owned();
+        let map = state
+            .execute(
+                "map.create",
+                json!({
+                    "name":"Harbor battle map", "kind":"Battle",
+                    "image":{"type":"img","url":"data:image/png;base64,bWFw"},
+                    "width":1000, "height":500,
+                    "pins":[{"id":"pin-1","x":0.56,"y":0.65,"locationId":location_id,"label":"Dock","destinationMapId":null}],
+                    "party":{"x":0.2,"y":0.8},
+                    "expectedRevision":revision
+                }),
+            )
+            .await
+            .unwrap();
+        revision = map["revision"].as_u64().unwrap();
+        let map_id = map["map"]["id"].as_str().unwrap().to_owned();
+        let image_before = map["map"]["image"].clone();
+        assert_eq!(map["map"]["calibration"], Value::Null);
+        assert_eq!(map["map"]["grid"]["mode"], "none");
+        assert_eq!(map["map"]["snap"], false);
+
+        let uncalibrated = state
+            .execute(
+                "map.measure",
+                json!({"mapId":map_id,"points":[{"x":0.1,"y":0.5},{"x":0.35,"y":0.5}]}),
+            )
+            .await
+            .unwrap();
+        assert_eq!(uncalibrated["units"], "imagePixels");
+        assert_eq!(uncalibrated["total"], 250.0);
+
+        let stale = state
+            .execute(
+                "map.calibrate",
+                json!({"mapId":map_id,"pointA":{"x":0.1,"y":0.5},"pointB":{"x":0.2,"y":0.5},"knownDistance":10,"units":"feet","expectedRevision":revision - 1}),
+            )
+            .await
+            .unwrap_err();
+        assert_eq!(stale.code, "conflict");
+        let calibrated = state
+            .execute(
+                "map.calibrate",
+                json!({"mapId":map_id,"pointA":{"x":0.1,"y":0.5},"pointB":{"x":0.2,"y":0.5},"knownDistance":10,"units":"feet","expectedRevision":revision}),
+            )
+            .await
+            .unwrap();
+        revision = calibrated["revision"].as_u64().unwrap();
+        assert_eq!(calibrated["map"]["calibration"]["units"], "feet");
+        assert_eq!(calibrated["map"]["calibration"]["pixelsPerUnit"], 10.0);
+        let equivalent_calibration = state
+            .execute(
+                "map.calibrate",
+                json!({"mapId":map_id,"pointA":{"x":0.1,"y":0.5},"pointB":{"x":0.3,"y":0.5},"knownDistance":20,"units":"feet","expectedRevision":revision}),
+            )
+            .await
+            .unwrap();
+        assert_eq!(equivalent_calibration["revision"], revision);
+        let measured = state
+            .execute(
+                "map.measure",
+                json!({"mapId":map_id,"points":[{"x":0.1,"y":0.5},{"x":0.35,"y":0.5}]}),
+            )
+            .await
+            .unwrap();
+        assert_eq!(measured["total"], 25.0);
+        assert_eq!(measured["units"], "feet");
+
+        let configured = state
+            .execute(
+                "map.configure",
+                json!({"mapId":map_id,"grid":{"mode":"square","visible":true,"size":100.0,"offsetX":150.0,"offsetY":100.0,"orientation":"pointy"},"snap":true,"expectedRevision":revision}),
+            )
+            .await
+            .unwrap();
+        revision = configured["revision"].as_u64().unwrap();
+        let stored = state
+            .execute("map.get", json!({"mapId":map_id}))
+            .await
+            .unwrap();
+        assert_eq!(stored["map"]["pins"][0]["x"], 0.56);
+        assert_eq!(stored["map"]["party"], json!({"x":0.2,"y":0.8}));
+        assert_eq!(stored["map"]["grid"]["visible"], true);
+        assert_eq!(stored["map"]["snap"], true);
+
+        // Older map-update payloads that omit the new settings preserve them.
+        let legacy_update = state
+            .execute(
+                "map.update",
+                json!({
+                    "map":{"id":map_id,"name":"Harbor battle map renamed","kind":"Battle",
+                        "image":{"type":"img","url":"data:image/png;base64,bWFw"},
+                        "width":1000,"height":500,"locationIds":[],"pins":[],"party":null},
+                    "expectedRevision":revision
+                }),
+            )
+            .await
+            .unwrap();
+        revision = legacy_update["revision"].as_u64().unwrap();
+        assert_eq!(legacy_update["map"]["name"], "Harbor battle map renamed");
+        assert_eq!(legacy_update["map"]["calibration"]["units"], "feet");
+        assert_eq!(legacy_update["map"]["grid"]["mode"], "square");
+        assert_eq!(legacy_update["map"]["snap"], true);
+
+        let snapped = state
+            .execute(
+                "map.snap",
+                json!({"mapId":map_id,"point":{"x":0.24,"y":0.21}}),
+            )
+            .await
+            .unwrap();
+        assert_eq!(snapped["requested"], json!({"x":0.24,"y":0.21}));
+        assert_eq!(snapped["effective"], json!({"x":0.25,"y":0.2}));
+        assert_eq!(snapped["cell"], json!({"col":1,"row":0}));
+        assert_eq!(snapped["snapped"], true);
+        let tie = state
+            .execute(
+                "map.snap",
+                json!({"mapId":map_id,"point":{"x":0.2,"y":0.2}}),
+            )
+            .await
+            .unwrap();
+        assert_eq!(tie["cell"], json!({"col":1,"row":0}));
+        let unsnapped = state
+            .execute(
+                "map.snap",
+                json!({"mapId":map_id,"point":{"x":0.24,"y":0.21},"snap":false}),
+            )
+            .await
+            .unwrap();
+        assert_eq!(unsnapped["effective"], json!({"x":0.24,"y":0.21}));
+        assert_eq!(unsnapped["snapped"], false);
+
+        let equal = state
+            .execute(
+                "map.measure",
+                json!({"mapId":map_id,"metric":"square-equal-diagonals","points":[{"x":0.15,"y":0.2},{"x":0.45,"y":1.0}]}),
+            )
+            .await
+            .unwrap();
+        assert_eq!(equal["total"], 4.0);
+        assert_eq!(equal["units"], "cells");
+        let alternating = state
+            .execute(
+                "map.measure",
+                json!({"mapId":map_id,"metric":"square-alternating-diagonals","points":[{"x":0.15,"y":0.2},{"x":0.45,"y":1.0}]}),
+            )
+            .await
+            .unwrap();
+        assert_eq!(alternating["total"], 5.0);
+        let off_centre = state
+            .execute(
+                "map.measure",
+                json!({"mapId":map_id,"metric":"square-equal-diagonals","points":[{"x":0.16,"y":0.21},{"x":0.45,"y":1.0}],"snap":false}),
+            )
+            .await
+            .unwrap_err();
+        assert_eq!(off_centre.code, "validation");
+
+        let converted = state
+            .execute(
+                "map.configure",
+                json!({"mapId":map_id,"units":"metres","expectedRevision":revision}),
+            )
+            .await
+            .unwrap();
+        revision = converted["revision"].as_u64().unwrap();
+        assert!(
+            (converted["map"]["calibration"]["pixelsPerUnit"]
+                .as_f64()
+                .unwrap()
+                - 32.808_398_950_131_24)
+                .abs()
+                < 1e-9
+        );
+        assert_eq!(converted["map"]["grid"]["mode"], "square");
+        assert_eq!(converted["map"]["grid"]["offsetX"], 150.0);
+        assert_eq!(converted["map"]["grid"]["offsetY"], 100.0);
+        assert_eq!(converted["map"]["image"], image_before);
+        let metric = state
+            .execute(
+                "map.measure",
+                json!({"mapId":map_id,"points":[{"x":0.1,"y":0.5},{"x":0.35,"y":0.5}],"snap":false}),
+            )
+            .await
+            .unwrap();
+        assert!((metric["total"].as_f64().unwrap() - 7.62).abs() < 1e-9);
+        assert_eq!(metric["units"], "metres");
+
+        let before_queries = state.execute("campaign.inspect", json!({})).await.unwrap();
+        let history_before = state.execute("history.status", json!({})).await.unwrap();
+        state
+            .execute(
+                "map.snap",
+                json!({"mapId":map_id,"point":{"x":0.24,"y":0.21}}),
+            )
+            .await
+            .unwrap();
+        state
+            .execute(
+                "map.measure",
+                json!({"mapId":map_id,"metric":"hex-steps","points":[{"x":0.1,"y":0.1},{"x":0.2,"y":0.2}]}),
+            )
+            .await
+            .unwrap_err();
+        assert_eq!(
+            state.execute("campaign.inspect", json!({})).await.unwrap(),
+            before_queries
+        );
+        assert_eq!(
+            state.execute("history.status", json!({})).await.unwrap(),
+            history_before
+        );
+
+        let undo_units = state
+            .execute("history.undo", json!({"expectedRevision":revision}))
+            .await
+            .unwrap();
+        revision = undo_units["revision"].as_u64().unwrap();
+        assert_eq!(undo_units["label"], "Change map units");
+        assert_eq!(
+            state
+                .execute("map.get", json!({"mapId":map_id}))
+                .await
+                .unwrap()["map"]["calibration"]["units"],
+            "feet"
+        );
+        let redo_units = state
+            .execute("history.redo", json!({"expectedRevision":revision}))
+            .await
+            .unwrap();
+        revision = redo_units["revision"].as_u64().unwrap();
+        assert_eq!(
+            state
+                .execute("map.get", json!({"mapId":map_id}))
+                .await
+                .unwrap()["map"]["calibration"]["units"],
+            "metres"
+        );
+
+        let state_before_invalid = state.execute("campaign.inspect", json!({})).await.unwrap();
+        let history_before_invalid = state.execute("history.status", json!({})).await.unwrap();
+        let stale_config = state
+            .execute(
+                "map.configure",
+                json!({"mapId":map_id,"snap":false,"expectedRevision":revision - 1}),
+            )
+            .await
+            .unwrap_err();
+        assert_eq!(stale_config.code, "conflict");
+        for (method, params) in [
+            (
+                "map.calibrate",
+                json!({"mapId":map_id,"pointA":{"x":0.1,"y":0.5},"pointB":{"x":0.1,"y":0.5},"knownDistance":10,"units":"feet","expectedRevision":revision}),
+            ),
+            (
+                "map.calibrate",
+                json!({"mapId":map_id,"pointA":{"x":0.1,"y":0.5},"pointB":{"x":0.2,"y":0.5},"knownDistance":0,"units":"feet","expectedRevision":revision}),
+            ),
+            (
+                "map.configure",
+                json!({"mapId":map_id,"grid":{"mode":"triangle","visible":true,"size":100.0,"offsetX":0.0,"offsetY":0.0,"orientation":"pointy"},"expectedRevision":revision}),
+            ),
+            (
+                "map.configure",
+                json!({"mapId":map_id,"units":"yards","expectedRevision":revision}),
+            ),
+            (
+                "map.measure",
+                json!({"mapId":map_id,"points":[{"x":-0.1,"y":0.5},{"x":0.2,"y":0.5}]}),
+            ),
+            (
+                "map.measure",
+                json!({"mapId":map_id,"metric":"hex-steps","points":[{"x":0.15,"y":0.2},{"x":0.45,"y":1.0}]}),
+            ),
+            (
+                "map.snap",
+                json!({"mapId":"missing","point":{"x":0.5,"y":0.5}}),
+            ),
+            (
+                "map.measure",
+                json!({"mapId":"missing","points":[{"x":0.1,"y":0.5},{"x":0.2,"y":0.5}]}),
+            ),
+        ] {
+            state.execute(method, params).await.unwrap_err();
+        }
+        assert_eq!(
+            state.execute("campaign.inspect", json!({})).await.unwrap(),
+            state_before_invalid
+        );
+        assert_eq!(
+            state.execute("history.status", json!({})).await.unwrap(),
+            history_before_invalid
+        );
+        assert_eq!(revision, state.inspect()["revision"]);
+    }
+
+    #[tokio::test]
     async fn failed_open_preserves_active_campaign_and_history() {
         let temp = tempfile::tempdir().unwrap();
         let path = temp.path().join("missing.campaign");
@@ -1770,6 +2960,6 @@ mod discovery_tests {
         }
         let schema_methods: HashSet<_> = methods.keys().cloned().collect();
         assert_eq!(listed, schema_methods);
-        assert!(methods.len() >= 43);
+        assert!(methods.len() >= 49);
     }
 }

@@ -1687,6 +1687,86 @@ fn npc_creation_is_undoable_through_the_compatibility_endpoint() {
 }
 
 #[test]
+fn session_creation_and_update_share_normalization_and_noop_behavior() {
+    let mut client = Client::new();
+    client.ok(
+        "campaign.new",
+        json!({"name":"Session normalization","expectedRevision":0}),
+    );
+    let npc = client.ok("npc.create", json!({"name":"Niya","expectedRevision":1}));
+    let npc_id = npc["npc"]["id"].as_str().unwrap();
+    let created = client.ok(
+        "session.create",
+        json!({
+            "title":"  The Low Tide  ",
+            "date":"  2026-11-14  ",
+            "beats":[{
+                "id":"beat-1","title":"  Meet Niya  ","status":"planned",
+                "notes":[{"type":"p","children":[{"text":"  Preserve note whitespace  "}]}]
+            }],
+            "links":[{"kind":"npc","targetId":format!(" {npc_id} "),"label":"  Contact  "}],
+            "expectedRevision":2
+        }),
+    );
+    assert_eq!(created["session"]["title"], "The Low Tide");
+    assert_eq!(created["session"]["date"], "2026-11-14");
+    assert_eq!(created["session"]["beats"][0]["title"], "Meet Niya");
+    assert_eq!(created["session"]["links"][0]["targetId"], npc_id);
+    assert_eq!(created["session"]["links"][0]["label"], "Contact");
+    assert_eq!(
+        created["session"]["beats"][0]["notes"][0]["children"][0]["text"],
+        "  Preserve note whitespace  "
+    );
+    let before = client.ok("campaign.inspect", json!({}));
+    let history = client.ok("history.status", json!({}));
+
+    // Sending the accepted record back unchanged must not add another edit.
+    let unchanged = client.ok(
+        "session.update",
+        json!({"session":created["session"],"expectedRevision":3}),
+    );
+    assert_eq!(unchanged, created);
+    assert_eq!(client.ok("campaign.inspect", json!({})), before);
+    assert_eq!(client.ok("history.status", json!({})), history);
+
+    let mut padded = created["session"].clone();
+    padded["title"] = json!("  The Low Tide  ");
+    padded["date"] = json!("  2026-11-14  ");
+    padded["beats"][0]["title"] = json!("  Meet Niya  ");
+    padded["links"][0]["targetId"] = json!(format!(" {npc_id} "));
+    padded["links"][0]["label"] = json!("  Contact  ");
+    let normalized = client.ok(
+        "session.update",
+        json!({"session":padded,"expectedRevision":3}),
+    );
+    assert_eq!(normalized, created);
+    assert_eq!(client.ok("campaign.inspect", json!({})), before);
+    assert_eq!(client.ok("history.status", json!({})), history);
+
+    // References that differ only in surrounding whitespace are duplicates on
+    // both creation and update; rejection must preserve the accepted state.
+    let links = json!([
+        {"kind":"npc","targetId":npc_id,"label":"First"},
+        {"kind":"npc","targetId":format!(" {npc_id} "),"label":"Second"}
+    ]);
+    let rejected_create = client.request(
+        "session.create",
+        json!({"title":"Duplicate links","links":links,"expectedRevision":3}),
+    );
+    assert_eq!(error_code(&rejected_create), "validation");
+    let mut duplicate = created["session"].clone();
+    duplicate["links"] = links;
+    let rejected_update = client.request(
+        "session.update",
+        json!({"session":duplicate,"expectedRevision":3}),
+    );
+    assert_eq!(error_code(&rejected_update), "validation");
+    assert_eq!(client.ok("campaign.inspect", json!({})), before);
+    assert_eq!(client.ok("history.status", json!({})), history);
+    client.close();
+}
+
+#[test]
 fn session_preparation_and_review_persist_through_the_cli() {
     let folder = tempfile::tempdir().unwrap();
     let path = folder.path().join("sessions.campaign");
@@ -1922,5 +2002,1018 @@ fn session_preparation_and_review_persist_through_the_cli() {
     );
     let no_history = reopened.request("history.undo", json!({"expectedRevision":loaded_revision}));
     assert_eq!(error_code(&no_history), "conflict");
+    reopened.close();
+}
+
+#[test]
+fn session_references_and_backlinks_resolve_through_the_cli() {
+    let folder = tempfile::tempdir().unwrap();
+    let path = folder.path().join("references.campaign");
+    let mut client = Client::new();
+
+    let description = client.ok("system.describe", json!({}));
+    assert!(description["queries"]
+        .as_array()
+        .unwrap()
+        .contains(&json!("session.references")));
+    assert!(description["queries"]
+        .as_array()
+        .unwrap()
+        .contains(&json!("session.backlinks")));
+    assert_eq!(
+        description["methods"]["session.references"]["properties"]["sessionId"]["type"],
+        "string"
+    );
+    assert_eq!(
+        description["methods"]["session.backlinks"]["properties"]["kind"]["type"],
+        "string"
+    );
+    assert_eq!(
+        description["methods"]["session.backlinks"]["properties"]["targetId"]["type"],
+        "string"
+    );
+    for (method, params) in [
+        ("session.references", json!({"sessionId":"missing-session"})),
+        (
+            "session.backlinks",
+            json!({"kind":"npc","targetId":"missing-npc"}),
+        ),
+    ] {
+        let response = client.request(method, params);
+        assert_eq!(error_code(&response), "no_campaign");
+    }
+
+    let created = client.ok(
+        "campaign.new",
+        json!({"name":"Reference journey","expectedRevision":0}),
+    );
+    let mut revision = self::revision(&created);
+    let npc = client.ok(
+        "npc.create",
+        json!({"name":"Niya Jade","expectedRevision":revision}),
+    );
+    revision = self::revision(&npc);
+    let npc_id = npc["npc"]["id"].as_str().unwrap().to_owned();
+    // A second NPC with the same display name proves resolution is ID-based.
+    let namesake = client.ok(
+        "npc.create",
+        json!({"name":"Niya Jade","expectedRevision":revision}),
+    );
+    revision = self::revision(&namesake);
+    let namesake_id = namesake["npc"]["id"].as_str().unwrap().to_owned();
+    let location = client.ok(
+        "location.create",
+        json!({"name":"Eastern Seawall","expectedRevision":revision}),
+    );
+    revision = self::revision(&location);
+    let location_id = location["location"]["id"].as_str().unwrap().to_owned();
+    let faction = client.ok(
+        "faction.create",
+        json!({"name":"Dockworkers' Guild","expectedRevision":revision}),
+    );
+    revision = self::revision(&faction);
+    let faction_id = faction["faction"]["id"].as_str().unwrap().to_owned();
+    let item = client.ok(
+        "item.create",
+        json!({"name":"Tide Chart","expectedRevision":revision}),
+    );
+    revision = self::revision(&item);
+    let item_id = item["item"]["id"].as_str().unwrap().to_owned();
+    let thread = client.ok(
+        "thread.create",
+        json!({"title":"The Missing Morrow","expectedRevision":revision}),
+    );
+    revision = self::revision(&thread);
+    let thread_id = thread["thread"]["id"].as_str().unwrap().to_owned();
+    let unused = client.ok(
+        "npc.create",
+        json!({"name":"Unused","expectedRevision":revision}),
+    );
+    revision = self::revision(&unused);
+    let unused_id = unused["npc"]["id"].as_str().unwrap().to_owned();
+
+    let first = client.ok(
+        "session.create",
+        json!({
+            "title":"The Low Tide","number":8,"date":"2026-11-14","previous":false,
+            "links":[
+                {"kind":"npc","targetId":npc_id,"label":"Witness"},
+                {"kind":"location","targetId":location_id,"label":"Last seen"},
+                {"kind":"item","targetId":item_id,"label":"Clue"},
+                {"kind":"thread","targetId":"never-existed","label":"Lost thread"}
+            ],
+            "expectedRevision":revision
+        }),
+    );
+    revision = self::revision(&first);
+    let first_id = first["session"]["id"].as_str().unwrap().to_owned();
+    let second = client.ok(
+        "session.create",
+        json!({
+            "title":"A Quiet Bargain","number":3,"previous":true,
+            "links":[
+                {"kind":"npc","targetId":npc_id,"label":"Ally"},
+                {"kind":"npc","targetId":namesake_id,"label":"Namesake"},
+                {"kind":"faction","targetId":faction_id,"label":"Employer"},
+                {"kind":"thread","targetId":thread_id,"label":"Origin"}
+            ],
+            "expectedRevision":revision
+        }),
+    );
+    revision = self::revision(&second);
+    let second_id = second["session"]["id"].as_str().unwrap().to_owned();
+    let third = client.ok(
+        "session.create",
+        json!({
+            "title":"Bells at Dusk","number":5,
+            "links":[{"kind":"location","targetId":location_id,"label":"Visited"}],
+            "expectedRevision":revision
+        }),
+    );
+    let third_id = third["session"]["id"].as_str().unwrap().to_owned();
+    revision = self::revision(&third);
+
+    let before_query = client.ok("campaign.inspect", json!({}));
+    let history_before_query = client.ok("history.status", json!({}));
+    assert_eq!(before_query["dirty"], true);
+    let references = client.ok("session.references", json!({"sessionId":first_id}));
+    assert_eq!(references["revision"], revision);
+    assert_eq!(
+        references["references"],
+        json!([
+            {"kind":"npc","targetId":npc_id,"label":"Witness","available":true,"name":"Niya Jade"},
+            {"kind":"location","targetId":location_id,"label":"Last seen","available":true,"name":"Eastern Seawall"},
+            {"kind":"item","targetId":item_id,"label":"Clue","available":true,"name":"Tide Chart"},
+            {"kind":"thread","targetId":"never-existed","label":"Lost thread","available":false,"name":null}
+        ])
+    );
+    let backlinks = client.ok("session.backlinks", json!({"kind":"npc","targetId":npc_id}));
+    assert_eq!(backlinks["revision"], revision);
+    assert_eq!(
+        backlinks["sessions"],
+        json!([
+            {"id":first_id,"title":"The Low Tide","number":8,"date":"2026-11-14","previous":false,"label":"Witness"},
+            {"id":second_id,"title":"A Quiet Bargain","number":3,"date":"","previous":true,"label":"Ally"}
+        ])
+    );
+    assert_eq!(
+        client.ok(
+            "session.backlinks",
+            json!({"kind":"npc","targetId":namesake_id}),
+        )["sessions"],
+        json!([
+            {"id":second_id,"title":"A Quiet Bargain","number":3,"date":"","previous":true,"label":"Namesake"}
+        ]),
+        "duplicate display names must stay separated by stable target ID"
+    );
+    assert_eq!(
+        client.ok(
+            "session.backlinks",
+            json!({"kind":"location","targetId":location_id}),
+        )["sessions"],
+        json!([
+            {"id":first_id,"title":"The Low Tide","number":8,"date":"2026-11-14","previous":false,"label":"Last seen"},
+            {"id":third_id,"title":"Bells at Dusk","number":5,"date":"","previous":false,"label":"Visited"}
+        ])
+    );
+    assert_eq!(
+        client.ok(
+            "session.backlinks",
+            json!({"kind":"npc","targetId":unused_id}),
+        )["sessions"],
+        json!([])
+    );
+    assert_eq!(
+        client.ok(
+            "session.backlinks",
+            json!({"kind":"item","targetId":"never-existed"}),
+        )["sessions"],
+        json!([])
+    );
+    for params in [
+        json!({"kind":"puzzle","targetId":npc_id}),
+        json!({"kind":"npc","targetId":"   "}),
+    ] {
+        let rejected = client.request("session.backlinks", params);
+        assert_eq!(error_code(&rejected), "validation");
+    }
+    let missing_session =
+        client.request("session.references", json!({"sessionId":"missing-session"}));
+    assert_eq!(error_code(&missing_session), "not_found");
+    assert_eq!(client.ok("campaign.inspect", json!({})), before_query);
+    assert_eq!(client.ok("history.status", json!({})), history_before_query);
+
+    // Rename through the existing record action; session links stay unchanged.
+    let renamed = client.ok(
+        "npc.update",
+        json!({"npcId":npc_id,"name":"Niya Jade Renamed","expectedRevision":revision}),
+    );
+    revision = self::revision(&renamed);
+    let renamed_references = client.ok("session.references", json!({"sessionId":first_id}));
+    assert_eq!(
+        renamed_references["references"][0]["name"],
+        "Niya Jade Renamed"
+    );
+    assert_eq!(renamed_references["references"][0]["label"], "Witness");
+    assert_eq!(renamed_references["references"][0]["targetId"], npc_id);
+    assert_eq!(
+        client.ok("session.backlinks", json!({"kind":"npc","targetId":npc_id}),)["sessions"][0]
+            ["label"],
+        "Witness"
+    );
+    client.ok("history.undo", json!({"expectedRevision":revision}));
+    revision += 1;
+    assert_eq!(
+        client.ok("session.references", json!({"sessionId":first_id}),)["references"][0]["name"],
+        "Niya Jade"
+    );
+    client.ok("history.redo", json!({"expectedRevision":revision}));
+    revision += 1;
+    assert_eq!(
+        client.ok("session.references", json!({"sessionId":first_id}),)["references"][0]["name"],
+        "Niya Jade Renamed"
+    );
+
+    // Changing session-owned links updates backlinks and follows undo/redo.
+    let mut second_record = second["session"].clone();
+    second_record["links"] = json!([
+        {"kind":"npc","targetId":namesake_id,"label":"Namesake"},
+        {"kind":"faction","targetId":faction_id,"label":"Employer"},
+        {"kind":"thread","targetId":thread_id,"label":"Origin"}
+    ]);
+    client.ok(
+        "session.update",
+        json!({"session":second_record,"expectedRevision":revision}),
+    );
+    revision += 1;
+    assert_eq!(
+        client.ok("session.backlinks", json!({"kind":"npc","targetId":npc_id}),)["sessions"]
+            .as_array()
+            .unwrap()
+            .len(),
+        1
+    );
+    client.ok("history.undo", json!({"expectedRevision":revision}));
+    revision += 1;
+    assert_eq!(
+        client.ok("session.backlinks", json!({"kind":"npc","targetId":npc_id}),)["sessions"]
+            .as_array()
+            .unwrap()
+            .len(),
+        2
+    );
+    client.ok("history.redo", json!({"expectedRevision":revision}));
+    revision += 1;
+
+    // Deleting a target keeps the authored reference and its backlink.
+    client.ok(
+        "item.delete",
+        json!({"itemId":item_id,"expectedRevision":revision}),
+    );
+    revision += 1;
+    let deleted_references = client.ok("session.references", json!({"sessionId":first_id}));
+    assert_eq!(deleted_references["references"][2]["available"], false);
+    assert_eq!(deleted_references["references"][2]["name"], Value::Null);
+    assert_eq!(deleted_references["references"][2]["label"], "Clue");
+    assert_eq!(
+        client.ok(
+            "session.backlinks",
+            json!({"kind":"item","targetId":item_id}),
+        )["sessions"][0]["id"],
+        first_id
+    );
+    client.ok("history.undo", json!({"expectedRevision":revision}));
+    revision += 1;
+    assert_eq!(
+        client.ok("session.references", json!({"sessionId":first_id}),)["references"][2]["name"],
+        "Tide Chart"
+    );
+
+    let saved = client.ok(
+        "campaign.save",
+        json!({"path":path,"expectedRevision":revision}),
+    );
+    assert_eq!(saved["dirty"], false);
+    assert_eq!(self::revision(&saved), revision + 1);
+    let links_before_save =
+        client.ok("session.get", json!({"sessionId":first_id}))["session"]["links"].clone();
+    client.close();
+
+    let mut reopened = Client::new();
+    let loaded = reopened.ok("campaign.open", json!({"path":path,"expectedRevision":0}));
+    let loaded_revision = self::revision(&loaded);
+    assert_eq!(loaded["dirty"], false);
+    assert_eq!(loaded["campaign"]["sessions"].as_array().unwrap().len(), 3);
+    let database_before_queries = std::fs::read(path.join("campaign.sqlite")).unwrap();
+    let wal_before_queries = std::fs::read(path.join("campaign.sqlite-wal")).ok();
+    let before_reopen_queries = reopened.ok("campaign.inspect", json!({}));
+    let history_before_reopen_queries = reopened.ok("history.status", json!({}));
+    let loaded_references = reopened.ok("session.references", json!({"sessionId":first_id}));
+    assert_eq!(loaded_references["revision"], loaded_revision);
+    assert_eq!(
+        loaded_references["references"][0]["name"],
+        "Niya Jade Renamed"
+    );
+    assert_eq!(loaded_references["references"][3]["available"], false);
+    assert_eq!(loaded_references["references"][3]["label"], "Lost thread");
+    assert_eq!(
+        reopened.ok("session.backlinks", json!({"kind":"npc","targetId":npc_id}),)["sessions"],
+        json!([
+            {"id":first_id,"title":"The Low Tide","number":8,"date":"2026-11-14","previous":false,"label":"Witness"}
+        ])
+    );
+    assert_eq!(
+        reopened.ok(
+            "session.backlinks",
+            json!({"kind":"npc","targetId":namesake_id}),
+        )["sessions"][0]["title"],
+        "A Quiet Bargain"
+    );
+    assert_eq!(
+        reopened.ok("session.get", json!({"sessionId":first_id}))["session"]["links"],
+        links_before_save,
+        "renaming or querying must not rewrite the stored session links"
+    );
+    assert_eq!(
+        reopened.ok("campaign.inspect", json!({})),
+        before_reopen_queries
+    );
+    assert_eq!(
+        reopened.ok("history.status", json!({})),
+        history_before_reopen_queries
+    );
+    assert_eq!(
+        reopened.ok("history.status", json!({}))["history"]["canUndo"],
+        false
+    );
+    assert_eq!(
+        std::fs::read(path.join("campaign.sqlite")).unwrap(),
+        database_before_queries,
+        "read-only reference queries must not rewrite the saved database"
+    );
+    assert_eq!(
+        std::fs::read(path.join("campaign.sqlite-wal")).ok(),
+        wal_before_queries,
+        "read-only reference queries must not add or change a WAL sidecar"
+    );
+
+    // A different active campaign cannot see the first campaign's references.
+    reopened.ok(
+        "campaign.new",
+        json!({"name":"Other campaign","expectedRevision":loaded_revision}),
+    );
+    let missing = reopened.request("session.references", json!({"sessionId":first_id}));
+    assert_eq!(error_code(&missing), "not_found");
+    assert_eq!(
+        reopened.ok("session.backlinks", json!({"kind":"npc","targetId":npc_id}),)["sessions"],
+        json!([])
+    );
+    reopened.close();
+}
+
+#[test]
+fn map_calibration_grid_snap_and_measurement_resolve_through_the_cli() {
+    fn close(value: &Value, expected: f64) {
+        let actual = value
+            .as_f64()
+            .unwrap_or_else(|| panic!("missing number: {value}"));
+        assert!(
+            (actual - expected).abs() < 1e-9,
+            "expected {expected}, got {actual}"
+        );
+    }
+
+    let folder = tempfile::tempdir().unwrap();
+    let path = folder.path().join("map-geometry.campaign");
+    let mut client = Client::new();
+
+    let description = client.ok("system.describe", json!({}));
+    for query in ["map.snap", "map.measure"] {
+        assert!(description["queries"]
+            .as_array()
+            .unwrap()
+            .contains(&json!(query)));
+    }
+    for mutation in ["map.calibrate", "map.configure"] {
+        assert!(description["mutations"]
+            .as_array()
+            .unwrap()
+            .contains(&json!(mutation)));
+    }
+    assert_eq!(
+        description["methods"]["map.calibrate"]["properties"]["knownDistance"]["type"],
+        "number"
+    );
+    assert_eq!(
+        description["methods"]["map.measure"]["properties"]["points"]["type"],
+        "array"
+    );
+    for (method, params) in [
+        (
+            "map.snap",
+            json!({"mapId":"missing","point":{"x":0.5,"y":0.5}}),
+        ),
+        (
+            "map.measure",
+            json!({"mapId":"missing","points":[{"x":0.1,"y":0.5},{"x":0.2,"y":0.5}]}),
+        ),
+        (
+            "map.calibrate",
+            json!({"mapId":"missing","pointA":{"x":0.1,"y":0.5},"pointB":{"x":0.2,"y":0.5},"knownDistance":10,"units":"feet","expectedRevision":0}),
+        ),
+        (
+            "map.configure",
+            json!({"mapId":"missing","snap":true,"expectedRevision":0}),
+        ),
+    ] {
+        assert_eq!(error_code(&client.request(method, params)), "no_campaign");
+    }
+
+    let created = client.ok(
+        "campaign.new",
+        json!({"name":"Map geometry journey","expectedRevision":0}),
+    );
+    let mut revision = self::revision(&created);
+    let location = client.ok(
+        "location.create",
+        json!({"name":"Harbor","expectedRevision":revision}),
+    );
+    revision = self::revision(&location);
+    let location_id = location["location"]["id"].as_str().unwrap().to_owned();
+    let map = client.ok(
+        "map.create",
+        json!({
+            "name":"Harbor battle map", "kind":"Battle",
+            "image":{"type":"img","url":"data:image/png;base64,bWFw"},
+            "width":1000, "height":500,
+            "pins":[{"id":"pin-1","x":0.56,"y":0.65,"locationId":location_id,
+                "label":"Dock","destinationMapId":null}],
+            "party":{"x":0.2,"y":0.8},
+            "expectedRevision":revision
+        }),
+    );
+    revision = self::revision(&map);
+    let map_id = map["map"]["id"].as_str().unwrap().to_owned();
+    assert_eq!(map["map"]["calibration"], Value::Null);
+    assert_eq!(map["map"]["grid"]["mode"], "none");
+    assert_eq!(map["map"]["grid"]["size"], 64.0);
+    assert_eq!(map["map"]["snap"], false);
+    let pin_before = map["map"]["pins"].clone();
+    let party_before = map["map"]["party"].clone();
+
+    let uncalibrated = client.ok(
+        "map.measure",
+        json!({"mapId":map_id,"points":[{"x":0.1,"y":0.5},{"x":0.35,"y":0.5}]}),
+    );
+    assert_eq!(uncalibrated["units"], "imagePixels");
+    close(&uncalibrated["total"], 250.0);
+    assert_eq!(uncalibrated["calibration"], Value::Null);
+    let too_many_points = (0..257)
+        .map(|_| json!({"x":0.5,"y":0.5}))
+        .collect::<Vec<_>>();
+    assert_eq!(
+        error_code(&client.request(
+            "map.measure",
+            json!({"mapId":map_id,"points":too_many_points}),
+        )),
+        "validation"
+    );
+
+    for params in [
+        json!({"mapId":map_id,"pointA":{"x":0.1,"y":0.5},"pointB":{"x":0.1,"y":0.5},"knownDistance":10,"units":"feet","expectedRevision":revision}),
+        json!({"mapId":map_id,"pointA":{"x":0.1,"y":0.5},"pointB":{"x":0.2,"y":0.5},"knownDistance":0,"units":"feet","expectedRevision":revision}),
+        json!({"mapId":map_id,"pointA":{"x":0.1,"y":0.5},"pointB":{"x":0.2,"y":0.5},"knownDistance":10,"units":"yards","expectedRevision":revision}),
+    ] {
+        assert_eq!(
+            error_code(&client.request("map.calibrate", params)),
+            "validation"
+        );
+    }
+    let stale = client.request(
+        "map.calibrate",
+        json!({"mapId":map_id,"pointA":{"x":0.1,"y":0.5},"pointB":{"x":0.2,"y":0.5},"knownDistance":10,"units":"feet","expectedRevision":revision - 1}),
+    );
+    assert_eq!(error_code(&stale), "conflict");
+    let after_rejections = client.ok("campaign.inspect", json!({}));
+    assert_eq!(self::revision(&after_rejections), revision);
+    assert_eq!(
+        after_rejections["campaign"]["maps"][0]["calibration"],
+        Value::Null
+    );
+
+    let calibrated = client.ok(
+        "map.calibrate",
+        json!({"mapId":map_id,"pointA":{"x":0.1,"y":0.5},"pointB":{"x":0.2,"y":0.5},"knownDistance":10,"units":"feet","expectedRevision":revision}),
+    );
+    revision = self::revision(&calibrated);
+    assert_eq!(calibrated["map"]["calibration"]["units"], "feet");
+    close(&calibrated["map"]["calibration"]["pixelsPerUnit"], 10.0);
+
+    let horizontal = client.ok(
+        "map.measure",
+        json!({"mapId":map_id,"points":[{"x":0.1,"y":0.5},{"x":0.35,"y":0.5}],"snap":false}),
+    );
+    assert_eq!(horizontal["units"], "feet");
+    assert_eq!(horizontal["metric"], "straight");
+    close(&horizontal["total"], 25.0);
+    close(&horizontal["imageTotal"], 250.0);
+    let vertical = client.ok(
+        "map.measure",
+        json!({"mapId":map_id,"points":[{"x":0.5,"y":0.2},{"x":0.5,"y":0.4}],"snap":false}),
+    );
+    close(&vertical["total"], 10.0);
+    close(&vertical["imageTotal"], 100.0);
+    let diagonal = client.ok(
+        "map.measure",
+        json!({"mapId":map_id,"points":[{"x":0.1,"y":0.1},{"x":0.4,"y":0.9}],"snap":false}),
+    );
+    close(&diagonal["total"], 50.0);
+    close(&diagonal["imageTotal"], 500.0);
+    let fractional = client.ok(
+        "map.measure",
+        json!({"mapId":map_id,"points":[{"x":0.1,"y":0.5},{"x":0.2234,"y":0.5}],"snap":false}),
+    );
+    close(&fractional["total"], 12.34);
+    close(&fractional["imageTotal"], 123.4);
+    let zero = client.ok(
+        "map.measure",
+        json!({"mapId":map_id,"points":[{"x":0.1,"y":0.5},{"x":0.1,"y":0.5}],"snap":false}),
+    );
+    close(&zero["total"], 0.0);
+    close(&zero["imageTotal"], 0.0);
+    let path_measure = client.ok(
+        "map.measure",
+        json!({"mapId":map_id,"points":[
+            {"x":0.1,"y":0.1},{"x":0.2,"y":0.1},{"x":0.2,"y":0.3}
+        ],"snap":false}),
+    );
+    close(&path_measure["total"], 20.0);
+    close(&path_measure["imageTotal"], 200.0);
+    close(&path_measure["segments"][0]["distance"], 10.0);
+    close(&path_measure["segments"][1]["distance"], 10.0);
+    assert_eq!(path_measure["segments"].as_array().unwrap().len(), 2);
+
+    // Calibration participates in undo/redo.
+    let undone_calibration = client.ok("history.undo", json!({"expectedRevision":revision}));
+    revision = self::revision(&undone_calibration);
+    assert_eq!(undone_calibration["label"], "Calibrate map");
+    let uncalibrated_again = client.ok(
+        "map.measure",
+        json!({"mapId":map_id,"points":[{"x":0.1,"y":0.5},{"x":0.35,"y":0.5}],"snap":false}),
+    );
+    assert_eq!(uncalibrated_again["units"], "imagePixels");
+    let redone_calibration = client.ok("history.redo", json!({"expectedRevision":revision}));
+    revision = self::revision(&redone_calibration);
+    close(
+        &client.ok(
+            "map.measure",
+            json!({"mapId":map_id,"points":[{"x":0.1,"y":0.5},{"x":0.35,"y":0.5}],"snap":false}),
+        )["total"],
+        25.0,
+    );
+
+    let square = client.ok(
+        "map.configure",
+        json!({"mapId":map_id,"grid":{"mode":"square","visible":true,"size":100.0,
+            "offsetX":150.0,"offsetY":100.0,"orientation":"pointy"},"snap":true,
+            "expectedRevision":revision}),
+    );
+    revision = self::revision(&square);
+    let stored = client.ok("map.get", json!({"mapId":map_id}));
+    assert_eq!(stored["map"]["pins"], pin_before);
+    assert_eq!(stored["map"]["party"], party_before);
+    assert_eq!(stored["map"]["grid"]["visible"], true);
+    assert_eq!(stored["map"]["snap"], true);
+
+    let snapped = client.ok(
+        "map.snap",
+        json!({"mapId":map_id,"point":{"x":0.24,"y":0.21}}),
+    );
+    assert_eq!(snapped["requested"], json!({"x":0.24,"y":0.21}));
+    assert_eq!(snapped["effective"], json!({"x":0.25,"y":0.2}));
+    close(&snapped["requestedImage"]["x"], 240.0);
+    close(&snapped["requestedImage"]["y"], 105.0);
+    close(&snapped["effectiveImage"]["x"], 250.0);
+    close(&snapped["effectiveImage"]["y"], 100.0);
+    assert_eq!(snapped["cell"], json!({"col":1,"row":0}));
+    assert_eq!(snapped["snapped"], true);
+    assert_eq!(snapped["grid"]["sizeMeaning"], "squareSideLength");
+    close(&snapped["grid"]["centerSpacing"]["x"], 100.0);
+    let tie = client.ok(
+        "map.snap",
+        json!({"mapId":map_id,"point":{"x":0.2,"y":0.2}}),
+    );
+    assert_eq!(tie["cell"], json!({"col":1,"row":0}));
+    let unsnapped = client.ok(
+        "map.snap",
+        json!({"mapId":map_id,"point":{"x":0.24,"y":0.21},"snap":false}),
+    );
+    assert_eq!(unsnapped["effective"], json!({"x":0.24,"y":0.21}));
+    assert_eq!(unsnapped["snapped"], false);
+    assert_eq!(unsnapped["cell"], Value::Null);
+
+    // Visibility is independent of snapping and grid topology.
+    let hidden = client.ok(
+        "map.configure",
+        json!({"mapId":map_id,"grid":{"mode":"square","visible":false,"size":100.0,
+            "offsetX":150.0,"offsetY":100.0,"orientation":"pointy"},
+            "expectedRevision":revision}),
+    );
+    revision = self::revision(&hidden);
+    assert_eq!(
+        client.ok(
+            "map.snap",
+            json!({"mapId":map_id,"point":{"x":0.24,"y":0.21}}),
+        )["cell"],
+        json!({"col":1,"row":0})
+    );
+    assert_eq!(
+        client.ok(
+            "map.measure",
+            json!({"mapId":map_id,"metric":"square-equal-diagonals","snap":false,
+                "points":[{"x":0.15,"y":0.2},{"x":0.45,"y":1.0}]}),
+        )["total"],
+        4.0,
+        "hidden grid topology still participates in measurement"
+    );
+    let snap_off = client.ok(
+        "map.configure",
+        json!({"mapId":map_id,"snap":false,"expectedRevision":revision}),
+    );
+    revision = self::revision(&snap_off);
+    assert_eq!(
+        client.ok(
+            "map.snap",
+            json!({"mapId":map_id,"point":{"x":0.24,"y":0.21}}),
+        )["snapped"],
+        false
+    );
+    assert_eq!(
+        client.ok(
+            "map.snap",
+            json!({"mapId":map_id,"point":{"x":0.24,"y":0.21},"snap":true}),
+        )["snapped"],
+        true
+    );
+    let snap_on = client.ok(
+        "map.configure",
+        json!({"mapId":map_id,"snap":true,"expectedRevision":revision}),
+    );
+    revision = self::revision(&snap_on);
+
+    let equal = client.ok(
+        "map.measure",
+        json!({"mapId":map_id,"metric":"square-equal-diagonals","snap":false,
+            "points":[{"x":0.15,"y":0.2},{"x":0.45,"y":1.0}]}),
+    );
+    close(&equal["total"], 4.0);
+    assert_eq!(equal["units"], "cells");
+    let alternating = client.ok(
+        "map.measure",
+        json!({"mapId":map_id,"metric":"square-alternating-diagonals","snap":false,
+            "points":[{"x":0.15,"y":0.2},{"x":0.45,"y":1.0}]}),
+    );
+    close(&alternating["total"], 5.0);
+    let direct_diagonal = client.ok(
+        "map.measure",
+        json!({"mapId":map_id,"metric":"square-alternating-diagonals","snap":false,
+            "points":[{"x":0.15,"y":0.2},{"x":0.35,"y":0.6}]}),
+    );
+    close(&direct_diagonal["total"], 3.0);
+    let split_diagonal = client.ok(
+        "map.measure",
+        json!({"mapId":map_id,"metric":"square-alternating-diagonals","snap":false,
+            "points":[{"x":0.15,"y":0.2},{"x":0.25,"y":0.4},{"x":0.35,"y":0.6}]}),
+    );
+    close(&split_diagonal["total"], 3.0);
+    assert_eq!(split_diagonal["segments"][0]["nextDiagonalCost"], 2);
+    assert_eq!(split_diagonal["segments"][1]["nextDiagonalCost"], 1);
+    assert_eq!(
+        error_code(&client.request(
+            "map.measure",
+            json!({"mapId":map_id,"metric":"square-equal-diagonals","snap":false,
+                "points":[{"x":0.16,"y":0.21},{"x":0.45,"y":1.0}]}),
+        )),
+        "validation"
+    );
+    let snapped_cells = client.ok(
+        "map.measure",
+        json!({"mapId":map_id,"metric":"square-equal-diagonals","snap":true,
+            "points":[{"x":0.16,"y":0.21},{"x":0.45,"y":1.0}]}),
+    );
+    close(&snapped_cells["total"], 4.0);
+    assert_eq!(snapped_cells["snapped"], true);
+    assert_eq!(
+        error_code(&client.request(
+            "map.measure",
+            json!({"mapId":map_id,"metric":"hex-steps","snap":false,
+                "points":[{"x":0.15,"y":0.2},{"x":0.45,"y":1.0}]}),
+        )),
+        "validation"
+    );
+
+    // Unit changes keep the same physical scale.
+    let metres = client.ok(
+        "map.configure",
+        json!({"mapId":map_id,"units":"metres","expectedRevision":revision}),
+    );
+    revision = self::revision(&metres);
+    close(
+        &metres["map"]["calibration"]["pixelsPerUnit"],
+        32.808_398_950_131_24,
+    );
+    let metres_measured = client.ok(
+        "map.measure",
+        json!({"mapId":map_id,"points":[{"x":0.1,"y":0.5},{"x":0.35,"y":0.5}],"snap":false}),
+    );
+    close(&metres_measured["total"], 7.62);
+    assert_eq!(metres_measured["units"], "metres");
+    let miles = client.ok(
+        "map.configure",
+        json!({"mapId":map_id,"units":"miles","expectedRevision":revision}),
+    );
+    revision = self::revision(&miles);
+    close(&miles["map"]["calibration"]["pixelsPerUnit"], 52_800.0);
+    let miles_measured = client.ok(
+        "map.measure",
+        json!({"mapId":map_id,"points":[{"x":0.1,"y":0.5},{"x":0.35,"y":0.5}],"snap":false}),
+    );
+    close(&miles_measured["total"], 25.0 / 5280.0);
+    assert_eq!(miles_measured["units"], "miles");
+    let feet = client.ok(
+        "map.configure",
+        json!({"mapId":map_id,"units":"feet","expectedRevision":revision}),
+    );
+    revision = self::revision(&feet);
+    close(&feet["map"]["calibration"]["pixelsPerUnit"], 10.0);
+
+    let before_noop = client.ok("campaign.inspect", json!({}));
+    let history_before_noop = client.ok("history.status", json!({}));
+    let noop_calibration = client.ok(
+        "map.calibrate",
+        json!({"mapId":map_id,"pointA":{"x":0.1,"y":0.5},"pointB":{"x":0.2,"y":0.5},"knownDistance":10,"units":"feet","expectedRevision":revision}),
+    );
+    assert_eq!(self::revision(&noop_calibration), revision);
+    let noop_grid = client.ok(
+        "map.configure",
+        json!({"mapId":map_id,"grid":{"mode":"square","visible":false,"size":100.0,
+            "offsetX":150.0,"offsetY":100.0,"orientation":"pointy"},"snap":true,
+            "expectedRevision":revision}),
+    );
+    assert_eq!(self::revision(&noop_grid), revision);
+    assert_eq!(client.ok("campaign.inspect", json!({})), before_noop);
+    assert_eq!(client.ok("history.status", json!({})), history_before_noop);
+
+    // Hex pointy-top centres and neighbours.
+    let pointy = client.ok(
+        "map.configure",
+        json!({"mapId":map_id,"grid":{"mode":"hex","visible":true,"size":50.0,
+            "offsetX":150.0,"offsetY":100.0,"orientation":"pointy"},
+            "expectedRevision":revision}),
+    );
+    revision = self::revision(&pointy);
+    let pointy_center = client.ok(
+        "map.snap",
+        json!({"mapId":map_id,"point":{"x":0.23660254037844385,"y":0.2}}),
+    );
+    assert_eq!(pointy_center["cell"], json!({"q":1,"r":0}));
+    assert_eq!(pointy_center["snapped"], true);
+    let pointy_south = client.ok(
+        "map.snap",
+        json!({"mapId":map_id,"point":{"x":0.1933012701892219,"y":0.35}}),
+    );
+    assert_eq!(pointy_south["cell"], json!({"q":0,"r":1}));
+    let pointy_tie = client.ok(
+        "map.snap",
+        json!({"mapId":map_id,"point":{"x":0.1933012701892219,"y":0.2}}),
+    );
+    assert_eq!(pointy_tie["cell"], json!({"q":0,"r":0}));
+    let pointy_steps = client.ok(
+        "map.measure",
+        json!({"mapId":map_id,"metric":"hex-steps","snap":false,
+            "points":[{"x":0.15,"y":0.2},{"x":0.23660254037844385,"y":0.2}]}),
+    );
+    close(&pointy_steps["total"], 1.0);
+    assert_eq!(pointy_steps["units"], "cells");
+    assert_eq!(pointy_steps["grid"]["orientation"], "pointy");
+    assert_eq!(pointy_steps["grid"]["sizeMeaning"], "hexCircumradius");
+    close(
+        &pointy_steps["grid"]["centerSpacing"]["x"],
+        86.602_540_378_443_86,
+    );
+    close(&pointy_steps["grid"]["centerSpacing"]["y"], 75.0);
+    assert_eq!(
+        error_code(&client.request(
+            "map.measure",
+            json!({"mapId":map_id,"metric":"square-equal-diagonals","snap":false,
+                "points":[{"x":0.15,"y":0.2},{"x":0.45,"y":1.0}]}),
+        )),
+        "validation"
+    );
+
+    // Flat-top hex centres and neighbours.
+    let flat = client.ok(
+        "map.configure",
+        json!({"mapId":map_id,"grid":{"mode":"hex","visible":true,"size":50.0,
+            "offsetX":150.0,"offsetY":100.0,"orientation":"flat"},
+            "expectedRevision":revision}),
+    );
+    revision = self::revision(&flat);
+    let flat_center = client.ok(
+        "map.snap",
+        json!({"mapId":map_id,"point":{"x":0.225,"y":0.28660254037844385}}),
+    );
+    assert_eq!(flat_center["cell"], json!({"q":1,"r":0}));
+    let flat_steps = client.ok(
+        "map.measure",
+        json!({"mapId":map_id,"metric":"hex-steps","snap":false,
+            "points":[{"x":0.15,"y":0.2},{"x":0.225,"y":0.28660254037844385}]}),
+    );
+    close(&flat_steps["total"], 1.0);
+    assert_eq!(flat_steps["grid"]["orientation"], "flat");
+    close(&flat_steps["grid"]["centerSpacing"]["x"], 75.0);
+    close(
+        &flat_steps["grid"]["centerSpacing"]["y"],
+        86.602_540_378_443_86,
+    );
+
+    // Mode None disables snapping without changing straight measurement.
+    let none = client.ok(
+        "map.configure",
+        json!({"mapId":map_id,"grid":{"mode":"none","visible":false,"size":64.0,
+            "offsetX":0.0,"offsetY":0.0,"orientation":"pointy"},
+            "expectedRevision":revision}),
+    );
+    revision = self::revision(&none);
+    assert_eq!(
+        client.ok(
+            "map.snap",
+            json!({"mapId":map_id,"point":{"x":0.24,"y":0.21}}),
+        )["effective"],
+        json!({"x":0.24,"y":0.21})
+    );
+    assert_eq!(
+        error_code(&client.request(
+            "map.measure",
+            json!({"mapId":map_id,"metric":"square-equal-diagonals","snap":true,
+                "points":[{"x":0.1,"y":0.1},{"x":0.2,"y":0.2}]}),
+        )),
+        "validation"
+    );
+
+    // Grid configuration follows undo/redo.
+    let square_again = client.ok(
+        "map.configure",
+        json!({"mapId":map_id,"grid":{"mode":"square","visible":true,"size":100.0,
+            "offsetX":150.0,"offsetY":100.0,"orientation":"pointy"},"snap":true,
+            "expectedRevision":revision}),
+    );
+    revision = self::revision(&square_again);
+    close(
+        &client.ok(
+            "map.measure",
+            json!({"mapId":map_id,"metric":"square-equal-diagonals","snap":false,
+                "points":[{"x":0.15,"y":0.2},{"x":0.45,"y":1.0}]}),
+        )["total"],
+        4.0,
+    );
+    let undo_grid = client.ok("history.undo", json!({"expectedRevision":revision}));
+    revision = self::revision(&undo_grid);
+    assert_eq!(undo_grid["label"], "Configure map grid");
+    assert_eq!(
+        client.ok("map.get", json!({"mapId":map_id}))["map"]["grid"]["mode"],
+        "none"
+    );
+    assert_eq!(
+        error_code(&client.request(
+            "map.measure",
+            json!({"mapId":map_id,"metric":"square-equal-diagonals","snap":false,
+                "points":[{"x":0.1,"y":0.1},{"x":0.2,"y":0.2}]}),
+        )),
+        "validation"
+    );
+    let redo_grid = client.ok("history.redo", json!({"expectedRevision":revision}));
+    revision = self::revision(&redo_grid);
+    close(
+        &client.ok(
+            "map.measure",
+            json!({"mapId":map_id,"metric":"square-equal-diagonals","snap":false,
+                "points":[{"x":0.15,"y":0.2},{"x":0.45,"y":1.0}]}),
+        )["total"],
+        4.0,
+    );
+
+    // Queries do not change campaign state, history, or dirty status.
+    let before_queries = client.ok("campaign.inspect", json!({}));
+    let history_before_queries = client.ok("history.status", json!({}));
+    assert_eq!(before_queries["dirty"], true);
+    client.ok(
+        "map.snap",
+        json!({"mapId":map_id,"point":{"x":0.24,"y":0.21}}),
+    );
+    client.ok(
+        "map.measure",
+        json!({"mapId":map_id,"metric":"square-alternating-diagonals","snap":true,
+            "points":[{"x":0.15,"y":0.2},{"x":0.45,"y":1.0}]}),
+    );
+    assert_eq!(client.ok("campaign.inspect", json!({})), before_queries);
+    assert_eq!(
+        client.ok("history.status", json!({})),
+        history_before_queries
+    );
+
+    let saved = client.ok(
+        "campaign.save",
+        json!({"path":path,"expectedRevision":revision}),
+    );
+    assert_eq!(saved["dirty"], false);
+    assert_eq!(self::revision(&saved), revision + 1);
+    let saved_map = saved["campaign"]["maps"][0].clone();
+    let database_before_queries = std::fs::read(path.join("campaign.sqlite")).unwrap();
+    let wal_before_queries = std::fs::read(path.join("campaign.sqlite-wal")).ok();
+    client.close();
+
+    let mut reopened = Client::new();
+    let loaded = reopened.ok("campaign.open", json!({"path":path,"expectedRevision":0}));
+    let loaded_revision = self::revision(&loaded);
+    assert_eq!(loaded["dirty"], false);
+    assert_eq!(loaded["campaign"]["maps"][0], saved_map);
+    assert_eq!(loaded["campaign"]["maps"][0]["pins"], pin_before);
+    assert_eq!(loaded["campaign"]["maps"][0]["party"], party_before);
+    assert_eq!(
+        loaded["campaign"]["maps"][0]["calibration"]["units"],
+        "feet"
+    );
+    assert_eq!(loaded["campaign"]["maps"][0]["grid"]["mode"], "square");
+    assert_eq!(loaded["campaign"]["maps"][0]["snap"], true);
+    assert_eq!(
+        reopened.ok(
+            "map.measure",
+            json!({"mapId":map_id,"points":[{"x":0.1,"y":0.5},{"x":0.35,"y":0.5}],"snap":false}),
+        )["total"],
+        25.0
+    );
+    assert_eq!(
+        reopened.ok(
+            "map.snap",
+            json!({"mapId":map_id,"point":{"x":0.24,"y":0.21}}),
+        )["cell"],
+        json!({"col":1,"row":0})
+    );
+    close(
+        &reopened.ok(
+            "map.measure",
+            json!({"mapId":map_id,"metric":"square-equal-diagonals","snap":false,
+                "points":[{"x":0.15,"y":0.2},{"x":0.45,"y":1.0}]}),
+        )["total"],
+        4.0,
+    );
+    close(
+        &reopened.ok(
+            "map.measure",
+            json!({"mapId":map_id,"metric":"square-alternating-diagonals","snap":false,
+                "points":[{"x":0.15,"y":0.2},{"x":0.45,"y":1.0}]}),
+        )["total"],
+        5.0,
+    );
+    let reopened_queries = reopened.ok("campaign.inspect", json!({}));
+    assert_eq!(reopened_queries["revision"], loaded_revision);
+    assert_eq!(
+        reopened.ok("history.status", json!({}))["history"]["canUndo"],
+        false
+    );
+    assert_eq!(
+        std::fs::read(path.join("campaign.sqlite")).unwrap(),
+        database_before_queries,
+        "read-only map queries must not rewrite the saved database"
+    );
+    assert_eq!(
+        std::fs::read(path.join("campaign.sqlite-wal")).ok(),
+        wal_before_queries,
+        "read-only map queries must not add or change a WAL sidecar"
+    );
+
+    reopened.ok(
+        "campaign.new",
+        json!({"name":"Other map campaign","expectedRevision":loaded_revision}),
+    );
+    assert_eq!(
+        error_code(&reopened.request("map.get", json!({"mapId":map_id}),)),
+        "not_found"
+    );
+    assert_eq!(
+        error_code(&reopened.request(
+            "map.snap",
+            json!({"mapId":map_id,"point":{"x":0.5,"y":0.5}}),
+        )),
+        "not_found"
+    );
+    assert_eq!(
+        error_code(&reopened.request(
+            "map.measure",
+            json!({"mapId":map_id,"points":[{"x":0.1,"y":0.5},{"x":0.2,"y":0.5}]}),
+        )),
+        "not_found"
+    );
     reopened.close();
 }

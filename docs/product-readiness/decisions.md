@@ -8,9 +8,15 @@ new requirement.
 
 > **Implementation update after this assessment.** The core/CLI part of D1 has
 > been implemented: game sessions persist through schema version 8 and the
-> `session.list`/`get`/`create`/`update` actions. The desktop Sessions UI remains
-> memory-only. D1 still requires a product decision for the desktop authoring,
-> lifecycle, and presentation surfaces.
+> `session.list`/`get`/`create`/`update` actions. A later core/CLI slice adds
+> `session.references` and `session.backlinks`, so session-owned references now
+> resolve live names and can be queried from a target. This does not implement a
+> universal link model or lifecycle. The map core/CLI now has GM-only
+> calibration, grid, snapping-preview, and measurement geometry; this does not
+> settle D2 player visibility or add a player-safe map. The desktop Sessions UI
+> remains memory-only. D1 still requires a product decision for the desktop
+> authoring, lifecycle, and presentation surfaces; D3 remains open for
+> cross-record ownership, archive, and deletion.
 
 Priority order:
 
@@ -150,7 +156,8 @@ representation in memory
 lines 3–35; [`faction-panel.tsx`](../../ttrpg-gm-cm-app/src/components/campaign/faction-panel.tsx)
 lines 169–181). Missing targets are retained and shown as unavailable, which is
 good for note preservation but leaves no cleanup lifecycle. There are no
-computed backlinks on NPC/location/faction pages.
+computed backlinks on NPC/location/faction pages; the later core/CLI
+`session.backlinks` query covers only session-owned links.
 
 **GM example.** The GM links Niya Jade to the Dockworkers’ Guild on Niya's page,
 then adds Niya to the guild's Members list in the faction prototype. Renaming the
@@ -347,6 +354,8 @@ authoring. It is independent of D1 but depends on D2 for expanded content.
 - Rune, Turso Cloud/replication, network listeners, and desktop attachment are
   future scope and not proposed for the next goal.
 - Puzzles, bestiary, crafting, loot/unboxing, media cues, fog/tokens,
-  initiative, measurement, and session visits remain brainstorm or explicitly
-  deferred features. They are not silently promoted to requirements by this
-  report.
+  initiative, attack templates, and session visits remain brainstorm or
+  explicitly deferred features. They are not silently promoted to requirements
+  by this report. A later GM-only core/CLI slice implements map
+  calibration/grid/snapping/measurement geometry, but not a play surface or
+  player-safe projection.

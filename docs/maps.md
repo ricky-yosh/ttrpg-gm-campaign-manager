@@ -2,6 +2,12 @@
 
 Working design for a sandbox atlas that helps the GM track where the party is, what is nearby, and what to show players. See [UI/UX](ui-ux.md) for the app workspace and [Campaign Data Model](data-model.md) for related records.
 
+The expanded [map requirements](map-requirements.md) define the atlas/tactical
+target: Hex/Square/None grids, snapping, NPC and enemy tokens, movement ghosts,
+measured paths, cones/circles, visibility, and core/CLI acceptance. They separate
+user-confirmed scope from recommended details and unresolved gameplay choices.
+The implemented atlas below is a baseline, not completion of that target.
+
 The current visual direction retains the map canvas and comprehensive right-hand location preview, with child-location navigation and map thumbnails. There is no mini-map. Maps are added and opened through their own sidebar section; a visual library is deferred.
 
 ## Implemented atlas
@@ -16,7 +22,101 @@ The resizable, collapsible right preview shows the selected location's artwork, 
 
 Each saved map opens in its own Dockview tab. Back/Forward returns to linked maps; Locate selects and centers a placement. Camera centers are stored in map coordinates, so restoring a view or resizing a pane preserves framing. Camera, preview selection, and inspector settings are saved with the workspace. Legacy prototype and map-library tabs are removed on restoration. Old library history entries become Maps sidebar routes. A temporary empty component and backend layout recognition allow older campaigns to restore before these obsolete tabs are removed; saved map records are retained.
 
-SQLite version 5 adds `map_record`; versions 1–4 load with an empty map collection when the table is absent and upgrade on save. Map images use the campaign's hashed assets directory. Older app builds reject version 5 packages. Party knowledge and player output do not change when browsing or moving a marker. Fog, tactical tools, session visits, and map presentation remain future features described below.
+SQLite version 5 adds `map_record`; versions 1–4 load with an empty map collection when the table is absent and upgrade on save. Map images use the campaign's hashed assets directory. Older app builds reject version 5 packages. Party knowledge and player output do not change when browsing or moving a marker. The headless core/CLI now implement calibration, grid configuration, snapping previews, and measurement without changing the database version; fog, tokens, attack templates, session visits, map presentation, and frontend grid/measurement controls remain future features described below.
+
+## Headless map geometry (implemented first slice)
+
+The shared Rust core and CLI now support the non-rendering foundation of the
+tactical map: per-map scale/units, None/Square/Hex grid configuration, snap
+previews, and straight or waypoint measurement. The desktop canvas does not yet
+expose these controls, and there is no player-safe map projection.
+
+### Coordinates and units
+
+- Public map points are normalized `{x,y}` values in `0..1`, origin top-left,
+  using the same convention as saved pins and the party marker. Convert to image
+  pixels with `(x * width, y * height)`. Non-square images therefore produce
+  different image/ground distances for equal normalized x and y offsets.
+- Grid `size` and `offsetX`/`offsetY` are **image pixels**. `size` means square
+  side length for Square, and hex circumradius (centre-to-vertex) for Hex. The
+  offset is the image-space centre of cell `(0,0)`: square `(col,row)=(0,0)` or
+  hex axial `(q,r)=(0,0)`.
+- Calibration stores a physical unit (`feet`, `metres`, or `miles`) and
+  `pixelsPerUnit`, computed as the Euclidean image-pixel distance between the
+  two calibration points divided by the known distance. Physical distance is
+  image-pixel distance divided by `pixelsPerUnit`. It never depends on camera zoom, viewport size, display DPI,
+  or a statblock ruleset.
+- Changing units requires an existing calibration and converts its scale to
+  preserve the same physical distance. Calibration from two points is the action
+  that sets units and changes the intended physical scale. Calibration and grid
+  changes never move pins or the party marker.
+- The API retains full `f64` precision and never rounds before summing path
+  segments. Display rounding belongs to a client. Tests compare with numeric
+  tolerance rather than implying rounded storage.
+
+### Grid geometry and snapping
+
+- **None:** no grid snapping and no cell-based measurement; calibrated
+  straight-line measurement still works. A stored snap preference is inactive.
+- **Square:** cell `(col,row)` centre is
+  `(offsetX + col*size, offsetY + row*size)` and its cell spans half a `size`
+  around that centre. Snapping picks the nearest centre; an exact shared-edge
+  tie goes to the larger column or row (east/south).
+- **Hex, pointy-top:** axial `(q,r)` centre is
+  `(offsetX + sqrt(3)*size*(q + r/2), offsetY + 1.5*size*r)`.
+- **Hex, flat-top:** axial `(q,r)` centre is
+  `(offsetX + 1.5*size*q, offsetY + sqrt(3)*size*(r + q/2))`.
+- Hex `centerSpacing` reports the axial basis spacing (`sqrt(3)*size` by
+  `1.5*size`, or the transpose for flat-top); `sizeMeaning` identifies the size
+  as a circumradius. Clients do not infer radius versus diameter.
+- Hex snapping chooses the nearest cell centre. An exact tie chooses the
+  smallest `q`, then the smallest `r`. Snapped centres outside the image are
+  rejected rather than clamped.
+- Grid visibility, grid topology, calibration, and snapping are independent.
+  Hiding the grid does not change snapping or cell measurement. Toggling
+  snapping never moves saved objects. Old maps load with mode None, visibility
+  off, snapping off, and no calibration.
+- `map.configure` replaces the complete grid object when supplied; omitting
+  `grid`, `snap`, or `units` preserves the current value. Calibration units are
+  changed only through `map.configure`, with recalibration available through
+  `map.calibrate`.
+
+### Measurement policies
+
+`map.measure` accepts an ordered path of 2–256 normalized points and returns the
+effective points, per-segment image distance, per-segment metric distance,
+`imageTotal`, `total`, units, metric, and whether snapping was applied. Repeated
+points and zero-length segments are valid and add zero. A path totals its
+segments, not just endpoint separation.
+
+- `straight` (default): Euclidean image distance, converted to calibrated
+  physical units. Without calibration, `units` is `imagePixels` and no physical
+  scale is invented.
+- `square-equal-diagonals`: requires Square; every orthogonal or diagonal cell
+  step costs 1 (`max(|dcol|,|drow|)`).
+- `square-alternating-diagonals`: requires Square; diagonals alternate cost
+  1, 2, 1, 2…, orthogonals cost 1. The diagonal state continues across waypoint
+  segments, so splitting an equivalent diagonal route does not reset the count.
+- `hex-steps`: requires Hex; one segment costs
+  `(|dq| + |dr| + |dq+dr|) / 2` cell steps.
+
+Cell metrics require endpoints at cell centres. With snapping enabled, endpoints
+are snapped first. With snapping disabled, off-centre free-space endpoints are
+rejected instead of being silently rounded. `units` is `cells` for cell
+policies; image distances remain available separately. Cell measures do not
+enforce movement allowances, terrain cost, elevation, attacks, or resource use.
+
+The settings are additive fields in the existing `map_record` JSON, so no table
+migration or database-version bump is required. Compatibility tests open older
+map records with pins/party markers and complex unrelated records, apply the new
+settings through Turso, and read them back through the temporary desktop
+`rusqlite` adapter; both adapters preserve the same map record.
+
+Both read-only queries read the current in-memory campaign, including unsaved edits
+and undo/redo state, and leave revision, dirty state, history, assets, database,
+and WAL unchanged. All of this is GM inspection/authoring; nothing here is a
+player-safe map projection. See [Headless development](headless-development.md)
+for the exact JSON-RPC requests, responses, and error behavior.
 
 ## Core idea: linked maps
 
@@ -87,7 +187,7 @@ The map kind provides useful defaults, but should not prevent a GM from placing 
 
 The map canvas is a separate integration to evaluate alongside the note editor. **Confirmed scope:** artists create the map artwork outside the app. The app imports and displays those images, adding pins, tokens, fog, grids, measurement, pan/zoom, and links to other maps. Map-art generation and tools for drawing terrain, rooms, or walls are outside the current scope.
 
-**The implemented atlas uses Konva + react-konva** for the shared interactive map canvas. It supplies React bindings for images, shapes, layers, pointer events, dragging, and tweening; its official examples demonstrate pointer-centered zoom. We still implement grid snapping, measurement rules, fog editing, linked-map navigation, and command integration. Sources: [React integration](https://konvajs.org/docs/react/index.html), [zoom example](https://konvajs.org/docs/sandbox/Zooming_Relative_To_Pointer.html), [license](https://github.com/konvajs/konva/blob/master/LICENSE).
+**The implemented atlas uses Konva + react-konva** for the shared interactive map canvas. It supplies React bindings for images, shapes, layers, pointer events, dragging, and tweening; its official examples demonstrate pointer-centered zoom. The headless core now owns grid snapping and measurement geometry; the canvas still needs controls, rendering, fog editing, linked-map navigation, and command integration for those core actions. Sources: [React integration](https://konvajs.org/docs/react/index.html), [zoom example](https://konvajs.org/docs/sandbox/Zooming_Relative_To_Pointer.html), [license](https://github.com/konvajs/konva/blob/master/LICENSE).
 
 Alternatives: [Leaflet](https://leafletjs.com/reference) supplies image overlays, markers, and pan/zoom with `CRS.Simple` for non-geographic maps; it is worth evaluating if atlas navigation dominates. [PixiJS](https://pixijs.com/8.x/guides/getting-started/intro) with [pixi-viewport](https://github.com/pixijs-userland/pixi-viewport) is an alternative for GPU-rendered scenes if representative map tests show a need. These alternatives are historical evaluation context; Konva/react-konva is installed and used by the current atlas.
 

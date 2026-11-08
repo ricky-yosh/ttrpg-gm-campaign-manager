@@ -892,6 +892,11 @@ shared core and CLI: database version 8 adds `session_record`, and
 `session.list`/`get`/`create`/`update` persist session details, ordered beats,
 prep/running notes, recap, and NPC/location/faction/thread/item references. See
 [Sessions](sessions.md#headless-persistence) and the current
-[Headless development](headless-development.md) contract. The desktop Sessions
-UI remains the separate memory-only frontend prototype; this note does not
-retroactively change the approved scope or evidence of the original run.
+[Headless development](headless-development.md) contract. A later core/CLI slice
+adds `session.references` and `session.backlinks` for live reference resolution
+and computed session backlinks. A later core/CLI slice adds per-map calibration,
+None/Square/Hex grid configuration, snapping previews, and straight/cell-policy
+measurement; it remains GM-only and adds no renderer, tokens, templates, fog, or
+player-safe map projection. The desktop Sessions UI remains the separate
+memory-only frontend prototype; this note does not retroactively change the
+approved scope or evidence of the original run.
